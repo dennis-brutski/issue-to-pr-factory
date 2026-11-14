@@ -1,0 +1,72 @@
+{
+  "data": {
+    "repository": {
+      "issues": {
+        "nodes": [
+          {
+            "number": 1, "title": "Fix undo", "body": "Undo fails on an empty ledger",
+            "author": { "login": "dennis-brutski" }, "lastEditedAt": null,
+            "labels": { "nodes": [{ "name": "agent:implement" }, { "name": "bug" }] },
+            "timelineItems": { "nodes": [
+              { "createdAt": "2026-11-01T10:00:00Z", "actor": { "login": "dennis-brutski" }, "label": { "name": "agent:implement" } }
+            ] },
+            "comments": { "nodes": [
+              { "author": { "login": "dennis-brutski" }, "body": "keep it small", "createdAt": "2026-11-01T10:05:00Z" }
+            ] }
+          },
+          {
+            "number": 2, "title": "Add dark mode toggle", "body": "Please",
+            "author": { "login": "mallory" }, "lastEditedAt": "2026-11-02T12:00:00Z",
+            "labels": { "nodes": [{ "name": "agent:explore" }] },
+            "timelineItems": { "nodes": [
+              { "createdAt": "2026-11-02T09:00:00Z", "actor": { "login": "dennis-brutski" }, "label": { "name": "agent:explore" } }
+            ] },
+            "comments": { "nodes": [] }
+          },
+          {
+            "number": 3, "title": "Ghost issue", "body": "",
+            "author": null, "lastEditedAt": null,
+            "labels": { "nodes": [{ "name": "agent:implement" }] },
+            "timelineItems": { "nodes": [
+              { "createdAt": "2026-11-03T09:00:00Z", "actor": null, "label": { "name": "agent:implement" } }
+            ] },
+            "comments": { "nodes": [{ "author": null, "body": "from a deleted account", "createdAt": "2026-11-03T09:30:00Z" }] }
+          }
+        ]
+      },
+      "pullRequests": {
+        "nodes": [
+          {
+            "number": 4, "title": "Fix undo", "body": "Closes #1",
+            "author": { "login": "dennis-brutski" }, "lastEditedAt": null,
+            "headRefName": "factory/issue-1", "headRepository": { "nameWithOwner": "dennis-brutski/gin-rummy-score-pad" },
+            "labels": { "nodes": [{ "name": "agent:review" }] },
+            "timelineItems": { "nodes": [
+              { "createdAt": "2026-11-04T10:00:00Z", "actor": { "login": "dennis-brutski" }, "label": { "name": "agent:review" } }
+            ] },
+            "comments": { "nodes": [
+              { "author": { "login": "dennis-brutski" }, "body": "also handle redo", "createdAt": "2026-11-04T09:00:00Z" }
+            ] },
+            "reviews": { "nodes": [
+              { "author": { "login": "dennis-brutski" }, "body": "", "createdAt": "2026-11-04T09:10:00Z" },
+              { "author": { "login": "dennis-brutski" }, "body": "overall fine", "createdAt": "2026-11-04T09:20:00Z" }
+            ] },
+            "reviewThreads": { "nodes": [
+              { "comments": { "nodes": [
+                { "author": { "login": "dennis-brutski" }, "body": "rename this helper", "path": "src/state.js", "createdAt": "2026-11-04T09:15:00Z" }
+              ] } }
+            ] }
+          },
+          {
+            "number": 5, "title": "Deleted fork", "body": "",
+            "author": { "login": "mallory" }, "lastEditedAt": null,
+            "headRefName": "factory/issue-9", "headRepository": null,
+            "labels": { "nodes": [{ "name": "agent:review" }] },
+            "timelineItems": { "nodes": [] }, "comments": { "nodes": [] },
+            "reviews": { "nodes": [] }, "reviewThreads": { "nodes": [] }
+          }
+        ]
+      }
+    }
+  }
+}
