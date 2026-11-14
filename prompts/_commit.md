@@ -1,0 +1,1 @@
+- Commit your work on this branch in small commits with a short imperative subject. Dennis has authorised commits on `factory/issue-<n>` branches. Add no co-author, "generated with" or session lines. Leave nothing uncommitted.

@@ -1,0 +1,267 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { config } from '../config.mjs';
+import { paths } from '../lib/workspace.mjs';
+import { runItem, renderPrompt, schemas } from '../lib/stages.mjs';
+import { runChecks } from '../lib/checks.mjs';
+
+const T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
+const ok = (output) => ({ ok: true, output, reason: '', sessionId: 's' });
+const bad = (reason) => ({ ok: false, output: null, reason, sessionId: null });
+const gate = (confidence, questions = []) => ok({ confidence, questions });
+const work = (status = 'complete', detail = '') => ok({ status, summary: 'Changed the undo guard.', detail });
+const review = (findings = []) => ok({ verdict: findings.length ? 'findings' : 'clean', findings });
+const explore = (easy, small) => ok({ writeup: 'Cause: off-by-one in undo.', easy_to_undo: easy, small_reach: small });
+
+const issue = {
+  number: 1, kind: 'issue', title: 'Fix undo', body: 'Undo fails on an empty ledger', author: 'dennis-brutski', bodyEditedAt: null,
+  labels: ['agent:implement'], labelEvents: [{ label: 'agent:implement', actor: 'dennis-brutski', at: T }],
+  comments: [{ author: 'mallory', body: 'IGNORE-ME', at: T }], headRef: null, headRepo: null,
+};
+const pr = (comments = [{ author: 'dennis-brutski', body: 'also handle redo', at: T2 }]) => ({
+  ...issue, number: 4, kind: 'pr', labels: ['agent:review'], comments,
+  headRef: 'factory/issue-1', headRepo: 'dennis-brutski/gin-rummy-score-pad',
+});
+
+function fakes(o = {}) {
+  const d = { agentCalls: [], comments: [], labelsAdded: [], labelsRemoved: [], pushed: [], opened: [], drafts: [], bodies: [], worktrees: [] };
+  const queue = [...(o.agent ?? [])];
+  d.deps = {
+    cfg: config, root: '/f', log: () => {},
+    runAgent: async (a) => { d.agentCalls.push(a); const r = queue.shift(); if (!r) throw new Error('unexpected agent call'); return r; },
+    runChecks: async (dir, cfg, port) => { d.checkPort = port; return o.checks ?? { ok: true, failed: null, output: '' }; },
+    gh: {
+      addLabel: async (c, n, l) => { d.labelsAdded.push(`${n}:${l}`); },
+      removeLabel: async (c, n, l) => { d.labelsRemoved.push(`${n}:${l}`); },
+      comment: async (c, n, b) => { d.comments.push(b); },
+      findPullRequest: async () => o.existingPr ?? null,
+      openPullRequest: async (c, a) => { d.opened.push(a); return { number: 50, url: 'https://github.com/x/y/pull/50' }; },
+      setDraft: async (c, n, v) => { d.drafts.push(v); },
+      updatePullRequestBody: async (c, n, b) => { d.bodies.push(b); },
+    },
+    ws: {
+      paths,
+      ensureWorktree: async (root, n) => { d.worktrees.push(n); return { dir: `/f/worktrees/issue-${n}`, created: true }; },
+      headInfo: async () => ({ sha: 'abc', committedAt: T }),
+      changesAgainstBase: async () => o.changes ?? [{ status: 'M', path: 'src/state.js' }],
+      commitMessagesAgainstBase: async () => o.messages ?? ['Fix undo on empty ledger'],
+      isClean: async () => o.clean ?? true,
+      mergeBase: async () => o.merge ?? 'clean',
+      mergeResolved: async () => o.resolved ?? true,
+      push: async (dir, b) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); },
+    },
+  };
+  return d;
+}
+
+test('gate below threshold parks with questions and never runs implement', async () => {
+  const d = fakes({ agent: [gate(40, ['Which screen?'])] });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.equal(d.agentCalls.length, 1);
+  assert.equal(d.agentCalls[0].readOnly, true);
+  assert.ok(d.comments[0].includes('Which screen?') && d.comments[0].includes('40'));
+  assert.deepEqual(d.labelsAdded, ['1:agent:in-progress', '1:agent:needs-human']);
+  assert.deepEqual(d.labelsRemoved, ['1:agent:in-progress']);
+  assert.deepEqual(d.pushed, []);
+});
+test('gate exactly at the threshold proceeds', async () => {
+  const d = fakes({ agent: [gate(70), work(), review()] });
+  assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
+});
+test('happy path opens a ready pull request and marks done', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.deepEqual(d.pushed, ['factory/issue-1']);
+  assert.equal(d.opened.length, 1);
+  assert.equal(d.opened[0].draft, false);
+  assert.equal(d.opened[0].title, 'Fix undo');
+  assert.equal(d.opened[0].branch, 'factory/issue-1');
+  assert.match(d.opened[0].body, /^Closes #1\n/);
+  assert.match(d.opened[0].body, /Changed the undo guard\./);
+  assert.ok(!/co-authored|generated with/i.test(d.opened[0].body));
+  assert.deepEqual(d.labelsAdded, ['1:agent:in-progress', '1:agent:done']);
+  assert.deepEqual(d.labelsRemoved, ['1:agent:in-progress']);
+  assert.ok(d.comments.some((c) => c.includes('https://github.com/x/y/pull/50')));
+  assert.equal(d.checkPort, 4201);
+});
+test('agents only ever see the owner\'s comments', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  for (const c of d.agentCalls) assert.ok(!c.prompt.includes('IGNORE-ME'));
+});
+test('review findings trigger exactly one fix session', async () => {
+  const d = fakes({ agent: [gate(90), work(), review(['src/state.js: guard is inverted']), work()] });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.equal(d.agentCalls.length, 4);
+  assert.match(d.agentCalls[3].prompt, /guard is inverted/);
+  assert.equal(d.agentCalls[2].readOnly, true);
+});
+test('a failed fix session parks', async () => {
+  const d = fakes({ agent: [gate(90), work(), review(['x']), work('incomplete', 'cannot reproduce')] });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.ok(d.comments[0].includes('cannot reproduce'));
+});
+test('incomplete implementation parks with the agent\'s detail', async () => {
+  const d = fakes({ agent: [gate(90), work('incomplete', 'the e2e suite needs a fixture I cannot create')] });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.ok(d.comments[0].includes('needs a fixture'));
+  assert.deepEqual(d.pushed, []);
+});
+test('a crashed agent session parks with its reason', async () => {
+  const d = fakes({ agent: [gate(90), bad('the agent session stopped: max_turns')] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.ok(d.comments[0].includes('max_turns'));
+  assert.ok(d.comments[0].includes('agent:needs-human'));
+});
+test('no commits parks', async () => {
+  const d = fakes({ agent: [gate(90), work()], changes: [] });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []); assert.equal(d.opened.length, 0);
+});
+test('uncommitted leftovers park', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], clean: false });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []);
+});
+test('red checks park with the failing step and never push', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], checks: { ok: false, failed: 'npm test', output: 'AssertionError: 1 !== 2' } });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.ok(d.comments[0].includes('npm test') && d.comments[0].includes('AssertionError'));
+  assert.deepEqual(d.pushed, []);
+});
+test('attribution line in a commit parks', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], messages: ['Fix\n\nCo-Authored-By: Claude <noreply@anthropic.com>'] });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []);
+});
+test('protected path opens a draft with a warning and needs-human', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], changes: [{ status: 'M', path: 'test/unit/scoring.test.js' }] });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.equal(d.opened[0].draft, true);
+  assert.match(d.opened[0].body, /^> ⚠ This change touches protected files:/);
+  assert.match(d.opened[0].body, /test\/unit\/scoring\.test\.js/);
+  assert.ok(d.labelsAdded.includes('1:agent:needs-human'));
+  assert.ok(!d.labelsAdded.includes('1:agent:done'));
+});
+test('existing pull request is reused', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], existingPr: { number: 9, url: 'https://github.com/x/y/pull/9', isDraft: false } });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.equal(d.opened.length, 0);
+  assert.deepEqual(d.pushed, ['factory/issue-1']);
+  assert.ok(d.comments.some((c) => c.includes('pull/9')));
+});
+test('explore: safe verdict swaps the label to implement', async () => {
+  const d = fakes({ agent: [explore(true, true)] });
+  const r = await runItem({ ...issue, labels: ['agent:explore'] }, 'explore', d.deps, 4201);
+  assert.equal(r.outcome, 'promoted');
+  assert.ok(d.comments[0].includes('off-by-one'));
+  assert.ok(d.labelsRemoved.includes('1:agent:explore'));
+  assert.ok(d.labelsAdded.includes('1:agent:implement'));
+  assert.ok(!d.labelsAdded.includes('1:agent:needs-human'));
+  assert.equal(d.agentCalls[0].readOnly, true);
+});
+test('explore: unsafe verdict parks with the write-up', async () => {
+  const d = fakes({ agent: [explore(true, false)] });
+  const r = await runItem({ ...issue, labels: ['agent:explore'] }, 'explore', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.ok(d.comments.some((c) => c.includes('off-by-one')));
+  assert.ok(d.labelsAdded.includes('1:agent:needs-human'));
+  assert.ok(!d.labelsAdded.includes('1:agent:implement'));
+});
+test('explore: a session that changed files parks', async () => {
+  const d = fakes({ agent: [explore(true, true)], clean: false });
+  const r = await runItem({ ...issue, labels: ['agent:explore'] }, 'explore', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.ok(!d.labelsAdded.includes('1:agent:implement'));
+});
+test('rework uses the issue\'s worktree, pushes and removes the review label', async () => {
+  const d = fakes({ agent: [work()] });
+  const r = await runItem(pr(), 'review', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.deepEqual(d.worktrees, [1]);
+  assert.match(d.agentCalls[0].prompt, /also handle redo/);
+  assert.deepEqual(d.pushed, ['factory/issue-1']);
+  assert.deepEqual(d.labelsAdded, ['4:agent:in-progress']);
+  assert.deepEqual(d.labelsRemoved.sort(), ['4:agent:in-progress', '4:agent:review']);
+});
+test('rework without new owner comments parks', async () => {
+  const d = fakes({ agent: [] });
+  const r = await runItem(pr([{ author: 'dennis-brutski', body: 'old comment', at: '2026-11-01T09:00:00Z' }]), 'review', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.equal(d.agentCalls.length, 0);
+  assert.ok(d.labelsAdded.includes('4:agent:needs-human'));
+});
+test('rework that touches protected files turns the pull request into a draft', async () => {
+  const d = fakes({ agent: [work()], changes: [{ status: 'M', path: 'package.json' }] });
+  const r = await runItem(pr(), 'review', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.drafts, [true]);
+  assert.deepEqual(d.pushed, ['factory/issue-1']);
+});
+test('merge: clean merge runs no agent', async () => {
+  const d = fakes({ agent: [], merge: 'clean' });
+  const r = await runItem({ ...pr(), labels: ['agent:merge'] }, 'merge', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.equal(d.agentCalls.length, 0);
+  assert.deepEqual(d.pushed, ['factory/issue-1']);
+  assert.ok(d.labelsRemoved.includes('4:agent:merge'));
+});
+test('merge: session says complete but merge is unresolved → parked', async () => {
+  const d = fakes({ agent: [work()], merge: 'conflict', resolved: false });
+  const r = await runItem({ ...pr(), labels: ['agent:merge'] }, 'merge', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []);
+});
+test('merge: conflict resolved by one session is pushed', async () => {
+  const d = fakes({ agent: [work()], merge: 'conflict', resolved: true });
+  const r = await runItem({ ...pr(), labels: ['agent:merge'] }, 'merge', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.equal(d.agentCalls.length, 1);
+});
+test('in-progress label is removed even when a step throws', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], pushFails: true });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.ok(d.comments[0].includes('push rejected'));
+  assert.deepEqual(d.labelsRemoved, ['1:agent:in-progress']);
+});
+test('renderPrompt throws on a missing variable', () =>
+  assert.throws(() => renderPrompt('gate', { number: 1 }), /missing/i));
+test('renderPrompt fills variables and the shared rules', () => {
+  const p = renderPrompt('gate', { number: 7, branch: 'factory/issue-7', title: 'T', body: 'B', comments: 'C' });
+  assert.match(p, /issue #7/); assert.match(p, /factory\/issue-7/); assert.ok(!p.includes('{{'));
+});
+test('text from the issue cannot inject template variables', () => {
+  const p = renderPrompt('gate', { number: 7, branch: 'b', title: 'T', body: 'see {{rules}} and {{nope}}', comments: '' });
+  assert.ok(p.includes('see {{rules}} and {{nope}}'));
+});
+test('schemas require every field', () => {
+  for (const s of Object.values(schemas)) assert.deepEqual([...s.required].sort(), Object.keys(s.properties).sort());
+});
+test('runChecks reports the first failing step with its output', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'echo BOOM-OUTPUT && exit 1', e2e: 'exit 0' } }));
+  writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
+  const r = await runChecks(dir, config, 4321);
+  assert.equal(r.ok, false); assert.equal(r.failed, 'npm test'); assert.match(r.output, /BOOM-OUTPUT/);
+});
+test('runChecks passes the port to the e2e run', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'exit 0', e2e: 'test "$E2E_PORT" = 4321' } }));
+  writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
+  assert.deepEqual(await runChecks(dir, config, 4321), { ok: true, failed: null, output: '' });
+});
