@@ -73,3 +73,9 @@ test('agentSettings denies push and gh, and switches attribution off', () => {
   assert.ok(s.permissions.deny.includes('Bash(git push*)') && s.permissions.deny.includes('Bash(gh *)'));
   assert.deepEqual(s.attribution, { commit: '', pr: '' });
 });
+test('agentSettings lets the sandbox read node and the Playwright browsers, nothing else at home', () => {
+  const fs = agentSettings('/f/worktrees/issue-7').sandbox.filesystem;
+  assert.deepEqual(fs.denyRead, ['~']);
+  assert.ok(fs.allowRead.includes('~/.nvm') && fs.allowRead.includes('~/.cache/ms-playwright'));
+  assert.equal(fs.allowRead.length, 3);
+});
