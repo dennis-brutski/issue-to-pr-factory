@@ -1,6 +1,6 @@
 // A throwaway world for running the real factory: a local bare repo as origin,
 // a fake GitHub (fakes/gh.mjs) and a fake Claude (fakes/claude.mjs) first on PATH.
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, openSync, closeSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,8 +43,20 @@ export async function world({ seed = SEED, settings = {} } = {}) {
   writeFileSync(settingsFile, `export default ${JSON.stringify({ repo: `${OWNER}/demo`, remoteUrl: origin, runDir, pollSec: 1, ...settings })};\n`);
 
   const readGh = () => JSON.parse(readFileSync(ghState, 'utf8'));
-  const writeGh = (s) => writeFileSync(ghState, JSON.stringify(s, null, 1));
-  const change = (fn) => { const s = readGh(); fn(s); writeGh(s); };
+  // Same lock and atomic write as the fake gh, which may be writing at the same moment.
+  const change = (fn) => {
+    const lock = `${ghState}.lock`, end = Date.now() + 5000;
+    for (;;) {
+      try { closeSync(openSync(lock, 'wx')); break; } catch (e) {
+        if (e.code !== 'EEXIST' || Date.now() > end) throw e;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      }
+    }
+    try {
+      const s = readGh(); fn(s);
+      writeFileSync(`${ghState}.tmp`, JSON.stringify(s, null, 1)); renameSync(`${ghState}.tmp`, ghState);
+    } finally { rmSync(lock, { force: true }); }
+  };
   const now = () => new Date().toISOString();
   const running = new Set(), outputs = [];
 
@@ -78,8 +90,11 @@ export async function world({ seed = SEED, settings = {} } = {}) {
       return { subjects: lines(['log', '--format=%s', `master..${name}`]).reverse(), files: lines(['diff', '--name-only', `master...${name}`]) };
     },
     start(extraArgs = []) {
+      // node --test marks its children with NODE_TEST_CONTEXT; a project's own `node --test`
+      // inheriting it reports to us instead and exits 0 even when its tests fail.
+      const { NODE_TEST_CONTEXT, ...env } = process.env;
       const proc = spawn(process.execPath, [FACTORY, settingsFile, ...extraArgs], {
-        env: { ...process.env, PATH: `${FAKES_BIN}:${process.env.PATH}`, FAKE_GH_STATE: ghState, FAKE_CLAUDE_SCRIPT: script, FAKE_CLAUDE_LOG: log,
+        env: { ...env, PATH: `${FAKES_BIN}:${env.PATH}`, FAKE_GH_STATE: ghState, FAKE_CLAUDE_SCRIPT: script, FAKE_CLAUDE_LOG: log,
           npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' },
         stdio: ['ignore', 'pipe', 'pipe'], detached: true,
       });

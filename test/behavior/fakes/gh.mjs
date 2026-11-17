@@ -1,7 +1,7 @@
 // A fake `gh` for behaviour tests. It knows exactly the commands lib/github.mjs
 // uses and keeps the "GitHub" state in the JSON file named by FAKE_GH_STATE.
 // Anything else fails loudly, so a new gh call in the factory breaks the tests.
-import { readFileSync, writeFileSync, openSync, closeSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, openSync, closeSync, rmSync } from 'node:fs';
 
 const argv = process.argv.slice(2);
 const file = process.env.FAKE_GH_STATE;
@@ -87,7 +87,8 @@ try {
     item(pos[2]).isDraft = !!opt.undo;
   } else unsupported();
 
-  writeFileSync(file, JSON.stringify(s, null, 1));
+  writeFileSync(`${file}.tmp`, JSON.stringify(s, null, 1));
+  renameSync(`${file}.tmp`, file); // readers never see a half-written file
 } finally { rmSync(lockFile, { force: true }); }
 if (out) process.stdout.write(`${out}\n`);
 process.exit(code);

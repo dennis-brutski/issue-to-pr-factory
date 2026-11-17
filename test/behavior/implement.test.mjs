@@ -2,13 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { world } from './world.mjs';
-
-const ok = (summary) => ({ status: 'complete', summary, detail: '' });
-const gate = (confidence, questions = []) => ({ session: 'gate', output: { confidence, questions } });
-const clean = { session: 'review', output: { verdict: 'clean', findings: [] } };
-const implement = (write, commit, summary = commit) => ({ session: 'implement', write, commit, output: ok(summary) });
-const polls = (f) => f.output().split('0 eligible').length - 1;
-const factoryComments = (w, n) => w.item(n).comments.filter((c) => c.body.startsWith('🏭'));
+import { gate, clean, implement, polls, factoryComments, settled } from './steps.mjs';
 
 test('a clear labelled issue becomes a pull request', async () => {
   const w = await world();
@@ -16,8 +10,7 @@ test('a clear labelled issue becomes a pull request', async () => {
     const n = w.issue({ labels: ['agent:implement'] });
     w.script(n, [gate(90), implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), clean]);
     const f = w.start();
-    const settled = () => w.item(n).labels.includes('agent:done') && !w.item(n).labels.includes('agent:in-progress');
-    await w.until(settled, 20000, 'agent:done without agent:in-progress');
+    await w.until(settled(w, n, 'agent:done'), 20000, 'agent:done without agent:in-progress');
     const pr = w.pr();
     assert.match(pr.body, new RegExp(`Closes #${n}`));
     assert.equal(pr.isDraft, false);
