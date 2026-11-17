@@ -32,7 +32,7 @@ for (;;) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
   }
 }
-let out = '', code = 0;
+let out = '', code = 0, delay = 0;
 try {
   const s = JSON.parse(readFileSync(file, 'utf8'));
   s.calls.push(argv);
@@ -42,6 +42,7 @@ try {
   let m;
 
   if (pos[0] === 'api' && pos[1] === 'graphql') {
+    delay = s.listDelayMs ?? 0; // slow GitHub, outside the lock
     const wanted = field('labels[]');
     const actor = (l) => (l ? { login: l } : null);
     const node = (i) => ({
@@ -94,5 +95,6 @@ try {
   writeFileSync(`${file}.tmp`, JSON.stringify(s, null, 1));
   renameSync(`${file}.tmp`, file); // readers never see a half-written file
 } finally { rmSync(lockFile, { force: true }); }
+if (delay) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
 if (out) process.stdout.write(`${out}\n`);
 process.exit(code);

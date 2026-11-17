@@ -61,7 +61,7 @@ try {
     await cleanup(deps, running);
     const started = await tick(deps, running);
     if (!started.length && !running.size) log('0 eligible');
-    await sleep(cfg.pollSec * 1000);
+    if (!stopping) await sleep(cfg.pollSec * 1000); // Ctrl-C during the poll: wake() had no sleep to end
   }
   await Promise.all(running.values());
   log('stopped');
