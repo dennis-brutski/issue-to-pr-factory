@@ -1,0 +1,98 @@
+// A fake `gh` for behaviour tests. It knows exactly the commands lib/github.mjs
+// uses and keeps the "GitHub" state in the JSON file named by FAKE_GH_STATE.
+// Anything else fails loudly, so a new gh call in the factory breaks the tests.
+import { readFileSync, writeFileSync, renameSync, openSync, closeSync, rmSync } from 'node:fs';
+
+const argv = process.argv.slice(2);
+const file = process.env.FAKE_GH_STATE;
+let lock = null; // set while we hold it; process.exit skips finally blocks, so die releases it
+const die = (msg, code = 1) => { if (lock) rmSync(lock, { force: true }); process.stderr.write(`${msg}\n`); process.exit(code); };
+if (!file) die('fake gh: FAKE_GH_STATE is not set', 2);
+
+// Parse: positional words, -X method, -f/-F key=value (repeatable), --flag value, bare --flags.
+const pos = [], fields = [], opt = {};
+for (let i = 0; i < argv.length; i++) {
+  const a = argv[i];
+  if (a === '-f' || a === '-F') fields.push(argv[++i]);
+  else if (a === '-X') opt.method = argv[++i];
+  else if (['--jq', '--repo', '--head', '--base', '--title', '--body-file', '--state', '--json'].includes(a)) opt[a.slice(2)] = argv[++i];
+  else if (a.startsWith('--')) opt[a.slice(2)] = true;
+  else pos.push(a);
+}
+const field = (k) => fields.filter((f) => f.startsWith(`${k}=`)).map((f) => f.slice(k.length + 1));
+const stdin = () => readFileSync(0, 'utf8');
+const now = () => new Date().toISOString();
+
+// One writer at a time: the factory runs gh from parallel item runs.
+const lockFile = `${file}.lock`;
+const deadline = Date.now() + 5000;
+for (;;) {
+  try { closeSync(openSync(lockFile, 'wx')); lock = lockFile; break; } catch (e) {
+    if (e.code !== 'EEXIST' || Date.now() > deadline) die(`fake gh: cannot lock state: ${e.message}`, 2);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+  }
+}
+let out = '', code = 0;
+try {
+  const s = JSON.parse(readFileSync(file, 'utf8'));
+  s.calls.push(argv);
+  const item = (n) => s.items.find((i) => i.number === Number(n)) ?? die(`fake gh: no item #${n} (HTTP 404)`);
+  const url = (repo, n) => `https://github.com/${repo}/pull/${n}`;
+  const unsupported = () => die(`fake gh: unsupported command: ${argv.join(' ')}`, 2);
+  let m;
+
+  if (pos[0] === 'api' && pos[1] === 'graphql') {
+    const wanted = field('labels[]');
+    const actor = (l) => (l ? { login: l } : null);
+    const node = (i) => ({
+      number: i.number, title: i.title, body: i.body, lastEditedAt: i.lastEditedAt ?? null, author: actor(i.author),
+      labels: { nodes: i.labels.map((name) => ({ name })) },
+      timelineItems: { nodes: i.labelEvents.map((e) => ({ createdAt: e.at, actor: actor(e.actor), label: { name: e.label } })) },
+      comments: { nodes: i.comments.filter((c) => !c.path).map((c) => ({ author: actor(c.author), body: c.body, createdAt: c.at })) },
+      ...(i.kind === 'pr' ? {
+        headRefName: i.headRefName, headRepository: i.headRepo ? { nameWithOwner: i.headRepo } : null,
+        reviews: { nodes: [] },
+        reviewThreads: { nodes: i.comments.filter((c) => c.path).map((c) => ({ comments: { nodes: [{ author: actor(c.author), body: c.body, path: c.path, createdAt: c.at }] } })) },
+      } : {}),
+    });
+    const open = (kind) => s.items.filter((i) => i.kind === kind && i.state === 'OPEN' && i.labels.some((l) => wanted.includes(l))).map(node);
+    out = JSON.stringify({ data: { repository: { issues: { nodes: open('issue') }, pullRequests: { nodes: open('pr') } } } });
+  } else if (pos[0] === 'api' && pos[1] === 'user') {
+    out = s.login;
+  } else if (pos[0] === 'api' && (m = /^repos\/[^/]+\/[^/]+\/issues\/(\d+)\/labels(?:\/(.+))?$/.exec(pos[1]))) {
+    const i = item(m[1]);
+    if (opt.method === 'POST') {
+      for (const l of field('labels[]')) if (!i.labels.includes(l)) { i.labels.push(l); i.labelEvents.push({ label: l, actor: s.login, at: now() }); }
+    } else if (opt.method === 'DELETE') {
+      const l = decodeURIComponent(m[2]);
+      if (!i.labels.includes(l)) die('gh: Label does not exist (HTTP 404)');
+      i.labels = i.labels.filter((x) => x !== l);
+    } else unsupported();
+  } else if (pos[0] === 'api' && opt.method === 'POST' && (m = /^repos\/[^/]+\/[^/]+\/issues\/(\d+)\/comments$/.exec(pos[1]))) {
+    item(m[1]).comments.push({ author: s.login, body: stdin(), at: now() });
+  } else if (pos[0] === 'api' && opt.method === 'PATCH' && (m = /^repos\/[^/]+\/[^/]+\/pulls\/(\d+)$/.exec(pos[1]))) {
+    item(m[1]).body = stdin();
+  } else if (pos[0] === 'api' && !opt.method && opt.jq === '.state' && (m = /^repos\/[^/]+\/[^/]+\/issues\/(\d+)$/.exec(pos[1]))) {
+    out = item(m[1]).state === 'OPEN' ? 'open' : 'closed';
+  } else if (pos[0] === 'api' && /^repos\/[^/]+\/[^/]+\/labels$/.test(pos[1]) && opt.jq === '.[].name' && !opt.method) {
+    out = (s.repoLabels ?? []).join('\n');
+  } else if (pos[0] === 'api' && opt.method === 'POST' && /^repos\/[^/]+\/[^/]+\/labels$/.test(pos[1])) {
+    s.repoLabels = [...(s.repoLabels ?? []), field('name')[0]];
+  } else if (pos[0] === 'pr' && pos[1] === 'list') {
+    const keys = opt.json.split(',');
+    const prs = s.items.filter((i) => i.kind === 'pr' && i.headRefName === opt.head && (opt.state === 'all' || i.state === 'OPEN'));
+    out = JSON.stringify(prs.map((i) => Object.fromEntries(keys.map((k) => [k, k === 'url' ? url(i.headRepo, i.number) : i[k]]))));
+  } else if (pos[0] === 'pr' && pos[1] === 'create') {
+    const n = s.nextNumber++;
+    s.items.push({ number: n, kind: 'pr', title: opt.title, body: stdin(), author: s.login, state: 'OPEN', labels: [], labelEvents: [],
+      comments: [], headRefName: opt.head, headRepo: opt.repo, baseRefName: opt.base, isDraft: !!opt.draft });
+    out = url(opt.repo, n);
+  } else if (pos[0] === 'pr' && pos[1] === 'ready') {
+    item(pos[2]).isDraft = !!opt.undo;
+  } else unsupported();
+
+  writeFileSync(`${file}.tmp`, JSON.stringify(s, null, 1));
+  renameSync(`${file}.tmp`, file); // readers never see a half-written file
+} finally { rmSync(lockFile, { force: true }); }
+if (out) process.stdout.write(`${out}\n`);
+process.exit(code);

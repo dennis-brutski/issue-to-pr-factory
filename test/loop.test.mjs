@@ -141,3 +141,15 @@ test('a park is logged once, with every line of its reason', async () => {
   assert.equal(parks.length, 1);
   assert.ok(parks[0].includes('touches protected files:\n          - test/a.test.js\n          - test/b.test.js'), parks[0]);
 });
+test('lockHolder names a live holder and ignores dead or missing locks', async () => {
+  const { lockHolder } = await import('../lib/loop.mjs');
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'lock-'));
+  assert.equal(lockHolder(join(dir, 'none.lock')), null);
+  writeFileSync(join(dir, 'live.lock'), String(process.pid));
+  assert.equal(lockHolder(join(dir, 'live.lock')), process.pid);
+  writeFileSync(join(dir, 'dead.lock'), '2147483646');
+  assert.equal(lockHolder(join(dir, 'dead.lock')), null);
+});

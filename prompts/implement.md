@@ -7,7 +7,8 @@
 
 1. Read the issue and the code it concerns. Write yourself a short plan.
 2. Work test-first: for each behaviour change, write a failing test, run it and see it fail, then write the code that makes it pass.
-3. Run `npm test` and `npm run e2e` before you finish. Both must pass.
+3. Run these checks before you finish; all must pass:
+{{checks}}
 
 ## What to report
 

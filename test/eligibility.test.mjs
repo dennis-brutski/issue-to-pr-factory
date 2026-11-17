@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { config } from '../config.mjs';
+import { config as defaults } from '../config.mjs';
+
+// repo and baseBranch come from a target since multi-target; these tests use the score pad's.
+const config = { ...defaults, repo: 'dennis-brutski/gin-rummy-score-pad', baseBranch: 'master' };
 import { classify, promptInput } from '../lib/eligibility.mjs';
 
 const T0 = '2026-11-01T09:00:00Z', T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';

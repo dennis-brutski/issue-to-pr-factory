@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { protectedPathViolations, attributionViolations } from '../lib/brakes.mjs';
+import { protectedPathViolations as check, attributionViolations, workflowChanges } from '../lib/brakes.mjs';
+import scorePad from '../targets/gin-rummy-score-pad.mjs';
+
+// The score pad's own target: its protections must stay exactly what they were.
+const protectedPathViolations = (changes) => check(changes, scorePad);
 
 test('adding a test file is clean', () =>
   assert.deepEqual(protectedPathViolations([{ status: 'A', path: 'test/unit/new.test.js' }]), []));
@@ -32,4 +36,25 @@ test('attribution lines are flagged', () => {
   assert.equal(attributionViolations(['Fix x\n\n🤖 Generated with Claude Code']).length, 1);
   assert.equal(attributionViolations(['Fix x\n\nClaude-Session: https://claude.ai/code/session_1']).length, 1);
   assert.deepEqual(attributionViolations(['Fix undo on empty ledger']), []);
+});
+
+test('built-in protected paths cannot be removed by a target', () => {
+  const cfg = { protectedFiles: [], protectedDirs: [], testDirs: [] };
+  assert.equal(check([{ status: 'M', path: 'AGENTS.md' }, { status: 'M', path: '.claude/x' }, { status: 'A', path: '.github/x.yml' }, { status: 'M', path: 'CLAUDE.md' }], cfg).length, 4);
+});
+test('target lists add to the built-ins', () => {
+  assert.equal(check([{ status: 'M', path: 'Makefile' }], { protectedFiles: ['Makefile'] }).length, 1);
+  assert.equal(check([{ status: 'M', path: 'gradle/x' }], { protectedDirs: ['gradle/'] }).length, 1);
+  assert.equal(check([{ status: 'M', path: 'Makefile' }], {}).length, 0);
+});
+test('test folders come from the target', () => {
+  assert.equal(check([{ status: 'M', path: 'spec/a.js' }], { testDirs: ['spec/'] }).length, 1);
+  assert.equal(check([{ status: 'M', path: 'spec/a.js' }], { testDirs: ['test/'] }).length, 0);
+});
+test('workflowChanges finds added, changed, deleted and renamed workflows', () => {
+  assert.deepEqual(workflowChanges([
+    { status: 'A', path: '.github/workflows/a.yml' }, { status: 'M', path: '.github/workflows/b.yml' },
+    { status: 'D', path: '.github/workflows/c.yml' }, { status: 'R', oldPath: '.github/x.yml', path: '.github/workflows/d.yml' },
+    { status: 'R', oldPath: '.github/workflows/e.yml', path: 'old/e.yml' }, { status: 'M', path: '.github/CODEOWNERS' },
+  ]), ['.github/workflows/a.yml', '.github/workflows/b.yml', '.github/workflows/c.yml', '.github/workflows/d.yml', '.github/workflows/e.yml']);
 });

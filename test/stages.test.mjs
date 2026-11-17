@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
+import scorePad from '../targets/gin-rummy-score-pad.mjs';
 import { paths } from '../lib/workspace.mjs';
 import { runItem, renderPrompt, schemas } from '../lib/stages.mjs';
 import { runChecks } from '../lib/checks.mjs';
@@ -30,10 +31,14 @@ function fakes(o = {}) {
   const d = { installs: [], agentCalls: [], comments: [], labelsAdded: [], labelsRemoved: [], pushed: [], opened: [], drafts: [], bodies: [], worktrees: [] };
   const queue = [...(o.agent ?? [])];
   d.deps = {
-    cfg: config, root: '/f', log: () => {},
-    run: async (cmd, args, opts) => { d.installs.push({ cmd: [cmd, ...args].join(' '), cwd: opts.cwd, agentCallsSoFar: d.agentCalls.length }); return o.install ?? { code: 0, stdout: '', stderr: '' }; },
+    cfg: { ...config, ...scorePad }, root: '/f', log: () => {},
+    runSetup: async (dir, cfg, port, gitDir) => {
+      d.installs.push({ cmd: cfg.setup.map(([c, a]) => [c, ...a].join(' ')).join(' && '), cwd: dir, agentCallsSoFar: d.agentCalls.length, gitDir });
+      const r = o.install ?? { code: 0, stdout: '', stderr: '' };
+      return { ok: r.code === 0, failed: r.code === 0 ? null : 'npm ci', output: r.stdout + r.stderr };
+    },
     runAgent: async (a) => { d.agentCalls.push(a); const r = queue.shift(); if (!r) throw new Error('unexpected agent call'); return r; },
-    runChecks: async (dir, cfg, port) => { d.checkPort = port; return o.checks ?? { ok: true, failed: null, output: '' }; },
+    runChecks: async (dir, cfg, port) => { d.checkPort = port; d.checksRan = true; return o.checks ?? { ok: true, failed: null, output: '' }; },
     gh: {
       addLabel: async (c, n, l) => { d.labelsAdded.push(`${n}:${l}`); },
       removeLabel: async (c, n, l) => { d.labelsRemoved.push(`${n}:${l}`); },
@@ -50,9 +55,13 @@ function fakes(o = {}) {
       changesAgainstBase: async (dir, base, since) => (since && o.reworkChanges) || o.changes || [{ status: 'M', path: 'src/state.js' }],
       commitMessagesAgainstBase: async () => o.messages ?? ['Fix undo on empty ledger'],
       isClean: async () => o.clean ?? true,
+      diffAgainstBase: async () => o.diff ?? '',
       mergeBase: async () => o.merge ?? 'clean',
       mergeResolved: async () => o.resolved ?? true,
-      push: async (dir, b) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); },
+      push: async (dir, b, sha) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); d.pushedSha = sha; },
+      currentBranch: async () => (o.detached ? null : 'factory/issue-1'),
+      checkCloneConfig: async () => { d.configChecks = (d.configChecks ?? 0) + 1; if (o.configChanged) throw new Error("the clone's git config at /f/repo was changed: credential.helper"); },
+      checkGitLink: async () => { if (o.gitLinkChanged) throw new Error("the worktree's .git link at /f/worktrees/issue-1 was changed"); },
     },
   };
   return d;
@@ -257,14 +266,14 @@ test('runChecks reports the first failing step with its output', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'echo BOOM-OUTPUT && exit 1', e2e: 'exit 0' } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
-  const r = await runChecks(dir, config, 4321);
+  const r = await runChecks(dir, { ...config, ...scorePad }, 4321);
   assert.equal(r.ok, false); assert.equal(r.failed, 'npm test'); assert.match(r.output, /BOOM-OUTPUT/);
 });
 test('runChecks passes the port to the e2e run', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'exit 0', e2e: 'test "$E2E_PORT" = 4321' } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
-  assert.deepEqual(await runChecks(dir, config, 4321), { ok: true, failed: null, output: '' });
+  assert.deepEqual(await runChecks(dir, { ...config, ...scorePad }, 4321), { ok: true, failed: null, output: '' });
 });
 test('a park without commits does not point to a branch', async () => {
   const d = fakes({ agent: [gate(5, ['What?'])], messages: [] });
@@ -279,7 +288,7 @@ test('a park with commits names the local branch', async () => {
 test('dependencies are installed in the worktree before the first agent session', async () => {
   const d = fakes({ agent: [gate(5, ['What?'])] });
   await runItem(issue, 'implement', d.deps, 4201);
-  assert.deepEqual(d.installs, [{ cmd: 'npm ci', cwd: '/f/worktrees/issue-1', agentCallsSoFar: 0 }]);
+  assert.deepEqual(d.installs, [{ cmd: 'npm ci', cwd: '/f/worktrees/issue-1', agentCallsSoFar: 0, gitDir: '/f/repo/.git' }]);
 });
 test('a failed npm ci parks before any agent session', async () => {
   const d = fakes({ install: { code: 1, stdout: '', stderr: 'npm ERR! lockfile out of sync' } });
@@ -322,4 +331,78 @@ test('a parked pull request with only factory comments since the push does not r
   const r = await runItem(pr([{ author: 'dennis-brutski', body: '🏭 **Factory stopped (review).**', at: T2 }]), 'review', d.deps, 4201);
   assert.equal(r.outcome, 'parked');
   assert.equal(d.agentCalls.length, 0);
+});
+
+const workflow = [{ status: 'M', path: '.github/workflows/ci.yml' }];
+for (const [name, item, stage, agent] of [
+  ['implement', issue, 'implement', () => [gate(90), work(), review()]],
+  ['review', pr(), 'review', () => [work()]],
+  ['merge', { ...pr(), labels: ['agent:merge'] }, 'merge', () => []],
+]) {
+  test(`${name}: a workflow change parks before checks and push`, async () => {
+    const d = fakes({ agent: agent(), changes: workflow, diff: '+  run: curl evil' });
+    const r = await runItem(item, stage, d.deps, 4201);
+    assert.equal(r.outcome, 'parked');
+    assert.deepEqual(d.pushed, []);
+    assert.equal(d.checksRan, undefined);
+    assert.ok(d.comments.at(-1).includes('did not push') && d.comments.at(-1).includes('.github/workflows/ci.yml'), d.comments.at(-1));
+    assert.ok(d.comments.at(-1).includes('curl evil'));
+  });
+}
+test('the pull request names the checks the factory ran', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.match(d.opened[0].body, /`npm test`, `npm run e2e` — all passed/);
+});
+test('agent sessions get the target environment with their port', async () => {
+  const d = fakes({ agent: [gate(5, ['What?'])] });
+  await runItem(issue, 'implement', d.deps, 4207);
+  assert.equal(d.agentCalls[0].port, 4207);
+});
+const allVars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F' };
+const gradle = { checks: [['gradle', ['test']], ['gradle', ['lint']]], protectedFiles: ['build.gradle'], testDirs: ['src/test/'] };
+test("prompts name the target's checks and protected files, nothing npm-specific", () => {
+  for (const name of ['gate', 'implement', 'review', 'fix', 'rework', 'merge', 'explore']) {
+    const p = renderPrompt(name, allVars, gradle);
+    assert.doesNotMatch(p, /npm|e2e|playwright/i, name);
+    assert.match(p, /`build\.gradle`/, name);
+    assert.match(p, /`AGENTS\.md`/, name);
+    assert.match(p, /src\/test\//, name);
+  }
+  for (const name of ['implement', 'fix', 'rework', 'merge']) assert.match(renderPrompt(name, allVars, gradle), /- `gradle test`\n- `gradle lint`/, name);
+});
+test("the score pad's prompts keep naming its checks", () => {
+  assert.match(renderPrompt('implement', allVars, { ...config, ...scorePad }), /- `npm test`\n- `npm run e2e`/);
+});
+test('a detached HEAD parks before checks and push', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], detached: true });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []);
+  assert.equal(d.checksRan, undefined);
+  assert.match(d.comments.at(-1), /not on its branch/);
+});
+test('the commit that was checked is the one pushed', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(d.pushedSha, 'abc1');
+});
+test('a changed .git link after an agent session parks and never pushes', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], gitLinkChanged: true });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []);
+  assert.match(d.comments.at(-1), /\.git link/);
+});
+test('a changed clone config after an agent session parks and never pushes', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], configChanged: true });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []);
+  assert.match(d.comments.at(-1), /credential\.helper/);
+});
+test('the clone config is checked after every agent session and before the push', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(d.configChecks, 5); // after setup's worktree, 3 sessions, before push
 });

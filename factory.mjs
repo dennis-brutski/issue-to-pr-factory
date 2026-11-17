@@ -1,22 +1,30 @@
 #!/usr/bin/env node
-// Start: npm start    Stop: Ctrl-C (finish running work), Ctrl-C again (kill now).
+// Start: npm start [-- <target>]    Stop: Ctrl-C (finish running work), Ctrl-C again (kill now).
+import { mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { config as cfg } from './config.mjs';
+import { loadSettings, cloneUrl } from './lib/settings.mjs';
 import { run, children, killGroup } from './lib/exec.mjs';
 import * as gh from './lib/github.mjs';
 import * as ws from './lib/workspace.mjs';
 import { runAgent } from './lib/agent.mjs';
-import { runChecks } from './lib/checks.mjs';
+import { runChecks, runSetup } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
-import { recover, tick, cleanup, acquireLock, preflight } from './lib/loop.mjs';
+import { recover, tick, cleanup, acquireLock, lockHolder, preflight } from './lib/loop.mjs';
+import { driftWarnings, oldLayoutWarning } from './lib/startup.mjs';
 
-const root = dirname(fileURLToPath(import.meta.url));
+const factoryRoot = dirname(fileURLToPath(import.meta.url));
+let cfg;
+try { cfg = await loadSettings(process.argv[2], { factoryRoot }); } catch (e) { console.error(`factory cannot run: ${e.message}`); process.exit(1); }
+const root = cfg.runDir;
 const log = (msg) => console.log(`${new Date().toTimeString().slice(0, 8)}  ${msg}`);
-const deps = { cfg, root, log, gh, ws, run, runAgent, runChecks, runItem };
+const deps = { cfg, root, log, gh, ws, run, runAgent, runSetup, runChecks, runItem };
 
 let release;
-try { release = acquireLock(join(root, 'factory.lock')); } catch (e) { console.error(e.message); process.exit(1); }
+// A factory from before targets locks the folder itself; it would poll the same repo.
+const oldFactory = lockHolder(join(factoryRoot, 'factory.lock'));
+if (oldFactory) { console.error(`factory cannot run: an older factory is still running from this folder (pid ${oldFactory}). Stop it first.`); process.exit(1); }
+try { mkdirSync(root, { recursive: true }); release = acquireLock(join(root, 'factory.lock')); } catch (e) { console.error(e.message); process.exit(1); }
 
 const running = new Map();
 let stopping = false, wake = () => {};
@@ -37,10 +45,19 @@ process.on('SIGTERM', () => process.emit('SIGINT'));
 
 try {
   await preflight(deps);
-  await ws.ensureClone(root, `https://github.com/${cfg.repo}.git`);
+  if (existsSync(join(root, 'repo', '.git'))) await ws.checkCloneConfig(root, cloneUrl(cfg)); // before the fetch reads it
+  await ws.ensureClone(root, cloneUrl(cfg));
+  const clone = join(root, 'repo');
+  if (!(await ws.hasRemoteBranch(clone, cfg.baseBranch))) throw new Error(`base branch "${cfg.baseBranch}" not found on ${cfg.repo}`);
+  const onBase = await ws.pathsOnBase(clone, cfg.baseBranch);
+  for (const w of [oldLayoutWarning(factoryRoot), ...driftWarnings(cfg, (p) => onBase.has(p))].filter(Boolean)) log(`warning: ${w}`);
+  const labels = await gh.listLabels(cfg);
+  for (const l of [...Object.values(cfg.triggers), ...Object.values(cfg.states)])
+    if (!labels.includes(l)) { await gh.createLabel(cfg, l); log(`created label ${l}`); }
   await recover(deps);
-  log(`factory started for ${cfg.repo} — polling every ${cfg.pollSec}s, up to ${cfg.maxParallel} at a time`);
+  log(`factory started for ${cfg.repo} (${cfg.target}) — polling every ${cfg.pollSec}s, up to ${cfg.maxParallel} at a time`);
   while (!stopping) {
+    await ws.checkCloneConfig(root, cloneUrl(cfg)); // a session may have planted config: stop before git reads it
     await cleanup(deps, running);
     const started = await tick(deps, running);
     if (!started.length && !running.size) log('0 eligible');

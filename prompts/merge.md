@@ -5,7 +5,8 @@
 {{rules}}
 {{commit}}
 
-Run `npm test` and `npm run e2e` before you finish. Both must pass.
+Run these checks before you finish; all must pass:
+{{checks}}
 
 ## What to report
 
