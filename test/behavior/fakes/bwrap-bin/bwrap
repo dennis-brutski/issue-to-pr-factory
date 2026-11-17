@@ -1,0 +1,19 @@
+#!/usr/bin/env node
+// Stands in for bwrap where the real one cannot start, as inside an agent's own sandbox.
+// Runs the command after `--` in --chdir with only the --setenv variables, unconfined.
+// world.mjs puts it on PATH only when the real bwrap fails its probe.
+import { spawnSync } from 'node:child_process';
+
+const args = process.argv.slice(2);
+const end = args.indexOf('--');
+if (end === -1) process.exit(0); // the factory's sandbox probe
+const env = {};
+let cwd = process.cwd();
+for (let i = 0; i < end; i++) {
+  if (args[i] === '--setenv') { env[args[i + 1]] = args[i + 2]; i += 2; }
+  else if (args[i] === '--chdir') cwd = args[++i];
+}
+const [cmd, ...rest] = args.slice(end + 1);
+const r = spawnSync(cmd, rest, { cwd, env, stdio: 'inherit' });
+if (r.error) { console.error(r.error.message); process.exit(127); }
+process.exit(r.status ?? 1);

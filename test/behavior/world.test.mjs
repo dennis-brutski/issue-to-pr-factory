@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { run } from '../../lib/exec.mjs';
 import { runAgent } from '../../lib/agent.mjs';
 import { config } from '../../config.mjs';
-import { world, FAKES_BIN } from './world.mjs';
+import { world, FAKES_BIN, FAKE_BWRAP_BIN } from './world.mjs';
 
 const ok = (summary) => ({ status: 'complete', summary, detail: '' });
 const schema = { type: 'object' };
@@ -53,4 +53,16 @@ test('the factory starts in a world and reports 0 eligible', async () => {
     assert.equal(await f.exited, 0);
     assert.match(f.output(), /stopped/);
   } finally { w.close(); }
+});
+
+test('the stand-in bwrap runs the command in --chdir with only the --setenv variables', async () => {
+  const bwrap = join(FAKE_BWRAP_BIN, 'bwrap'), dir = mkdtempSync(join(tmpdir(), 'fake-bwrap-'));
+  process.env.FACTORY_SENTINEL_SECRET = 'leak';
+  try {
+    const r = await run(bwrap, ['--ro-bind', '/', '/', '--clearenv', '--setenv', 'A', 'x', '--setenv', 'PATH', process.env.PATH,
+      '--chdir', dir, '--', 'sh', '-c', 'echo "$A $(pwd) $FACTORY_SENTINEL_SECRET"']);
+    assert.equal(r.stdout, `x ${dir} \n`);
+  } finally { delete process.env.FACTORY_SENTINEL_SECRET; }
+  assert.equal((await run(bwrap, ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true'])).code, 0, 'passes the sandbox probe');
+  assert.equal((await run(bwrap, ['--', 'sh', '-c', 'exit 3'])).code, 3, 'keeps the exit code');
 });

@@ -8,6 +8,10 @@ import { spawn, execFileSync } from 'node:child_process';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const FAKES_BIN = join(HERE, 'fakes', 'bin');
+export const FAKE_BWRAP_BIN = join(HERE, 'fakes', 'bwrap-bin');
+// Inside an agent's own sandbox bwrap cannot start; the factory's check run, where it can, still uses the real one.
+const bwrapWorks = (() => { try { execFileSync('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+const BINS = bwrapWorks ? FAKES_BIN : `${FAKES_BIN}:${FAKE_BWRAP_BIN}`;
 const FACTORY = join(HERE, '..', '..', 'factory.mjs');
 const OWNER = 'dennis-brutski';
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid'];
@@ -94,7 +98,7 @@ export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) 
       // inheriting it reports to us instead and exits 0 even when its tests fail.
       const { NODE_TEST_CONTEXT, ...env } = process.env;
       const proc = spawn(process.execPath, [FACTORY, settingsFile, ...extraArgs], {
-        env: { ...env, PATH: `${FAKES_BIN}:${env.PATH}`, FAKE_GH_STATE: ghState, FAKE_CLAUDE_SCRIPT: script, FAKE_CLAUDE_LOG: log,
+        env: { ...env, PATH: `${BINS}:${env.PATH}`, FAKE_GH_STATE: ghState, FAKE_CLAUDE_SCRIPT: script, FAKE_CLAUDE_LOG: log,
           npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' },
         stdio: ['ignore', 'pipe', 'pipe'], detached: true,
       });
