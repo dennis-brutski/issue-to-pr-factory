@@ -23,3 +23,7 @@ Run these checks before you finish; all must pass:
 ### {{title}}
 
 {{body}}
+
+### Comments from Dennis
+
+{{comments}}
