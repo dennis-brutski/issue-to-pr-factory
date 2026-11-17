@@ -63,3 +63,12 @@ test('cloneUrl defaults to GitHub and honours remoteUrl', () => {
   assert.equal(cloneUrl({ repo: 'a/b', remoteUrl: null }), 'https://github.com/a/b.git');
   assert.equal(cloneUrl({ repo: 'a/b', remoteUrl: '/tmp/o.git' }), '/tmp/o.git');
 });
+test('the factory target protects its own confinement', async () => {
+  const { protectedPathViolations } = await import('../lib/brakes.mjs');
+  const cfg = await loadSettings('issue-to-pr-factory', { factoryRoot: join(import.meta.dirname, '..') });
+  assert.equal(cfg.baseBranch, 'main');
+  const flagged = (path) => protectedPathViolations([{ status: 'M', path }], cfg).length === 1;
+  for (const p of ['lib/agent.mjs', 'lib/brakes.mjs', 'lib/checks.mjs', 'lib/confine.mjs', 'lib/eligibility.mjs', 'prompts/_rules.md',
+    'config.mjs', 'package.json', 'targets/x.mjs', 'smoke/containment.mjs', 'AGENTS.md', 'test/brakes.test.mjs']) assert.ok(flagged(p), p);
+  assert.ok(!flagged('lib/loop.mjs'));
+});
