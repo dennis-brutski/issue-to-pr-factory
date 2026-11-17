@@ -63,3 +63,5 @@ test('promptInput returns title and body', () => {
   const p = promptInput(item(), config);
   assert.equal(p.title, 'Fix undo'); assert.equal(p.body, 'Undo fails on empty ledger');
 });
+test("promptInput leaves out the factory's own comments, which gh posts as the owner", () =>
+  assert.deepEqual(promptInput(item({ comments: [c('dennis-brutski', '🏭 **Factory stopped (review).**', T), c('dennis-brutski', 'rename it', T)] }), config).comments, ['rename it']));

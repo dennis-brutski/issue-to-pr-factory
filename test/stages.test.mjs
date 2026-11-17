@@ -311,3 +311,15 @@ test('rework on an already flagged branch is checked only for what the rework ch
   assert.deepEqual(d.pushed, ['factory/issue-1']);
   assert.ok(d.comments.some((c) => c.includes('Changed the undo guard.')));
 });
+test('rework that restores a protected file to its base state is not flagged', async () => {
+  const d = fakes({ agent: [work()], changes: [{ status: 'M', path: 'src/state.js' }], reworkChanges: [{ status: 'M', path: 'test/unit/backup.test.js' }] });
+  const r = await runItem(pr(), 'review', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.deepEqual(d.drafts, []);
+});
+test('a parked pull request with only factory comments since the push does not rework', async () => {
+  const d = fakes({ agent: [] });
+  const r = await runItem(pr([{ author: 'dennis-brutski', body: '🏭 **Factory stopped (review).**', at: T2 }]), 'review', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.equal(d.agentCalls.length, 0);
+});
