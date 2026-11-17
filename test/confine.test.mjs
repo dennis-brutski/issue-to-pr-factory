@@ -48,6 +48,8 @@ test('targetEnv sets CI and fills {port} in every value', () => {
 const bwrapWorks = (await run('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true'])).code === 0;
 const real = { skip: bwrapWorks ? false : 'bwrap probe failed on this machine' };
 const net = "require('net').connect(443, '1.1.1.1').on('connect', () => process.exit(0)).on('error', () => process.exit(3))";
+// Setup's network can only be shown where there is one: not in the factory's own check run, which has none.
+const online = (await run('node', ['-e', net], { timeoutMs: 5000 })).code === 0;
 
 test('confined checks cannot read home, write outside the worktree or reach the network', real, async () => {
   const id = randomBytes(4).toString('hex');
@@ -63,7 +65,7 @@ test('confined checks cannot read home, write outside the worktree or reach the 
     assert.equal((await runChecks(dir, cfg([['node', ['-e', net]]]), 4201)).ok, false, 'reached the network');
     assert.equal((await runChecks(dir, cfg([['sh', ['-c', 'echo ok > inside.txt']]]), 4201)).ok, true);
     assert.ok(existsSync(join(dir, 'inside.txt')), 'can write in the worktree');
-    assert.equal((await runSetup(dir, { ...config, setup: [['node', ['-e', net]]] }, 4201)).ok, true, 'setup reaches the network');
+    if (online) assert.equal((await runSetup(dir, { ...config, setup: [['node', ['-e', net]]] }, 4201)).ok, true, 'setup reaches the network');
     assert.equal((await runSetup(dir, { ...config, setup: [['cat', [canary]]] }, 4201)).ok, false, 'setup read a file in home');
   } finally { rmSync(canary, { force: true }); rmSync(escape, { force: true }); }
 });
@@ -99,7 +101,7 @@ test('confined runs keep PATH, HOME, the target env and the git identity', real,
   const r = await runChecks(dir, cfg, 4201);
   assert.equal(r.ok, true, r.output);
 });
-test('setup can still resolve host names', real, async () => {
+test('setup can still resolve host names', { skip: real.skip || (online ? false : 'no network on this machine') }, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'confine-'));
   const r = await runSetup(dir, { ...config, setup: [['node', ['-e', "require('dns').lookup('registry.npmjs.org', (e) => process.exit(e ? 3 : 0))"]]] }, 4201);
   assert.equal(r.ok, true, r.output);
