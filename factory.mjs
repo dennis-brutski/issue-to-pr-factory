@@ -10,7 +10,7 @@ import * as ws from './lib/workspace.mjs';
 import { runAgent } from './lib/agent.mjs';
 import { runChecks, runSetup } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
-import { recover, tick, cleanup, acquireLock, preflight } from './lib/loop.mjs';
+import { recover, tick, cleanup, acquireLock, lockHolder, preflight } from './lib/loop.mjs';
 import { driftWarnings, oldLayoutWarning } from './lib/startup.mjs';
 
 const factoryRoot = dirname(fileURLToPath(import.meta.url));
@@ -21,6 +21,9 @@ const log = (msg) => console.log(`${new Date().toTimeString().slice(0, 8)}  ${ms
 const deps = { cfg, root, log, gh, ws, run, runAgent, runSetup, runChecks, runItem };
 
 let release;
+// A factory from before targets locks the folder itself; it would poll the same repo.
+const oldFactory = lockHolder(join(factoryRoot, 'factory.lock'));
+if (oldFactory) { console.error(`factory cannot run: an older factory is still running from this folder (pid ${oldFactory}). Stop it first.`); process.exit(1); }
 try { mkdirSync(root, { recursive: true }); release = acquireLock(join(root, 'factory.lock')); } catch (e) { console.error(e.message); process.exit(1); }
 
 const running = new Map();
