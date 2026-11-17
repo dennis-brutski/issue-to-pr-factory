@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// Start: npm start    Stop: Ctrl-C (finish running work), Ctrl-C again (kill now).
+// Start: npm start [-- settings.mjs]    Stop: Ctrl-C (finish running work), Ctrl-C again (kill now).
+import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { config as cfg } from './config.mjs';
+import { loadSettings, cloneUrl } from './lib/settings.mjs';
 import { run, children, killGroup } from './lib/exec.mjs';
 import * as gh from './lib/github.mjs';
 import * as ws from './lib/workspace.mjs';
@@ -11,12 +12,15 @@ import { runChecks } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
 import { recover, tick, cleanup, acquireLock, preflight } from './lib/loop.mjs';
 
-const root = dirname(fileURLToPath(import.meta.url));
+const factoryRoot = dirname(fileURLToPath(import.meta.url));
+let cfg;
+try { cfg = await loadSettings(process.argv[2], { factoryRoot }); } catch (e) { console.error(`factory cannot run: ${e.message}`); process.exit(1); }
+const root = cfg.runDir;
 const log = (msg) => console.log(`${new Date().toTimeString().slice(0, 8)}  ${msg}`);
 const deps = { cfg, root, log, gh, ws, run, runAgent, runChecks, runItem };
 
 let release;
-try { release = acquireLock(join(root, 'factory.lock')); } catch (e) { console.error(e.message); process.exit(1); }
+try { mkdirSync(root, { recursive: true }); release = acquireLock(join(root, 'factory.lock')); } catch (e) { console.error(e.message); process.exit(1); }
 
 const running = new Map();
 let stopping = false, wake = () => {};
@@ -37,7 +41,7 @@ process.on('SIGTERM', () => process.emit('SIGINT'));
 
 try {
   await preflight(deps);
-  await ws.ensureClone(root, `https://github.com/${cfg.repo}.git`);
+  await ws.ensureClone(root, cloneUrl(cfg));
   await recover(deps);
   log(`factory started for ${cfg.repo} — polling every ${cfg.pollSec}s, up to ${cfg.maxParallel} at a time`);
   while (!stopping) {
