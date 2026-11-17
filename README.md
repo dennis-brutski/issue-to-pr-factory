@@ -27,11 +27,11 @@ One file per repo in `targets/`, on top of the shared defaults in `config.mjs`:
 | `repo`, `baseBranch` (required) | `dennis-brutski/gin-rummy-score-pad`, `master` |
 | `setup` — run before the first agent session | `[['npm', ['ci']]]` |
 | `checks` — run before every push; agents are told to run them too | `[['npm', ['test']], ['npm', ['run', 'e2e']]]` |
-| `env` — `{port}` becomes the run's own port | `{ E2E_PORT: '{port}' }` |
+| `env` — `{port}` becomes the run's own port, `{runDir}` its run folder | `{ E2E_PORT: '{port}', npm_config_cache: '{runDir}/npm-cache' }` |
 | `testDirs` — changing an existing test there is flagged | `['test/', 'e2e/']` |
 | `protectedFiles`, `protectedDirs` — flagged when changed | `['playwright.config.js', 'package.json', …]` |
 | `sandboxRead` — extra home folders agents, setup and checks may read | `['~/.cache/ms-playwright']` |
-| `setupWrite` — caches setup may write | `['~/.npm']` |
+| `setupWrite` — caches setup may write; keep them in `{runDir}`, never your own (`~/.npm`) | `['{runDir}/npm-cache']` |
 
 `AGENTS.md`, `CLAUDE.md`, `.github/` and `.claude/` are protected on every target; a target can add to that list, never remove from it.
 

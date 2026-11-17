@@ -72,3 +72,8 @@ test('the factory target protects its own confinement', async () => {
     'config.mjs', 'package.json', 'targets/x.mjs', 'smoke/containment.mjs', 'AGENTS.md', 'test/brakes.test.mjs']) assert.ok(flagged(p), p);
   assert.ok(!flagged('lib/loop.mjs'));
 });
+test("the score pad's setup caches live in its run folder, not in ~/.npm", async () => {
+  const cfg = await loadSettings('gin-rummy-score-pad', { factoryRoot: join(import.meta.dirname, '..') });
+  assert.deepEqual(cfg.setupWrite, ['{runDir}/npm-cache']);
+  assert.equal(cfg.env.npm_config_cache, '{runDir}/npm-cache');
+});

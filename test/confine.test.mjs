@@ -118,3 +118,17 @@ test("the worktree's .git file is read-only for confined runs", real, async () =
   assert.equal(r.ok, false);
   assert.equal(readFileSync(join(dir, '.git'), 'utf8'), 'gitdir: /somewhere\n');
 });
+test('targetEnv fills {runDir} too', () => {
+  assert.equal(targetEnv({ runDir: '/r', env: { npm_config_cache: '{runDir}/npm-cache' } }, 1).npm_config_cache, '/r/npm-cache');
+});
+test("setup writes the run folder's cache, never the real home cache", real, async () => {
+  const runDir = mkdtempSync(join(tmpdir(), 'run-')), dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const id = randomBytes(4).toString('hex'), real = join(homedir(), '.npm', `factory-probe-${id}`);
+  const cfg = { ...config, runDir, setupWrite: ['{runDir}/npm-cache'], setup: [['sh', ['-c', `touch {runDir}/npm-cache/ok; mkdir -p "$HOME/.npm" && touch "$HOME/.npm/factory-probe-${id}"`.replaceAll('{runDir}', runDir)]]] };
+  try {
+    const r = await runSetup(dir, cfg, 4201);
+    assert.equal(r.ok, true, r.output);
+    assert.ok(existsSync(join(runDir, 'npm-cache', 'ok')));
+    assert.ok(!existsSync(real), 'setup wrote the real ~/.npm');
+  } finally { rmSync(real, { force: true }); }
+});
