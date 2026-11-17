@@ -27,10 +27,11 @@ const pr = (comments = [{ author: 'dennis-brutski', body: 'also handle redo', at
 });
 
 function fakes(o = {}) {
-  const d = { agentCalls: [], comments: [], labelsAdded: [], labelsRemoved: [], pushed: [], opened: [], drafts: [], bodies: [], worktrees: [] };
+  const d = { installs: [], agentCalls: [], comments: [], labelsAdded: [], labelsRemoved: [], pushed: [], opened: [], drafts: [], bodies: [], worktrees: [] };
   const queue = [...(o.agent ?? [])];
   d.deps = {
     cfg: config, root: '/f', log: () => {},
+    run: async (cmd, args, opts) => { d.installs.push({ cmd: [cmd, ...args].join(' '), cwd: opts.cwd, agentCallsSoFar: d.agentCalls.length }); return o.install ?? { code: 0, stdout: '', stderr: '' }; },
     runAgent: async (a) => { d.agentCalls.push(a); const r = queue.shift(); if (!r) throw new Error('unexpected agent call'); return r; },
     runChecks: async (dir, cfg, port) => { d.checkPort = port; return o.checks ?? { ok: true, failed: null, output: '' }; },
     gh: {
@@ -274,4 +275,16 @@ test('a park with commits names the local branch', async () => {
   const d = fakes({ agent: [gate(90), work()], checks: { ok: false, failed: 'npm test', output: 'x' } });
   await runItem(issue, 'implement', d.deps, 4201);
   assert.ok(d.comments[0].includes("factory's local branch `factory/issue-1`"));
+});
+test('dependencies are installed in the worktree before the first agent session', async () => {
+  const d = fakes({ agent: [gate(5, ['What?'])] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.deepEqual(d.installs, [{ cmd: 'npm ci', cwd: '/f/worktrees/issue-1', agentCallsSoFar: 0 }]);
+});
+test('a failed npm ci parks before any agent session', async () => {
+  const d = fakes({ install: { code: 1, stdout: '', stderr: 'npm ERR! lockfile out of sync' } });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.equal(d.agentCalls.length, 0);
+  assert.ok(d.comments[0].includes('lockfile out of sync'));
 });
