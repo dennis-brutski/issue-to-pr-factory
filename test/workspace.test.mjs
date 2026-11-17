@@ -206,3 +206,13 @@ test('a redirected commondir is refused', async () => {
   writeFileSync(join(root, 'repo', '.git', 'worktrees', 'issue-7', 'commondir'), '/tmp/elsewhere\n');
   await assert.rejects(ws.checkGitLink(root, 7), /commondir/);
 });
+test('abortMerge leaves a worktree that was mid-merge clean, at its old commit', async () => {
+  const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'a.txt', 'mine\n');
+  const before = (await ws.headInfo(dir)).sha;
+  await commitFile(seed, 'a.txt', 'theirs\n'); await git(seed, 'push', '-q', 'origin', 'master');
+  assert.equal(await ws.mergeBase(dir, 'master'), 'conflict');
+  await ws.abortMerge(dir);
+  assert.equal(await ws.isClean(dir), true);
+  assert.equal(await ws.mergeResolved(dir), true);
+  assert.equal((await ws.headInfo(dir)).sha, before);
+});
