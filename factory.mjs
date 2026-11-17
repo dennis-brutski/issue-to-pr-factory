@@ -11,6 +11,7 @@ import { runAgent } from './lib/agent.mjs';
 import { runChecks, runSetup } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
 import { recover, tick, cleanup, acquireLock, preflight } from './lib/loop.mjs';
+import { driftWarnings, oldLayoutWarning } from './lib/startup.mjs';
 
 const factoryRoot = dirname(fileURLToPath(import.meta.url));
 let cfg;
@@ -42,6 +43,13 @@ process.on('SIGTERM', () => process.emit('SIGINT'));
 try {
   await preflight(deps);
   await ws.ensureClone(root, cloneUrl(cfg));
+  const clone = join(root, 'repo');
+  if (!(await ws.hasRemoteBranch(clone, cfg.baseBranch))) throw new Error(`base branch "${cfg.baseBranch}" not found on ${cfg.repo}`);
+  const onBase = await ws.pathsOnBase(clone, cfg.baseBranch);
+  for (const w of [oldLayoutWarning(factoryRoot), ...driftWarnings(cfg, (p) => onBase.has(p))].filter(Boolean)) log(`warning: ${w}`);
+  const labels = await gh.listLabels(cfg);
+  for (const l of [...Object.values(cfg.triggers), ...Object.values(cfg.states)])
+    if (!labels.includes(l)) { await gh.createLabel(cfg, l); log(`created label ${l}`); }
   await recover(deps);
   log(`factory started for ${cfg.repo} (${cfg.target}) — polling every ${cfg.pollSec}s, up to ${cfg.maxParallel} at a time`);
   while (!stopping) {

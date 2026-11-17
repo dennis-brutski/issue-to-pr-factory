@@ -74,6 +74,10 @@ try {
     item(m[1]).body = stdin();
   } else if (pos[0] === 'api' && !opt.method && opt.jq === '.state' && (m = /^repos\/[^/]+\/[^/]+\/issues\/(\d+)$/.exec(pos[1]))) {
     out = item(m[1]).state === 'OPEN' ? 'open' : 'closed';
+  } else if (pos[0] === 'api' && /^repos\/[^/]+\/[^/]+\/labels$/.test(pos[1]) && opt.jq === '.[].name' && !opt.method) {
+    out = (s.repoLabels ?? []).join('\n');
+  } else if (pos[0] === 'api' && opt.method === 'POST' && /^repos\/[^/]+\/[^/]+\/labels$/.test(pos[1])) {
+    s.repoLabels = [...(s.repoLabels ?? []), field('name')[0]];
   } else if (pos[0] === 'pr' && pos[1] === 'list') {
     const keys = opt.json.split(',');
     const prs = s.items.filter((i) => i.kind === 'pr' && i.headRefName === opt.head && (opt.state === 'all' || i.state === 'OPEN'));

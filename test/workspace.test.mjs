@@ -151,3 +151,12 @@ test('changesAgainstBase with a commit lists only what changed after it', async 
   assert.deepEqual((await ws.changesAgainstBase(dir, 'master', sha)).map((c) => c.path), ['second.txt']);
   assert.deepEqual((await ws.changesAgainstBase(dir, 'master')).map((c) => c.path), ['first.txt', 'second.txt']);
 });
+test('pathsOnBase lists files and their folders on the remote base branch', async () => {
+  const paths = await ws.pathsOnBase(join(root, 'repo'), 'master');
+  assert.ok(paths.has('a.txt') && paths.has('test/') && paths.has('test/unit/') && paths.has('test/unit/stats.test.js'));
+  assert.ok(!paths.has('missing/'));
+});
+test('hasRemoteBranch tells whether the base branch exists', async () => {
+  assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'master'), true);
+  assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'nope'), false);
+});

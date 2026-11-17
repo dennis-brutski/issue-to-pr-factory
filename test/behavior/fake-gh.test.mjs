@@ -74,3 +74,8 @@ test('a failed command does not leave the state locked', async () => {
   const r = await run('gh', ['api', 'user', '--jq', '.login'], { timeoutMs: 2000 });
   assert.equal(r.code, 0, r.stderr);
 });
+test('listLabels and createLabel round-trip', async () => {
+  assert.deepEqual(await gh.listLabels(cfg), []);
+  await gh.createLabel(cfg, 'agent:implement');
+  assert.deepEqual(await gh.listLabels(cfg), ['agent:implement']);
+});
