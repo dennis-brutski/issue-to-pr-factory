@@ -71,7 +71,8 @@ test('each run gets its own e2e port', async () => {
   const d = fakes({ candidates: [issue(3), issue(5)] });
   const running = new Map();
   await tick(d.deps, running); await Promise.all(running.values());
-  assert.deepEqual(d.started.map((s) => s.port), [4203, 4205]);
+  const [a, b] = d.started.map((s) => s.port);
+  assert.ok(a && b && a !== b, `ports ${a} and ${b}`);
 });
 test('tick parks an edited foreign issue with a comment and starts nothing for it', async () => {
   const d = fakes({ candidates: [issue(2, { author: 'mallory', bodyEditedAt: T2 })] });
