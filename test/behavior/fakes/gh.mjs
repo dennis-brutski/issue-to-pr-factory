@@ -55,8 +55,18 @@ try {
         reviewThreads: { nodes: i.comments.filter((c) => c.path).map((c) => ({ comments: { nodes: [{ author: actor(c.author), body: c.body, path: c.path, createdAt: c.at }] } })) },
       } : {}),
     });
-    const open = (kind) => s.items.filter((i) => i.kind === kind && i.state === 'OPEN' && i.labels.some((l) => wanted.includes(l))).map(node);
-    out = JSON.stringify({ data: { repository: { issues: { nodes: open('issue') }, pullRequests: { nodes: open('pr') } } } });
+    // Pages like GitHub: at most `first:` nodes, starting after the cursor (here: how many came before).
+    const query = field('query')[0] ?? '';
+    const connection = (name, kind) => {
+      const args = new RegExp(`\\b${name}\\(([^)]*)\\)`).exec(query);
+      if (!args) return undefined;
+      const first = Number(/first:\s*(\d+)/.exec(args[1])?.[1] ?? 100);
+      const start = /after:/.test(args[1]) ? Number(field('after')[0] ?? 0) : 0;
+      const all = s.items.filter((i) => i.kind === kind && i.state === 'OPEN' && i.labels.some((l) => wanted.includes(l)));
+      const nodes = all.slice(start, start + first).map(node);
+      return { pageInfo: { hasNextPage: start + nodes.length < all.length, endCursor: String(start + nodes.length) }, nodes };
+    };
+    out = JSON.stringify({ data: { repository: { issues: connection('issues', 'issue'), pullRequests: connection('pullRequests', 'pr') } } });
   } else if (pos[0] === 'api' && pos[1] === 'user') {
     out = s.login;
   } else if (pos[0] === 'api' && (m = /^repos\/[^/]+\/[^/]+\/issues\/(\d+)\/labels(?:\/(.+))?$/.exec(pos[1]))) {
