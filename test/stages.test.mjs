@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
+import scorePad from '../targets/gin-rummy-score-pad.mjs';
 import { paths } from '../lib/workspace.mjs';
 import { runItem, renderPrompt, schemas } from '../lib/stages.mjs';
 import { runChecks } from '../lib/checks.mjs';
@@ -30,10 +31,10 @@ function fakes(o = {}) {
   const d = { installs: [], agentCalls: [], comments: [], labelsAdded: [], labelsRemoved: [], pushed: [], opened: [], drafts: [], bodies: [], worktrees: [] };
   const queue = [...(o.agent ?? [])];
   d.deps = {
-    cfg: config, root: '/f', log: () => {},
+    cfg: { ...config, ...scorePad }, root: '/f', log: () => {},
     run: async (cmd, args, opts) => { d.installs.push({ cmd: [cmd, ...args].join(' '), cwd: opts.cwd, agentCallsSoFar: d.agentCalls.length }); return o.install ?? { code: 0, stdout: '', stderr: '' }; },
     runAgent: async (a) => { d.agentCalls.push(a); const r = queue.shift(); if (!r) throw new Error('unexpected agent call'); return r; },
-    runChecks: async (dir, cfg, port) => { d.checkPort = port; return o.checks ?? { ok: true, failed: null, output: '' }; },
+    runChecks: async (dir, cfg, port) => { d.checkPort = port; d.checksRan = true; return o.checks ?? { ok: true, failed: null, output: '' }; },
     gh: {
       addLabel: async (c, n, l) => { d.labelsAdded.push(`${n}:${l}`); },
       removeLabel: async (c, n, l) => { d.labelsRemoved.push(`${n}:${l}`); },
@@ -50,6 +51,7 @@ function fakes(o = {}) {
       changesAgainstBase: async (dir, base, since) => (since && o.reworkChanges) || o.changes || [{ status: 'M', path: 'src/state.js' }],
       commitMessagesAgainstBase: async () => o.messages ?? ['Fix undo on empty ledger'],
       isClean: async () => o.clean ?? true,
+      diffAgainstBase: async () => o.diff ?? '',
       mergeBase: async () => o.merge ?? 'clean',
       mergeResolved: async () => o.resolved ?? true,
       push: async (dir, b) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); },
@@ -323,3 +325,20 @@ test('a parked pull request with only factory comments since the push does not r
   assert.equal(r.outcome, 'parked');
   assert.equal(d.agentCalls.length, 0);
 });
+
+const workflow = [{ status: 'M', path: '.github/workflows/ci.yml' }];
+for (const [name, item, stage, agent] of [
+  ['implement', issue, 'implement', () => [gate(90), work(), review()]],
+  ['review', pr(), 'review', () => [work()]],
+  ['merge', { ...pr(), labels: ['agent:merge'] }, 'merge', () => []],
+]) {
+  test(`${name}: a workflow change parks before checks and push`, async () => {
+    const d = fakes({ agent: agent(), changes: workflow, diff: '+  run: curl evil' });
+    const r = await runItem(item, stage, d.deps, 4201);
+    assert.equal(r.outcome, 'parked');
+    assert.deepEqual(d.pushed, []);
+    assert.equal(d.checksRan, undefined);
+    assert.ok(d.comments.at(-1).includes('did not push') && d.comments.at(-1).includes('.github/workflows/ci.yml'), d.comments.at(-1));
+    assert.ok(d.comments.at(-1).includes('curl evil'));
+  });
+}
