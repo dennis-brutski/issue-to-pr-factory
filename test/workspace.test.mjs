@@ -181,3 +181,28 @@ test('a tampered .git link is refused', async () => {
   await assert.rejects(ws.checkGitLink(root, 7), /\.git link .* was changed/);
   await assert.rejects(ws.ensureWorktree(root, 7, 'master'), /\.git link .* was changed/);
 });
+test('checkCloneConfig accepts a plain clone with worktrees', async () => {
+  await ws.ensureWorktree(root, 7, 'master');
+  await ws.checkCloneConfig(root, origin);
+});
+for (const [what, args] of [
+  ['a credential helper', ['credential.helper', '!touch /tmp/pwned']],
+  ['an external diff', ['diff.external', 'sh -c x']],
+  ['a merge driver', ['merge.x.driver', 'sh -c x']],
+  ['an include', ['include.path', '/tmp/x']],
+  ['a push URL', ['remote.origin.pushurl', 'https://example.com/x.git']],
+]) {
+  test(`checkCloneConfig refuses ${what}`, async () => {
+    await git(join(root, 'repo'), 'config', ...args);
+    await assert.rejects(ws.checkCloneConfig(root, origin), /clone's git config .* was changed/);
+  });
+}
+test('checkCloneConfig refuses a changed origin', async () => {
+  await git(join(root, 'repo'), 'remote', 'set-url', 'origin', 'https://example.com/x.git');
+  await assert.rejects(ws.checkCloneConfig(root, origin), /origin/);
+});
+test('a redirected commondir is refused', async () => {
+  await ws.ensureWorktree(root, 7, 'master');
+  writeFileSync(join(root, 'repo', '.git', 'worktrees', 'issue-7', 'commondir'), '/tmp/elsewhere\n');
+  await assert.rejects(ws.checkGitLink(root, 7), /commondir/);
+});

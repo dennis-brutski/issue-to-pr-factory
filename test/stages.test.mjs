@@ -60,6 +60,7 @@ function fakes(o = {}) {
       mergeResolved: async () => o.resolved ?? true,
       push: async (dir, b, sha) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); d.pushedSha = sha; },
       currentBranch: async () => (o.detached ? null : 'factory/issue-1'),
+      checkCloneConfig: async () => { d.configChecks = (d.configChecks ?? 0) + 1; if (o.configChanged) throw new Error("the clone's git config at /f/repo was changed: credential.helper"); },
       checkGitLink: async () => { if (o.gitLinkChanged) throw new Error("the worktree's .git link at /f/worktrees/issue-1 was changed"); },
     },
   };
@@ -392,4 +393,16 @@ test('a changed .git link after an agent session parks and never pushes', async 
   assert.equal(r.outcome, 'parked');
   assert.deepEqual(d.pushed, []);
   assert.match(d.comments.at(-1), /\.git link/);
+});
+test('a changed clone config after an agent session parks and never pushes', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], configChanged: true });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []);
+  assert.match(d.comments.at(-1), /credential\.helper/);
+});
+test('the clone config is checked after every agent session and before the push', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(d.configChecks, 5); // after setup's worktree, 3 sessions, before push
 });

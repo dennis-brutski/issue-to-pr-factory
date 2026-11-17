@@ -68,6 +68,7 @@ Comments you write on a labelled issue or pull request are instructions for the 
 | a check failed / setup failed | The output is in the comment. Remove the label for another attempt on the same branch. |
 | draft because it touches protected files | The agent changed existing tests, CI, config or a protected file. Review that part yourself. |
 | changes CI workflow files, so the factory did not push it | GitHub would run that workflow the moment it is pushed. Read the diff in the comment; if it is right, push the branch from `runs/<target>/worktrees/issue-<n>` yourself. |
+| the worktree's .git link / the clone's git config was changed | A session tried to change where git looks or what it runs. The factory stops entirely. Read the session log, fix or delete `runs/<target>/repo`, then start again. |
 | issue text was edited after it was approved | Someone else edited their issue after you labelled it. Re-read it, remove the label. |
 | timed out / max_turns / usage limit | Remove the label when you want it to continue. |
 
@@ -85,7 +86,11 @@ Nothing is ever retried on its own.
 - **Workflow files** under `.github/workflows/` are never pushed by the factory.
 - If the sandbox cannot start, the factory refuses to start.
 
-What stays outside: after a push, unchanged CI workflows run the branch's code on GitHub's machines.
+- **Git itself:** the factory's own git commands read the clone's `.git/config`, which agents can write. Before any git command runs on a worktree (and on every poll) the config must hold only what a plain clone holds and `origin` must be the target repo; otherwise the issue parks and the factory stops. The factory pushes exactly the commit it checked.
+
+What stays outside:
+- After a push, unchanged CI workflows run the branch's code on GitHub's machines.
+- With two issues running at once, git commands for one can run in the short window after the other's agent session changed the config and before the next check. Upgrade path: run the factory's own git confined as well, and push from a clone agents never touch.
 
 ## Files
 

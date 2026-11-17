@@ -32,6 +32,7 @@ for (const [path, content] of Object.entries(step.write ?? {})) {
 }
 for (const path of step.remove ?? []) rmSync(join(cwd, path), { force: true });
 if (step.commit) { git('add', '-A'); git('commit', '-q', '-m', step.commit); }
+for (const [key, value] of Object.entries(step.gitConfig ?? {})) git('config', key, value); // what a hostile session could do
 if (step.placeholders) { // what a killed sandbox leaves behind
   const gitDir = resolve(cwd, git('rev-parse', '--git-common-dir'));
   mkdirSync(join(cwd, '.claude'), { recursive: true });

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Start: npm start [-- <target>]    Stop: Ctrl-C (finish running work), Ctrl-C again (kill now).
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSettings, cloneUrl } from './lib/settings.mjs';
@@ -45,6 +45,7 @@ process.on('SIGTERM', () => process.emit('SIGINT'));
 
 try {
   await preflight(deps);
+  if (existsSync(join(root, 'repo', '.git'))) await ws.checkCloneConfig(root, cloneUrl(cfg)); // before the fetch reads it
   await ws.ensureClone(root, cloneUrl(cfg));
   const clone = join(root, 'repo');
   if (!(await ws.hasRemoteBranch(clone, cfg.baseBranch))) throw new Error(`base branch "${cfg.baseBranch}" not found on ${cfg.repo}`);
@@ -56,6 +57,7 @@ try {
   await recover(deps);
   log(`factory started for ${cfg.repo} (${cfg.target}) — polling every ${cfg.pollSec}s, up to ${cfg.maxParallel} at a time`);
   while (!stopping) {
+    await ws.checkCloneConfig(root, cloneUrl(cfg)); // a session may have planted config: stop before git reads it
     await cleanup(deps, running);
     const started = await tick(deps, running);
     if (!started.length && !running.size) log('0 eligible');

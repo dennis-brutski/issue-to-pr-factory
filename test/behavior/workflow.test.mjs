@@ -42,3 +42,21 @@ test('a non-npm target goes from issue to pull request', async () => {
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
 });
+
+test("a session that plants git config in the clone is stopped before any git runs it", async () => {
+  const w = await world();
+  const marker = `${w.dir}/helper-ran`;
+  try {
+    const n = w.issue({ labels: ['agent:implement'] });
+    w.script(n, [gate(90), { ...implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), gitConfig: { 'credential.helper': `!touch ${marker}`, 'diff.external': `touch ${marker}` } }]);
+    const f = w.start();
+    await w.until(settled(w, n, 'agent:needs-human'), 20000, 'agent:needs-human');
+    assert.match(factoryComments(w, n).at(-1).body, /credential\.helper/);
+    assert.equal(w.branch(`factory/issue-${n}`), null);
+    const { existsSync } = await import('node:fs');
+    await w.until(() => f.proc.exitCode !== null, 15000, 'the factory to stop');
+    assert.equal(await f.exited, 1);
+    assert.match(f.output(), /clone's git config .* was changed/);
+    assert.ok(!existsSync(marker), 'the planted command ran');
+  } finally { w.close(); }
+});
