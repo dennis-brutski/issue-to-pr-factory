@@ -8,7 +8,7 @@ import { run, children, killGroup } from './lib/exec.mjs';
 import * as gh from './lib/github.mjs';
 import * as ws from './lib/workspace.mjs';
 import { runAgent } from './lib/agent.mjs';
-import { runChecks } from './lib/checks.mjs';
+import { runChecks, runSetup } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
 import { recover, tick, cleanup, acquireLock, preflight } from './lib/loop.mjs';
 
@@ -17,7 +17,7 @@ let cfg;
 try { cfg = await loadSettings(process.argv[2], { factoryRoot }); } catch (e) { console.error(`factory cannot run: ${e.message}`); process.exit(1); }
 const root = cfg.runDir;
 const log = (msg) => console.log(`${new Date().toTimeString().slice(0, 8)}  ${msg}`);
-const deps = { cfg, root, log, gh, ws, run, runAgent, runChecks, runItem };
+const deps = { cfg, root, log, gh, ws, run, runAgent, runSetup, runChecks, runItem };
 
 let release;
 try { mkdirSync(root, { recursive: true }); release = acquireLock(join(root, 'factory.lock')); } catch (e) { console.error(e.message); process.exit(1); }

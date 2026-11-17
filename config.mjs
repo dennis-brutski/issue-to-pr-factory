@@ -3,6 +3,13 @@ export const config = {
   owner: 'dennis-brutski',
   remoteUrl: null, // null = https://github.com/<repo>.git
   runDir: null, // null = runs/<target>
+  setup: [], // [cmd, [args]] run before the first agent session, confined, with network
+  checks: [], // [cmd, [args]] run before every push, confined, without network
+  env: {}, // for setup, checks and agent sessions; '{port}' becomes the run's port
+  runtimeRead: ['~/.nvm'], // home folders everything may read (the Node install)
+  sandboxRead: [], // extra home folders agents, setup and checks may read
+  setupWrite: [], // caches setup may write
+  protectedFiles: [], protectedDirs: [], testDirs: [],
   pollSec: 300,
   maxParallel: 2,
   confidenceThreshold: 70,

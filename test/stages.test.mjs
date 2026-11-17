@@ -32,7 +32,11 @@ function fakes(o = {}) {
   const queue = [...(o.agent ?? [])];
   d.deps = {
     cfg: { ...config, ...scorePad }, root: '/f', log: () => {},
-    run: async (cmd, args, opts) => { d.installs.push({ cmd: [cmd, ...args].join(' '), cwd: opts.cwd, agentCallsSoFar: d.agentCalls.length }); return o.install ?? { code: 0, stdout: '', stderr: '' }; },
+    runSetup: async (dir, cfg, port, gitDir) => {
+      d.installs.push({ cmd: cfg.setup.map(([c, a]) => [c, ...a].join(' ')).join(' && '), cwd: dir, agentCallsSoFar: d.agentCalls.length, gitDir });
+      const r = o.install ?? { code: 0, stdout: '', stderr: '' };
+      return { ok: r.code === 0, failed: r.code === 0 ? null : 'npm ci', output: r.stdout + r.stderr };
+    },
     runAgent: async (a) => { d.agentCalls.push(a); const r = queue.shift(); if (!r) throw new Error('unexpected agent call'); return r; },
     runChecks: async (dir, cfg, port) => { d.checkPort = port; d.checksRan = true; return o.checks ?? { ok: true, failed: null, output: '' }; },
     gh: {
@@ -259,14 +263,14 @@ test('runChecks reports the first failing step with its output', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'echo BOOM-OUTPUT && exit 1', e2e: 'exit 0' } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
-  const r = await runChecks(dir, config, 4321);
+  const r = await runChecks(dir, { ...config, ...scorePad }, 4321);
   assert.equal(r.ok, false); assert.equal(r.failed, 'npm test'); assert.match(r.output, /BOOM-OUTPUT/);
 });
 test('runChecks passes the port to the e2e run', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'exit 0', e2e: 'test "$E2E_PORT" = 4321' } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
-  assert.deepEqual(await runChecks(dir, config, 4321), { ok: true, failed: null, output: '' });
+  assert.deepEqual(await runChecks(dir, { ...config, ...scorePad }, 4321), { ok: true, failed: null, output: '' });
 });
 test('a park without commits does not point to a branch', async () => {
   const d = fakes({ agent: [gate(5, ['What?'])], messages: [] });
@@ -281,7 +285,7 @@ test('a park with commits names the local branch', async () => {
 test('dependencies are installed in the worktree before the first agent session', async () => {
   const d = fakes({ agent: [gate(5, ['What?'])] });
   await runItem(issue, 'implement', d.deps, 4201);
-  assert.deepEqual(d.installs, [{ cmd: 'npm ci', cwd: '/f/worktrees/issue-1', agentCallsSoFar: 0 }]);
+  assert.deepEqual(d.installs, [{ cmd: 'npm ci', cwd: '/f/worktrees/issue-1', agentCallsSoFar: 0, gitDir: '/f/repo/.git' }]);
 });
 test('a failed npm ci parks before any agent session', async () => {
   const d = fakes({ install: { code: 1, stdout: '', stderr: 'npm ERR! lockfile out of sync' } });
@@ -342,3 +346,13 @@ for (const [name, item, stage, agent] of [
     assert.ok(d.comments.at(-1).includes('curl evil'));
   });
 }
+test('the pull request names the checks the factory ran', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.match(d.opened[0].body, /`npm test`, `npm run e2e` — all passed/);
+});
+test('agent sessions get the target environment with their port', async () => {
+  const d = fakes({ agent: [gate(5, ['What?'])] });
+  await runItem(issue, 'implement', d.deps, 4207);
+  assert.equal(d.agentCalls[0].port, 4207);
+});

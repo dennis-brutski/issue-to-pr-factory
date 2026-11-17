@@ -29,3 +29,16 @@ test('another .github change is pushed as a draft', async () => {
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
 });
+
+test('a non-npm target goes from issue to pull request', async () => {
+  const seed = { '.gitignore': '', 'src/a.js': 'export const a = 1;\n', 'test/a.test.mjs': "import { test } from 'node:test';\ntest('a', () => {});\n" };
+  const w = await world({ seed, settings: { setup: [], checks: [['node', ['--test']]], protectedFiles: [] } });
+  try {
+    const n = w.issue({ labels: ['agent:implement'] });
+    w.script(n, [gate(90), implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), clean]);
+    const f = w.start();
+    await w.until(settled(w, n, 'agent:done'), 20000, 'a pull request');
+    assert.match(w.pr().body, /`node --test` — all passed/);
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});

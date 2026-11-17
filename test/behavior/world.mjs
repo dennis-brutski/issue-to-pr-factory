@@ -40,7 +40,7 @@ export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) 
   writeFileSync(script, '{}'); writeFileSync(log, '');
   const settingsFile = join(dir, `${name}.mjs`);
   const runDir = join(dir, 'run');
-  writeFileSync(settingsFile, `export default ${JSON.stringify({ repo: `${OWNER}/${name}`, baseBranch: 'master', protectedFiles: ['package.json', 'package-lock.json'], testDirs: ['test/'], remoteUrl: origin, runDir, pollSec: 1, ...settings })};\n`);
+  writeFileSync(settingsFile, `export default ${JSON.stringify({ repo: `${OWNER}/${name}`, baseBranch: 'master', protectedFiles: ['package.json', 'package-lock.json'], testDirs: ['test/'], setup: [['npm', ['ci']]], checks: [['npm', ['test']]], setupWrite: ['~/.npm'], remoteUrl: origin, runDir, pollSec: 1, ...settings })};\n`);
 
   const readGh = () => JSON.parse(readFileSync(ghState, 'utf8'));
   // Same lock and atomic write as the fake gh, which may be writing at the same moment.

@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildArgs, interpret, agentSettings } from '../lib/agent.mjs';
+import { config } from '../config.mjs';
+import scorePad from '../targets/gin-rummy-score-pad.mjs';
 
 const base = { schema: { type: 'object' }, settings: { sandbox: { enabled: true } }, maxTurns: 150, model: null, readOnly: false };
 const result = (o = {}) => ({
@@ -74,8 +76,12 @@ test('agentSettings denies push and gh, and switches attribution off', () => {
   assert.deepEqual(s.attribution, { commit: '', pr: '' });
 });
 test('agentSettings lets the sandbox read node and the Playwright browsers, nothing else at home', () => {
-  const fs = agentSettings('/f/worktrees/issue-7').sandbox.filesystem;
+  const fs = agentSettings('/f/worktrees/issue-7', { ...config, ...scorePad }).sandbox.filesystem;
   assert.deepEqual(fs.denyRead, ['~']);
   assert.ok(fs.allowRead.includes('~/.nvm') && fs.allowRead.includes('~/.cache/ms-playwright'));
   assert.equal(fs.allowRead.length, 3);
+});
+test('agentSettings adds the runtime and target read folders', () => {
+  const fs = agentSettings('/w', { runtimeRead: ['~/.sdkman'], sandboxRead: ['~/.gradle'] }).sandbox.filesystem;
+  assert.ok(fs.allowRead.includes('~/.sdkman') && fs.allowRead.includes('~/.gradle'));
 });
