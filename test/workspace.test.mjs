@@ -143,3 +143,11 @@ test('ensureWorktree removes a sandbox placeholder config.lock from the clone', 
   const { created } = await ws.ensureWorktree(root, 4, 'master');
   assert.ok(created && !existsSync(lock));
 });
+test('changesAgainstBase with a commit lists only what changed after it', async () => {
+  const { dir } = await ws.ensureWorktree(root, 5, 'master');
+  await commitFile(dir, 'first.txt');
+  const { sha } = await ws.headInfo(dir);
+  await commitFile(dir, 'second.txt');
+  assert.deepEqual((await ws.changesAgainstBase(dir, 'master', sha)).map((c) => c.path), ['second.txt']);
+  assert.deepEqual((await ws.changesAgainstBase(dir, 'master')).map((c) => c.path), ['first.txt', 'second.txt']);
+});

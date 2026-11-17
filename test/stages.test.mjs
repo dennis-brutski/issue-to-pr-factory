@@ -46,8 +46,8 @@ function fakes(o = {}) {
     ws: {
       paths,
       ensureWorktree: async (root, n) => { d.worktrees.push(n); return { dir: `/f/worktrees/issue-${n}`, created: true }; },
-      headInfo: async () => ({ sha: 'abc', committedAt: T }),
-      changesAgainstBase: async () => o.changes ?? [{ status: 'M', path: 'src/state.js' }],
+      headInfo: async () => ({ sha: o.noNewCommits ? 'abc' : `abc${d.agentCalls.filter((a) => !a.readOnly).length}`, committedAt: T }),
+      changesAgainstBase: async (dir, base, since) => (since && o.reworkChanges) || o.changes || [{ status: 'M', path: 'src/state.js' }],
       commitMessagesAgainstBase: async () => o.messages ?? ['Fix undo on empty ledger'],
       isClean: async () => o.clean ?? true,
       mergeBase: async () => o.merge ?? 'clean',
@@ -293,4 +293,21 @@ test('runItem leaves park logging to the loop', async () => {
   const logs = []; d.deps.log = (m) => logs.push(m);
   await runItem(issue, 'implement', d.deps, 4201);
   assert.ok(!logs.some((l) => l.includes('parked')), logs.join('\n'));
+});
+test('rework with no new commits posts the agent\'s answer and finishes without pushing', async () => {
+  const d = fakes({ agent: [work('complete')], noNewCommits: true });
+  const r = await runItem(pr(), 'review', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.deepEqual(d.pushed, []);
+  assert.ok(d.comments.some((c) => c.includes('Changed the undo guard.')), d.comments.join('\n'));
+  assert.ok(d.labelsRemoved.includes('4:agent:review'));
+  assert.ok(!d.labelsAdded.includes('4:agent:needs-human'));
+});
+test('rework on an already flagged branch is checked only for what the rework changed', async () => {
+  const d = fakes({ agent: [work()], changes: [{ status: 'M', path: 'test/unit/backup.test.js' }], reworkChanges: [{ status: 'M', path: 'src/state.js' }] });
+  const r = await runItem(pr(), 'review', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.deepEqual(d.drafts, []);
+  assert.deepEqual(d.pushed, ['factory/issue-1']);
+  assert.ok(d.comments.some((c) => c.includes('Changed the undo guard.')));
 });
