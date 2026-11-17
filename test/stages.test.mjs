@@ -406,3 +406,11 @@ test('the clone config is checked after every agent session and before the push'
   await runItem(issue, 'implement', d.deps, 4201);
   assert.equal(d.configChecks, 5); // after setup's worktree, 3 sessions, before push
 });
+test('a worktree left dirty by a killed run parks before the first session, saying so', async () => {
+  const d = fakes({ agent: [gate(90)], clean: false });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.equal(d.agentCalls.length, 0);
+  assert.match(d.comments[0], /uncommitted changes/);
+  assert.match(d.comments[0], /worktrees\/issue-1/);
+});
