@@ -265,3 +265,13 @@ test('runChecks passes the port to the e2e run', async () => {
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
   assert.deepEqual(await runChecks(dir, config, 4321), { ok: true, failed: null, output: '' });
 });
+test('a park without commits does not point to a branch', async () => {
+  const d = fakes({ agent: [gate(5, ['What?'])], messages: [] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.ok(!d.comments[0].includes('factory/issue-1'));
+});
+test('a park with commits names the local branch', async () => {
+  const d = fakes({ agent: [gate(90), work()], checks: { ok: false, failed: 'npm test', output: 'x' } });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.ok(d.comments[0].includes("factory's local branch `factory/issue-1`"));
+});
