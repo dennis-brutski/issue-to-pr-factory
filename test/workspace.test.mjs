@@ -136,3 +136,10 @@ test('ensureWorktree removes sandbox placeholders a killed session left, and not
   for (const f of ['.bashrc', '.gitconfig', '.claude']) assert.ok(!existsSync(join(dir, f)), f);
   assert.ok(existsSync(join(dir, 'wip.js')) && existsSync(join(dir, 'empty.txt')));
 });
+test('ensureWorktree removes a sandbox placeholder config.lock from the clone', async () => {
+  const { chmodSync } = await import('node:fs');
+  const lock = join(root, 'repo', '.git', 'config.lock');
+  writeFileSync(lock, ''); chmodSync(lock, 0o444);
+  const { created } = await ws.ensureWorktree(root, 4, 'master');
+  assert.ok(created && !existsSync(lock));
+});
