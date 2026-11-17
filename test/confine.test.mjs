@@ -74,3 +74,9 @@ test('a missing check program reports which one', real, async () => {
   assert.equal(r.failed, 'definitely-missing-cmd x');
   assert.match(r.output, /No such file|not found|ENOENT/);
 });
+test('confined checks can commit with the git identity agents get', real, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  await run('git', ['init', '-q', dir]);
+  const r = await runChecks(dir, { ...config, checks: [['git', ['commit', '-q', '--allow-empty', '-m', 'x']]] }, 4201, join(dir, '.git'));
+  assert.equal(r.ok, true, r.output);
+});
