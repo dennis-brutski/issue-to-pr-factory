@@ -132,3 +132,12 @@ test("setup writes the run folder's cache, never the real home cache", real, asy
     assert.ok(!existsSync(real), 'setup wrote the real ~/.npm');
   } finally { rmSync(real, { force: true }); }
 });
+test('without a readable ~/.gitconfig the git identity comes from the environment', async () => {
+  // Inside an agent's sandbox the home folder is hidden; the outer factory passed the identity in.
+  const home = mkdtempSync(join(tmpdir(), 'home-'));
+  const code = "const { gitIdentityEnv } = await import(process.argv[1]); console.log(JSON.stringify(await gitIdentityEnv()));";
+  const r = await run(process.execPath, ['--input-type=module', '-e', code, new URL('../lib/confine.mjs', import.meta.url).href], {
+    env: { HOME: home, GIT_CONFIG_GLOBAL: join(home, 'missing'), GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Agent Name', GIT_AUTHOR_EMAIL: 'agent@example.invalid' },
+  });
+  assert.deepEqual(JSON.parse(r.stdout), { GIT_AUTHOR_NAME: 'Agent Name', GIT_AUTHOR_EMAIL: 'agent@example.invalid', GIT_COMMITTER_NAME: 'Agent Name', GIT_COMMITTER_EMAIL: 'agent@example.invalid' }, r.stderr);
+});
