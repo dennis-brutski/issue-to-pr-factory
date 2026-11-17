@@ -288,3 +288,9 @@ test('a failed npm ci parks before any agent session', async () => {
   assert.equal(d.agentCalls.length, 0);
   assert.ok(d.comments[0].includes('lockfile out of sync'));
 });
+test('runItem leaves park logging to the loop', async () => {
+  const d = fakes({ agent: [gate(5, ['What?'])] });
+  const logs = []; d.deps.log = (m) => logs.push(m);
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.ok(!logs.some((l) => l.includes('parked')), logs.join('\n'));
+});

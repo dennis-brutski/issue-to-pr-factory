@@ -132,3 +132,12 @@ test('preflight fails when claude is missing', async () =>
   assert.rejects(preflight(fakes({ failing: ['claude'] }).deps), /claude/i));
 test('preflight fails when gh is logged in as someone else', async () =>
   assert.rejects(preflight(fakes({ login: 'mallory' }).deps), /mallory/));
+test('a park is logged once, with every line of its reason', async () => {
+  const d = fakes({ candidates: [issue(9)] });
+  d.deps.runItem = async () => ({ outcome: 'parked', detail: 'touches protected files:\n- test/a.test.js\n- test/b.test.js' });
+  const running = new Map();
+  await tick(d.deps, running); await Promise.all(running.values());
+  const parks = d.logs.filter((l) => l.includes('parked'));
+  assert.equal(parks.length, 1);
+  assert.ok(parks[0].includes('touches protected files:\n          - test/a.test.js\n          - test/b.test.js'), parks[0]);
+});
