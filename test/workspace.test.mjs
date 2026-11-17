@@ -125,3 +125,14 @@ test('listWorktrees returns issue numbers on disk', async () => {
   await ws.ensureWorktree(root, 7, 'master'); await ws.ensureWorktree(root, 12, 'master');
   assert.deepEqual((await ws.listWorktrees(root)).sort((a, b) => a - b), [7, 12]);
 });
+test('ensureWorktree removes sandbox placeholders a killed session left, and nothing else', async () => {
+  const { dir } = await ws.ensureWorktree(root, 3, 'master');
+  const { mkdirSync, chmodSync } = await import('node:fs');
+  mkdirSync(join(dir, '.claude/.cc-writes'), { recursive: true });
+  for (const f of ['.bashrc', '.gitconfig', '.claude/settings.json']) { writeFileSync(join(dir, f), ''); chmodSync(join(dir, f), 0o444); }
+  writeFileSync(join(dir, 'wip.js'), 'unfinished work');   // the agent's own work
+  writeFileSync(join(dir, 'empty.txt'), '');               // empty but writable: not a placeholder
+  await ws.ensureWorktree(root, 3, 'master');
+  for (const f of ['.bashrc', '.gitconfig', '.claude']) assert.ok(!existsSync(join(dir, f)), f);
+  assert.ok(existsSync(join(dir, 'wip.js')) && existsSync(join(dir, 'empty.txt')));
+});
