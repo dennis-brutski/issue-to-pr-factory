@@ -1,6 +1,6 @@
-# gin-rummy-scorepad-factory
+# issue-to-pr-factory
 
-Turns labelled GitHub issues of `dennis-brutski/gin-rummy-score-pad` into checked pull requests.
+Turns labelled GitHub issues into checked pull requests, for the one repository set in `config.mjs` (now `dennis-brutski/gin-rummy-score-pad`).
 It runs only while you have started it. It never merges and never pushes to `master`.
 
 Design and plan: `docs/superpowers/specs/2026-11-10-software-factory-design.md` and
