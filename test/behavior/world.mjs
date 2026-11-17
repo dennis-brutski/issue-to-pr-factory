@@ -13,8 +13,13 @@ const OWNER = 'dennis-brutski';
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid'];
 
 const SEED = {
-  'package.json': JSON.stringify({ name: 'demo', version: '1.0.0', private: true, type: 'module', scripts: { test: 'node --test', e2e: 'node -e ""' } }, null, 2) + '\n',
+  'package.json': JSON.stringify({ name: 'demo', version: '1.0.0', private: true, type: 'module', scripts: {
+    test: 'node --test', e2e: 'node -e ""',
+    // npm ci runs this, so node_modules appearing proves setup ran (a project without dependencies gets none otherwise).
+    prepare: "node -e \"require('fs').mkdirSync('node_modules', { recursive: true })\"",
+  } }, null, 2) + '\n',
   'package-lock.json': JSON.stringify({ name: 'demo', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'demo', version: '1.0.0' } } }, null, 2) + '\n',
+  '.gitignore': 'node_modules/\n',
   'src/a.js': 'export const a = 1;\n',
   'test/a.test.js': "import { test } from 'node:test';\ntest('a', () => {});\n",
 };
