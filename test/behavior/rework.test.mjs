@@ -2,16 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { world } from './world.mjs';
-import { ok, gate, clean, implement, factoryComments, settled } from './steps.mjs';
+import { ok, gate, clean, implement, factoryComments, settled, toPullRequest } from './steps.mjs';
 
-// Runs a clear issue to an open pull request; returns [issue, pull request] numbers.
-async function toPullRequest(w) {
-  const n = w.issue({ labels: ['agent:implement'] });
-  w.script(n, [gate(90), implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), clean]);
-  const f = w.start();
-  await w.until(settled(w, n, 'agent:done'), 20000, 'a pull request');
-  return [n, w.pr().number, f];
-}
 const reworked = (w, p) => () => !w.item(p).labels.includes('agent:review') && !w.item(p).labels.includes('agent:in-progress')
   && factoryComments(w, p).length > 0;
 
