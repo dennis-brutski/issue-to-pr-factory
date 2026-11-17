@@ -60,3 +60,18 @@ test('a second start is refused', async () => {
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
 });
+
+test('two targets run side by side', async () => {
+  const a = await world({ name: 'demo-a' }), b = await world({ name: 'demo-b' });
+  try {
+    const fa = a.start(), fb = b.start();
+    await a.until(() => polls(fa) >= 1 && polls(fb) >= 1, 10000, 'both to poll');
+    assert.match(fa.output(), /\(demo-a\)/);
+    assert.match(fb.output(), /\(demo-b\)/);
+    assert.ok(existsSync(join(a.runDir, 'factory.lock')) && existsSync(join(b.runDir, 'factory.lock')));
+    fa.signal('SIGINT'); await fa.exited;
+    const seen = polls(fb);
+    await b.until(() => polls(fb) >= seen + 1, 10000, 'b to keep polling');
+    fb.signal('SIGINT'); await fb.exited;
+  } finally { a.close(); b.close(); }
+});

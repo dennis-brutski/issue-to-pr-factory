@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Start: npm start [-- settings.mjs]    Stop: Ctrl-C (finish running work), Ctrl-C again (kill now).
+// Start: npm start [-- <target>]    Stop: Ctrl-C (finish running work), Ctrl-C again (kill now).
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,7 +43,7 @@ try {
   await preflight(deps);
   await ws.ensureClone(root, cloneUrl(cfg));
   await recover(deps);
-  log(`factory started for ${cfg.repo} — polling every ${cfg.pollSec}s, up to ${cfg.maxParallel} at a time`);
+  log(`factory started for ${cfg.repo} (${cfg.target}) — polling every ${cfg.pollSec}s, up to ${cfg.maxParallel} at a time`);
   while (!stopping) {
     await cleanup(deps, running);
     const started = await tick(deps, running);

@@ -2,3 +2,4 @@ repo/
 worktrees/
 logs/
 factory.lock
+runs/

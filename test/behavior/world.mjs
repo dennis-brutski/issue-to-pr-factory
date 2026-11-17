@@ -24,7 +24,7 @@ const SEED = {
   'test/a.test.js': "import { test } from 'node:test';\ntest('a', () => {});\n",
 };
 
-export async function world({ seed = SEED, settings = {} } = {}) {
+export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'factory-world-'));
   const origin = join(dir, 'origin.git'), work = join(dir, 'seed');
   const ghState = join(dir, 'gh.json'), script = join(dir, 'claude-script.json'), log = join(dir, 'claude-log.jsonl');
@@ -38,9 +38,9 @@ export async function world({ seed = SEED, settings = {} } = {}) {
 
   writeFileSync(ghState, JSON.stringify({ login: OWNER, nextNumber: 1, items: [], calls: [] }));
   writeFileSync(script, '{}'); writeFileSync(log, '');
-  const settingsFile = join(dir, 'settings.mjs');
+  const settingsFile = join(dir, `${name}.mjs`);
   const runDir = join(dir, 'run');
-  writeFileSync(settingsFile, `export default ${JSON.stringify({ repo: `${OWNER}/demo`, remoteUrl: origin, runDir, pollSec: 1, ...settings })};\n`);
+  writeFileSync(settingsFile, `export default ${JSON.stringify({ repo: `${OWNER}/${name}`, baseBranch: 'master', remoteUrl: origin, runDir, pollSec: 1, ...settings })};\n`);
 
   const readGh = () => JSON.parse(readFileSync(ghState, 'utf8'));
   // Same lock and atomic write as the fake gh, which may be writing at the same moment.
