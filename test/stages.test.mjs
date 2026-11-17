@@ -356,3 +356,18 @@ test('agent sessions get the target environment with their port', async () => {
   await runItem(issue, 'implement', d.deps, 4207);
   assert.equal(d.agentCalls[0].port, 4207);
 });
+const allVars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F' };
+const gradle = { checks: [['gradle', ['test']], ['gradle', ['lint']]], protectedFiles: ['build.gradle'], testDirs: ['src/test/'] };
+test("prompts name the target's checks and protected files, nothing npm-specific", () => {
+  for (const name of ['gate', 'implement', 'review', 'fix', 'rework', 'merge', 'explore']) {
+    const p = renderPrompt(name, allVars, gradle);
+    assert.doesNotMatch(p, /npm|e2e|playwright/i, name);
+    assert.match(p, /`build\.gradle`/, name);
+    assert.match(p, /`AGENTS\.md`/, name);
+    assert.match(p, /src\/test\//, name);
+  }
+  for (const name of ['implement', 'fix', 'rework', 'merge']) assert.match(renderPrompt(name, allVars, gradle), /- `gradle test`\n- `gradle lint`/, name);
+});
+test("the score pad's prompts keep naming its checks", () => {
+  assert.match(renderPrompt('implement', allVars, { ...config, ...scorePad }), /- `npm test`\n- `npm run e2e`/);
+});
