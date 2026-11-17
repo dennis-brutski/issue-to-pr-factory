@@ -109,14 +109,10 @@ npm run smoke:checks -- <target>   # the target's setup and checks, inside the a
 
 ## Moving to runs/
 
-Before targets, the score pad's clone, worktrees and logs lived at the top of this folder. To keep them:
+Before targets, the score pad's clone, worktrees and logs lived at the top of this folder (`repo/`, `worktrees/`, `logs/`). Stop the factory, finish or park any open work, then delete them:
 
 ```sh
-# stop the factory first
-mkdir -p runs/gin-rummy-score-pad
-mv repo worktrees logs runs/gin-rummy-score-pad/
-cd runs/gin-rummy-score-pad && git -C repo worktree repair ../worktrees/* ; cd -
-rm -f factory.lock
+rm -rf repo worktrees logs factory.lock
 ```
 
-Or delete `repo/`, `worktrees/` and `logs/` and let the factory clone afresh. Finish or park any open work first.
+On its next start each target clones afresh into `runs/<target>/`. Branches already pushed (`factory/issue-<n>`) are picked up from GitHub again.
