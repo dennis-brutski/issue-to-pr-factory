@@ -8,6 +8,7 @@ import scorePad from '../targets/gin-rummy-score-pad.mjs';
 import { paths } from '../lib/workspace.mjs';
 import { runItem, renderPrompt, schemas } from '../lib/stages.mjs';
 import { runChecks } from '../lib/checks.mjs';
+import { execFileSync } from 'node:child_process';
 
 const T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
 const ok = (output) => ({ ok: true, output, reason: '', sessionId: 's' });
@@ -262,14 +263,17 @@ test('text from the issue cannot inject template variables', () => {
 test('schemas require every field', () => {
   for (const s of Object.values(schemas)) assert.deepEqual([...s.required].sort(), Object.keys(s.properties).sort());
 });
-test('runChecks reports the first failing step with its output', async () => {
+// Real bwrap, as in confine.test.mjs: skipped inside an agent's own sandbox, never in the factory's check run.
+const bwrapWorks = (() => { try { execFileSync('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true'], { stdio: 'ignore' }); return true; } catch { return false; } })();
+const real = { skip: bwrapWorks ? false : 'bwrap probe failed on this machine' };
+test('runChecks reports the first failing step with its output', real, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'echo BOOM-OUTPUT && exit 1', e2e: 'exit 0' } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
   const r = await runChecks(dir, { ...config, ...scorePad }, 4321);
   assert.equal(r.ok, false); assert.equal(r.failed, 'npm test'); assert.match(r.output, /BOOM-OUTPUT/);
 });
-test('runChecks passes the port to the e2e run', async () => {
+test('runChecks passes the port to the e2e run', real, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'exit 0', e2e: 'test "$E2E_PORT" = 4321' } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
