@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node factory.mjs",
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs test/behavior/*.test.mjs",
     "smoke": "node smoke/containment.mjs"
   }
 }
