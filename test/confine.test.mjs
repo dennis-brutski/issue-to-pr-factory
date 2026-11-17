@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, existsSync, rmSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -76,8 +76,8 @@ test('a missing check program reports which one', real, async () => {
 });
 test('confined checks can commit with the git identity agents get', real, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'confine-'));
-  await run('git', ['init', '-q', dir]);
-  const r = await runChecks(dir, { ...config, checks: [['git', ['commit', '-q', '--allow-empty', '-m', 'x']]] }, 4201, join(dir, '.git'));
+  // A project's tests that make commits do so in repos of their own (the worktree's git data is read-only).
+  const r = await runChecks(dir, { ...config, checks: [['sh', ['-c', 'git init -q sub && git -C sub commit -q --allow-empty -m x']]] }, 4201);
   assert.equal(r.ok, true, r.output);
 });
 
@@ -110,4 +110,11 @@ test('no process outlives a confined run', real, async () => {
   assert.equal(r.ok, true, r.output);
   await new Promise((res) => setTimeout(res, 3000));
   assert.ok(!existsSync(join(dir, 'late-write')), 'a process kept running after the check');
+});
+test("the worktree's .git file is read-only for confined runs", real, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  writeFileSync(join(dir, '.git'), 'gitdir: /somewhere\n');
+  const r = await runChecks(dir, { ...config, checks: [['sh', ['-c', 'echo "gitdir: ./.x" > .git']]] }, 4201);
+  assert.equal(r.ok, false);
+  assert.equal(readFileSync(join(dir, '.git'), 'utf8'), 'gitdir: /somewhere\n');
 });

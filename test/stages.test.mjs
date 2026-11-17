@@ -58,7 +58,9 @@ function fakes(o = {}) {
       diffAgainstBase: async () => o.diff ?? '',
       mergeBase: async () => o.merge ?? 'clean',
       mergeResolved: async () => o.resolved ?? true,
-      push: async (dir, b) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); },
+      push: async (dir, b, sha) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); d.pushedSha = sha; },
+      currentBranch: async () => (o.detached ? null : 'factory/issue-1'),
+      checkGitLink: async () => { if (o.gitLinkChanged) throw new Error("the worktree's .git link at /f/worktrees/issue-1 was changed"); },
     },
   };
   return d;
@@ -370,4 +372,24 @@ test("prompts name the target's checks and protected files, nothing npm-specific
 });
 test("the score pad's prompts keep naming its checks", () => {
   assert.match(renderPrompt('implement', allVars, { ...config, ...scorePad }), /- `npm test`\n- `npm run e2e`/);
+});
+test('a detached HEAD parks before checks and push', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], detached: true });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []);
+  assert.equal(d.checksRan, undefined);
+  assert.match(d.comments.at(-1), /not on its branch/);
+});
+test('the commit that was checked is the one pushed', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(d.pushedSha, 'abc1');
+});
+test('a changed .git link after an agent session parks and never pushes', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], gitLinkChanged: true });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(d.pushed, []);
+  assert.match(d.comments.at(-1), /\.git link/);
 });

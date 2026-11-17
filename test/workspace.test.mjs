@@ -108,10 +108,10 @@ test('mergeBase continues a merge that is already in progress', async () => {
 });
 test('push publishes the branch and never forces', async () => {
   const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'x.txt');
-  await ws.push(dir, 'factory/issue-7');
+  await ws.push(dir, 'factory/issue-7', (await ws.headInfo(dir)).sha);
   assert.match(await git(seed, 'ls-remote', origin, 'factory/issue-7'), /factory\/issue-7/);
   await git(dir, 'commit', '-q', '--amend', '-m', 'rewritten');
-  await assert.rejects(ws.push(dir, 'factory/issue-7'));
+  await assert.rejects(ws.push(dir, 'factory/issue-7', (await ws.headInfo(dir)).sha));
 });
 test('removeWorktree leaves no directory and no local branch', async () => {
   const { dir } = await ws.ensureWorktree(root, 7, 'master');
@@ -159,4 +159,25 @@ test('pathsOnBase lists files and their folders on the remote base branch', asyn
 test('hasRemoteBranch tells whether the base branch exists', async () => {
   assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'master'), true);
   assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'nope'), false);
+});
+test('push sends the given commit, not whatever the branch ref points at', async () => {
+  const { dir } = await ws.ensureWorktree(root, 7, 'master');
+  await commitFile(dir, 'checked.txt');
+  const checked = (await ws.headInfo(dir)).sha;
+  await commitFile(dir, 'sneaked.txt'); // moves the branch ref past what was checked
+  await ws.push(dir, 'factory/issue-7', checked);
+  assert.equal((await git(seed, 'ls-remote', origin, 'refs/heads/factory/issue-7')).split('\t')[0], checked);
+});
+test('currentBranch names the checked-out branch, null when HEAD is detached', async () => {
+  const { dir } = await ws.ensureWorktree(root, 7, 'master');
+  assert.equal(await ws.currentBranch(dir), 'factory/issue-7');
+  await git(dir, 'checkout', '-q', '--detach');
+  assert.equal(await ws.currentBranch(dir), null);
+});
+test('a tampered .git link is refused', async () => {
+  const { dir } = await ws.ensureWorktree(root, 7, 'master');
+  await ws.checkGitLink(root, 7);
+  writeFileSync(join(dir, '.git'), 'gitdir: ./.x\n');
+  await assert.rejects(ws.checkGitLink(root, 7), /\.git link .* was changed/);
+  await assert.rejects(ws.ensureWorktree(root, 7, 'master'), /\.git link .* was changed/);
 });
