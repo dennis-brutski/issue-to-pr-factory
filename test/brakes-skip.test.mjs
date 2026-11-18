@@ -16,3 +16,15 @@ test('removed or unchanged lines and plain tests are clean', () => {
 
 test('each finding quotes the line', () =>
   assert.match(skippedTests(diff("it.only('focus', () => {})"))[0], /test skipped or singled out: it\.only\('focus'/));
+
+test('skips inside string literals are test data, not skips', () => {
+  assert.deepEqual(skippedTests(diff(
+    `await commit(dir, { 'test/b.test.mjs': "test.skip('b', () => {})\\n" });`,
+    "const fixture = 'it.only(\"x\")';",
+    'const t = `describe.todo(\'y\')`;',
+  )), []);
+});
+
+test('a real skip next to a string is still flagged', () => {
+  assert.equal(skippedTests(diff("test.skip('has a \"quoted\" name', () => {})", "test('x', { skip: 'needs bwrap' }, () => {})")).length, 2);
+});
