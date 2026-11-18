@@ -12,14 +12,19 @@ Design and plan: `docs/superpowers/specs/2026-11-17-multi-target-design.md` and
 
 You need:
 - **Linux with `bwrap`** (bubblewrap), with unprivileged user namespaces allowed. `bwrap --ro-bind / / --dev /dev true` must succeed.
-- **Node.js.** The factory has no dependencies. If Node lives in your home folder but not in `~/.nvm` (fnm, volta, `~/.local`), add that folder to `runtimeRead` in `config.mjs`.
+- **`socat`**, which Claude Code's sandbox needs on Linux next to `bwrap` (see its docs). Without it every agent session fails; `npm run smoke` shows it.
+- **Node.js.** The factory has no dependencies. If Node lives in your home folder but not in `~/.nvm` (fnm, volta, `~/.local`), add that folder to `runtimeRead` in `local.mjs` (step 1).
 - **Claude Code** (`claude`), logged in with your Claude account, with access to the model in `config.mjs`.
 - **`gh`**, logged in as you (`gh auth login`). For a **private repo**, also run `gh auth setup-git`: the factory clones, fetches and pushes over https.
 - **A git identity** (`git config --global user.name` and `user.email`).
 
 Then:
-1. In `config.mjs`, set `owner` to your GitHub login and `ownerName` to the name the agents should call you.
-2. Write `targets/<name>.mjs` (fields below). A minimal one:
+1. Create `local.mjs` next to `config.mjs` for your own settings. It is git-ignored and goes over `config.mjs`; a target file goes over both.
+   ```js
+   export default { owner: 'your-github-login', ownerName: 'Alex' };
+   ```
+   Only labels and comments by `owner` count, and `gh` must be logged in as that account. `ownerName` is what the agents call you.
+2. Write `targets/<name>.mjs` (fields below). Leave the two example targets in place: the tests use them. A minimal one:
    ```js
    export default {
      repo: 'you/your-repo', baseBranch: 'main',
@@ -131,7 +136,8 @@ What stays outside:
 
 ## Files
 
-- `config.mjs` — shared defaults: owner, limits (2 at a time, confidence 70, timeouts), model, labels.
+- `config.mjs` — shared defaults: limits (2 at a time, confidence 70, timeouts), model, labels.
+- `local.mjs` — your own settings over those defaults (not in git).
 - `targets/` — one settings file per repo.
 - `prompts/` — what each agent step is told.
 - `runs/<target>/` — the target's clone (`repo/`), per-issue worktrees and logs, and its lock (not in git).
