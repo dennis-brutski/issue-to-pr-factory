@@ -73,7 +73,7 @@ const STAGES = ['explore', 'gate', 'implement', 'review', 'fix', 'rework', 'merg
 const stageRank = (s) => (STAGES.includes(s) ? STAGES.indexOf(s) : STAGES.length);
 
 // Sessions ({ issue, stage, at, usage }) → what they used by stage, the top 3 issues by
-// output tokens, early stops by reason, unreadable sessions and refused tool calls. Pure.
+// cost, early stops by reason, unreadable sessions and refused tool calls. Pure.
 export function groupAgentUse(sessions, since = null) {
   const ours = sessions.filter((s) => !since || s.at >= Date.parse(since));
   const byStage = new Map();
@@ -82,9 +82,9 @@ export function groupAgentUse(sessions, since = null) {
   const stages = [...byStage]
     .sort(([a], [b]) => stageRank(a) - stageRank(b) || a.localeCompare(b))
     .map(([name, list]) => [name, sum(list)]);
-  const outByIssue = new Map();
-  for (const s of ours) if (s.usage?.tokensOut !== undefined) outByIssue.set(s.issue, (outByIssue.get(s.issue) ?? 0) + s.usage.tokensOut);
-  const top = [...outByIssue].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 3);
+  const costByIssue = new Map();
+  for (const s of ours) if (s.usage?.costUsd !== undefined) costByIssue.set(s.issue, (costByIssue.get(s.issue) ?? 0) + s.usage.costUsd);
+  const top = [...costByIssue].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 3);
   const early = new Map();
   for (const s of ours) {
     const reason = s.usage?.reason;
@@ -101,8 +101,10 @@ export function groupAgentUse(sessions, since = null) {
 }
 
 const cached = (u) => (u.tokensIn > 0 && u.cachedIn !== undefined ? ` (${Math.round((100 * u.cachedIn) / u.tokensIn)}%)` : '');
+const dollars = (x) => `$${x.toFixed(2)}`;
 const row = (name, u) => `  ${name.padEnd(12)}${String(u.sessions).padStart(8)}${String(u.turns ?? '-').padStart(8)}`
-  + `${(u.tokensIn === undefined ? '-' : count(u.tokensIn) + cached(u)).padStart(21)}${(u.tokensOut === undefined ? '-' : count(u.tokensOut)).padStart(9)}`;
+  + `${(u.tokensIn === undefined ? '-' : count(u.tokensIn) + cached(u)).padStart(21)}${(u.tokensOut === undefined ? '-' : count(u.tokensOut)).padStart(9)}`
+  + `${(u.costUsd === undefined ? '-' : dollars(u.costUsd)).padStart(9)}`;
 
 // The "agent use" section. g is null when there is no log folder.
 export function formatAgentUse(g, since = null) {
@@ -110,11 +112,11 @@ export function formatAgentUse(g, since = null) {
   if (!g.total.sessions) return `agent use: no sessions since ${since}`;
   const early = [...g.early.map(([reason, n]) => `${n} ${reason}`), ...(g.unreadable ? [`${g.unreadable} unreadable (timed out or crashed)`] : [])];
   return [
-    'agent use (from session logs)',
-    `  ${'stage'.padEnd(12)}${'sessions'.padStart(8)}${'turns'.padStart(8)}${'tokens in (cached)'.padStart(21)}${'out'.padStart(9)}`,
+    'agent use (from session logs; ≈ cost is an estimate at API list price, not your bill)',
+    `  ${'stage'.padEnd(12)}${'sessions'.padStart(8)}${'turns'.padStart(8)}${'tokens in (cached)'.padStart(21)}${'out'.padStart(9)}${'≈ cost'.padStart(9)}`,
     ...g.stages.map(([name, u]) => row(name, u)),
     row('total', g.total),
-    ...(g.top.length ? [`  most used: ${g.top.map(([n, out]) => `#${n} ${count(out)} out`).join(' · ')}`] : []),
+    ...(g.top.length ? [`  most used: ${g.top.map(([n, cost]) => `#${n} ≈ ${dollars(cost)}`).join(' · ')}`] : []),
     `  stopped early: ${early.join(' · ') || 'none'}`,
     `  tool calls refused: ${g.denials}`,
   ].join('\n');

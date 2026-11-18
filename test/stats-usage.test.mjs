@@ -31,14 +31,15 @@ test('groupAgentUse adds up sessions by stage, in the order the stages run', () 
   assert.deepEqual([g.total.sessions, g.total.turns, g.total.tokensOut], [5, 38, 3151]);
 });
 
-test('groupAgentUse ranks the top 3 issues by output tokens', () => {
+test('groupAgentUse ranks the top 3 issues by cost', () => {
   const g = groupAgentUse([
-    s(1, 'implement', u(1, 1, 0, 100)), s(1, 'review', u(1, 1, 0, 100)),
-    s(2, 'implement', u(1, 1, 0, 500)),
-    s(3, 'implement', u(1, 1, 0, 50)),
-    s(4, 'implement', u(1, 1, 0, 10)),
+    s(1, 'implement', u(1, 1, 0, 100, { costUsd: 1 })), s(1, 'review', u(1, 1, 0, 100, { costUsd: 1 })),
+    s(2, 'implement', u(1, 1, 0, 10, { costUsd: 5 })),
+    s(3, 'implement', u(1, 1, 0, 500, { costUsd: 0.5 })),
+    s(4, 'implement', u(1, 1, 0, 10, { costUsd: 0.25 })),
+    s(5, 'implement', u(1, 1, 0, 10, { costUsd: undefined })),
   ]);
-  assert.deepEqual(g.top, [[2, 500], [1, 200], [3, 50]]);
+  assert.deepEqual(g.top, [[2, 5], [1, 2], [3, 0.5]]);
 });
 
 test('groupAgentUse counts early stops by reason, unreadable sessions and refused tool calls', () => {
@@ -69,18 +70,18 @@ test('groupAgentUse with since leaves out older sessions', () => {
 
 test('formatAgentUse prints the table and the summary lines', () => {
   const g = groupAgentUse([
-    s(21, 'implement', u(200, 12_000_000, 11_280_000, 170_000, { reason: 'max_turns', denials: 4 })),
-    s(12, 'review', u(41, 2_100_000, 2_037_000, 22_000, { denials: 1 })),
+    s(21, 'implement', u(200, 12_000_000, 11_280_000, 170_000, { reason: 'max_turns', denials: 4, costUsd: 6.1 })),
+    s(12, 'review', u(41, 2_100_000, 2_037_000, 22_000, { denials: 1, costUsd: 3.1 })),
     s(12, 'gate', null),
   ]);
   assert.equal(formatAgentUse(g), [
-    'agent use (from session logs)',
-    '  stage       sessions   turns   tokens in (cached)      out',
-    '  gate               1       -                    -        -',
-    '  implement          1     200            12M (94%)     170k',
-    '  review             1      41           2.1M (97%)      22k',
-    '  total              3     241            14M (94%)     192k',
-    '  most used: #21 170k out · #12 22k out',
+    'agent use (from session logs; ≈ cost is an estimate at API list price, not your bill)',
+    '  stage       sessions   turns   tokens in (cached)      out   ≈ cost',
+    '  gate               1       -                    -        -        -',
+    '  implement          1     200            12M (94%)     170k    $6.10',
+    '  review             1      41           2.1M (97%)      22k    $3.10',
+    '  total              3     241            14M (94%)     192k    $9.20',
+    '  most used: #21 ≈ $6.10 · #12 ≈ $3.10',
     '  stopped early: 1 max_turns · 1 unreadable (timed out or crashed)',
     '  tool calls refused: 5',
   ].join('\n'));
@@ -94,7 +95,7 @@ test('formatAgentUse says when there are no logs, or none since the date', () =>
   assert.match(quiet, /\n {2}stopped early: none\n {2}tool calls refused: 0$/);
 });
 
-const result = (extra = {}) => JSON.stringify({ num_turns: 3, usage: { input_tokens: 100, cache_read_input_tokens: 900, output_tokens: 50 }, permission_denials: [], terminal_reason: 'completed', ...extra });
+const result = (extra = {}) => JSON.stringify({ num_turns: 3, usage: { input_tokens: 100, cache_read_input_tokens: 900, output_tokens: 50 }, total_cost_usd: 0.25, permission_denials: [], terminal_reason: 'completed', ...extra });
 
 test('agentUseSection reads the log folders of a run', () => {
   const root = mkdtempSync(join(tmpdir(), 'stats-usage-'));
@@ -117,11 +118,11 @@ test('agentUseSection reads the log folders of a run', () => {
   ].sort());
 
   const out = agentUseSection(logs);
-  assert.match(out, /^agent use \(from session logs\)\n/);
-  assert.match(out, /\n {2}gate\s+1\s+3\s+1k \(90%\)\s+50\n/);
+  assert.match(out, /^agent use \(from session logs; ≈ cost is an estimate at API list price, not your bill\)\n/);
+  assert.match(out, /\n {2}gate\s+1\s+3\s+1k \(90%\)\s+50\s+\$0\.25\n/);
   assert.match(out, /\n {2}implement\s+2\s+40\s/);
   assert.match(out, /\n {2}total\s+3\s+43\s/);
-  assert.match(out, /most used: #7 100 out\n/);
+  assert.match(out, /most used: #7 ≈ \$0\.50\n/);
   assert.match(out, /stopped early: 1 max_turns · 1 unreadable \(timed out or crashed\)\n/);
   assert.match(out, /tool calls refused: 2$/);
 
