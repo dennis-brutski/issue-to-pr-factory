@@ -156,16 +156,39 @@ test('columns: undefined does not wrap', () => noColour(() => {
   assert.equal(show(T, `#39 implement crashed: ${words}`), `${T}  #39 │ ✖ implement crashed: ${words}`);
 }));
 
-test('a wrapped park reason counts each reason line once', () => noColour(() => {
+// A cut park reason on a terminal: at most 3 lines on screen, the last ending in …, then the link on one line.
+function assertParkCut(out) {
+  assert.equal(out.length, 4, JSON.stringify(out));
+  assert.ok(out[2].endsWith(' …'), JSON.stringify(out));
+  assert.equal(out[3], `${PAD}#40 │   full text: https://github.com/o/r/issues/40`);
+  for (const l of out.slice(0, 3)) assert.ok(l.length <= 60, JSON.stringify(l));
+}
+
+test('columns: 60 cuts a single long one-line park reason by lines on screen', () => noColour(() => {
   const { show } = setup({ columns: 60 });
-  const long = Array.from({ length: 20 }, (_, i) => `w${i}`).join(' ');
-  const out = show(T, `#40 implement parked: first\n${PAD}${long}\n${PAD}${long}\n${PAD}more`).split('\n');
-  const text = out.join('\n');
-  assert.ok(out.at(-1).endsWith('https://github.com/o/r/issues/40'), JSON.stringify(out));
-  assert.ok(text.includes('full text:'));
-  assert.ok(text.includes(' …'));
-  assert.ok(!out.join('\n').includes('more'));
-  for (const l of out) assert.ok(l.length <= 60, JSON.stringify(l));
+  const long = Array.from({ length: 100 }, (_, i) => `w${i}`).join(' ');
+  const out = show(T, `#40 implement parked: ${long}`).split('\n');
+  assert.ok(out[0].startsWith(`${T}  #40 │ ⏸ implement parked: w0 w1`), JSON.stringify(out));
+  assertParkCut(out);
+}));
+
+test('columns: 60 cuts a two-long-line park reason by lines on screen', () => noColour(() => {
+  const { show } = setup({ columns: 60 });
+  const long = Array.from({ length: 60 }, (_, i) => `w${i}`).join(' ');
+  const out = show(T, `#40 implement parked: Could not finish:\n${PAD}${long}\n${PAD}${long}`).split('\n');
+  assert.equal(out[0], `${T}  #40 │ ⏸ implement parked: Could not finish:`);
+  assert.match(out[1], /^ {10}#40 │ {3}w0 w1/);
+  assertParkCut(out);
+}));
+
+test('with colour, wrapping uses the full visible width', () => withColour(() => {
+  const { show } = setup({ columns: 60 });
+  const words = Array.from({ length: 60 }, (_, i) => `w${i}`).join(' ');
+  const out = show(T, `#39 implement crashed: ${words}`).split('\n');
+  const visible = out.map((l) => l.replace(/\u001b\[\d+(;\d+)*m/g, ''));
+  assert.ok(out.length > 1, JSON.stringify(visible));
+  for (const l of visible) assert.ok(l.length <= 60, JSON.stringify(l));
+  assert.ok(Math.max(...visible.map((l) => l.length)) >= 57, JSON.stringify(visible));
 }));
 
 test('session ended keeps its padding when columns is known', () => noColour(() => {
