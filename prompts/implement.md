@@ -1,3 +1,4 @@
+<!-- session: implement -->
 # Implement issue #{{number}}
 
 {{rules}}
