@@ -90,6 +90,7 @@ try {
     out = (s.repoLabels ?? []).join('\n');
   } else if (pos[0] === 'api' && opt.method === 'POST' && /^repos\/[^/]+\/[^/]+\/labels$/.test(pos[1])) {
     s.repoLabels = [...(s.repoLabels ?? []), field('name')[0]];
+    (s.labelStyles ??= {})[field('name')[0]] = { color: field('color')[0], description: field('description')[0] };
   } else if (pos[0] === 'pr' && pos[1] === 'list') {
     const keys = opt.json.split(',');
     const prs = s.items.filter((i) => i.kind === 'pr' && i.headRefName === opt.head && (opt.state === 'all' || i.state === 'OPEN'));

@@ -83,3 +83,11 @@ test('listCandidates sees who renamed an issue', async () => {
   const s = state(); s.items[0].renames = [{ actor: 'mallory', at: T }]; write(s);
   assert.deepEqual((await gh.listCandidates(cfg))[0].renames, [{ actor: 'mallory', at: T }]);
 });
+test('createLabel gives each factory label its colour and description', async () => {
+  await gh.createLabel({ ...cfg, baseBranch: 'main' }, 'agent:merge');
+  await gh.createLabel(cfg, 'agent:needs-human');
+  assert.deepEqual(state().labelStyles, {
+    'agent:merge': { color: '1d76db', description: 'Factory: merge main into this branch' },
+    'agent:needs-human': { color: 'd93f0b', description: 'Factory stopped; see its comment. Remove to retry' },
+  });
+});
