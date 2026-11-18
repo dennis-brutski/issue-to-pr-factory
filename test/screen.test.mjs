@@ -31,9 +31,9 @@ function withColour(fn) {
   }
 }
 
-test('session started is not shown', () => noColour(() => {
+test('session started is shown, lined up with session ended', () => noColour(() => {
   const { show } = setup();
-  assert.equal(show(T, '#39 implement session started'), null);
+  assert.equal(show(T, '#39 implement session started'), `${T}  #39 │ implement  · started`);
 }));
 
 test('session ended: name padded to 10, then the usage', () => noColour(() => {
