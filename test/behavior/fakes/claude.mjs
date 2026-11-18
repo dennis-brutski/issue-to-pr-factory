@@ -4,17 +4,15 @@
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { sessionOf } from './session.mjs';
 
 const die = (msg) => { process.stderr.write(`fake claude: ${msg}\n`); process.exit(1); };
 if (process.argv.includes('--version')) { process.stdout.write('fake 0.0.0\n'); process.exit(0); }
 
-const SESSIONS = [['# Can issue', 'gate'], ['# Implement', 'implement'], ['# Review the change', 'review'], ['# Fix review', 'fix'],
-  ['# Rework', 'rework'], ['# Resolve the merge', 'merge'], ['# Explore', 'explore']];
 const prompt = readFileSync(0, 'utf8');
-const first = prompt.split('\n')[0];
-const session = SESSIONS.find(([p]) => first.startsWith(p))?.[1] ?? die(`unknown prompt: ${first}`);
-const issue = Number(/#(\d+)/.exec(first)?.[1]);
 const cwd = process.cwd();
+const { session, issue } = sessionOf(prompt, cwd);
+if (!session) die(`unknown prompt: ${prompt.split('\n')[0]}`);
 
 const scriptFile = process.env.FAKE_CLAUDE_SCRIPT, logFile = process.env.FAKE_CLAUDE_LOG;
 if (!scriptFile || !logFile) die('FAKE_CLAUDE_SCRIPT and FAKE_CLAUDE_LOG must be set');
