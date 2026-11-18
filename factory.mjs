@@ -19,7 +19,10 @@ try { cfg = await loadSettings(process.argv[2], { factoryRoot }); } catch (e) { 
 const root = cfg.runDir;
 const ws = workspace({ root, url: cloneUrl(cfg), base: cfg.baseBranch }); // checks the clone before each git command
 const log = (msg) => console.log(`${new Date().toTimeString().slice(0, 8)}  ${msg}`);
-const deps = { cfg, root, log, gh, ws, run, runAgent, runSetup, runChecks, runItem };
+// Read once: which version of the factory built each pull request.
+const head = await run('git', ['-C', factoryRoot, 'rev-parse', '--short', 'HEAD']);
+const factoryCommit = head.code === 0 && head.stdout.trim() ? head.stdout.trim() : 'unknown';
+const deps = { cfg, root, log, gh, ws, run, runAgent, runSetup, runChecks, runItem, factoryCommit };
 
 let release;
 // A factory from before targets locks the folder itself; it would poll the same repo.
