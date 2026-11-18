@@ -2,6 +2,7 @@
 // uses and keeps the "GitHub" state in the JSON file named by FAKE_GH_STATE.
 // Anything else fails loudly, so a new gh call in the factory breaks the tests.
 import { readFileSync, writeFileSync, renameSync, openSync, closeSync, rmSync } from 'node:fs';
+import { PULLS_JQ, COMMENTS_JQ } from '../../../lib/github.mjs';
 
 const argv = process.argv.slice(2);
 const file = process.env.FAKE_GH_STATE;
@@ -91,6 +92,12 @@ try {
   } else if (pos[0] === 'api' && opt.method === 'POST' && /^repos\/[^/]+\/[^/]+\/labels$/.test(pos[1])) {
     s.repoLabels = [...(s.repoLabels ?? []), field('name')[0]];
     (s.labelStyles ??= {})[field('name')[0]] = { color: field('color')[0], description: field('description')[0] };
+  } else if (pos[0] === 'api' && !opt.method && opt.paginate && opt.jq === PULLS_JQ && /^repos\/[^/]+\/[^/]+\/pulls\?state=all&per_page=100$/.test(pos[1])) {
+    out = s.items.filter((i) => i.kind === 'pr').map((i) => JSON.stringify({ number: i.number, ref: i.headRefName, repo: i.headRepo ?? null,
+      state: i.state === 'OPEN' ? 'open' : 'closed', merged: i.state === 'MERGED', at: i.createdAt ?? now() })).join('\n');
+  } else if (pos[0] === 'api' && !opt.method && opt.paginate && opt.jq === COMMENTS_JQ && /^repos\/[^/]+\/[^/]+\/issues\/comments\?per_page=100$/.test(pos[1])) {
+    // Review comments (with a path) live elsewhere on GitHub, so this list leaves them out.
+    out = s.items.flatMap((i) => i.comments.filter((c) => !c.path).map((c) => JSON.stringify({ author: c.author, body: c.body, at: c.at }))).join('\n');
   } else if (pos[0] === 'pr' && pos[1] === 'list') {
     const keys = opt.json.split(',');
     const prs = s.items.filter((i) => i.kind === 'pr' && i.headRefName === opt.head && (opt.state === 'all' || i.state === 'OPEN'));
