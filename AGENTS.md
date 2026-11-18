@@ -21,6 +21,7 @@ Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or 
 |---|---|
 | `lib/eligibility.mjs`, `lib/brakes.mjs`, `lib/names.mjs`, `lib/startup.mjs` | Pure decisions: who may trigger, what a diff may contain, issue ↔ branch ↔ worktree names, startup warnings. No I/O. |
 | `lib/github.mjs`, `lib/workspace.mjs`, `lib/agent.mjs`, `lib/confine.mjs`, `lib/checks.mjs` | Thin adapters around `gh`, `git`, `claude` and `bwrap`. |
+| `lib/verify.mjs` | Judges a branch: what stops a push, what makes a pull request a draft. |
 | `lib/stages.mjs`, `lib/loop.mjs`, `factory.mjs` | The stages of one run, the poll loop, the entry point. |
 | `lib/settings.mjs`, `config.mjs`, `targets/` | Shared defaults and one settings file per target repo. |
 | `prompts/` | What each agent session is told. `_rules.md` and `_commit.md` are shared. |
@@ -35,7 +36,7 @@ Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or 
 1. **Test first.** Write a failing test, see it fail, then write the code. Decisions get a unit test; anything the factory does end to end gets a behaviour test in `test/behavior/`.
 2. **No dependencies.** Node's standard library, `gh`, `git`, `bwrap`, `claude` only.
 3. **A new `gh` call needs the fake to learn it.** The fake `gh` in `test/behavior/fakes/gh.mjs` refuses unknown commands; add the command there and a contract test in `test/behavior/fake-gh.test.mjs` that runs the real adapter against it. A new workspace method goes into `test/fakes/workspace.mjs` as well; a test checks both have the same methods. The same goes for a new agent session: add its prompt's first line to `SESSIONS` in `fakes/claude.mjs`.
-4. **Never loosen confinement.** Do not touch the protected files: `lib/agent.mjs`, `lib/brakes.mjs`, `lib/checks.mjs`, `lib/confine.mjs`, `lib/eligibility.mjs`, `lib/names.mjs`, `lib/workspace.mjs`, `prompts/_rules.md`, `config.mjs`, `package.json`, `targets/`, `smoke/`, `docs/adr/`, `AGENTS.md`, `.github/`. Do not modify, rename or delete existing tests; adding tests is expected. If the right fix needs a protected file or a change to an existing test, don't work around it: stop and say which file and why.
+4. **Never loosen confinement.** Do not touch the protected files: `lib/agent.mjs`, `lib/brakes.mjs`, `lib/checks.mjs`, `lib/confine.mjs`, `lib/eligibility.mjs`, `lib/names.mjs`, `lib/workspace.mjs`, `lib/verify.mjs`, `prompts/_rules.md`, `config.mjs`, `package.json`, `targets/`, `smoke/`, `docs/adr/`, `AGENTS.md`, `.github/`. Do not modify, rename or delete existing tests; adding tests is expected. If the right fix needs a protected file or a change to an existing test, don't work around it: stop and say which file and why.
 5. **Small, readable changes.** Match the style of the file you are in. No drive-by refactors.
 6. **Plain wording.** Comments, log lines and GitHub comments are read by one person in a hurry: short sentences, no jargon.
 7. **Read the decisions.** Before changing a module, read the records in `docs/adr/` that concern it. Do not undo a recorded decision; if your change needs to, stop and say which record and why.
