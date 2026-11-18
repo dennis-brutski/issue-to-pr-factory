@@ -20,6 +20,7 @@ export const config = {
   sessionTimeoutMin: 45,
   checkTimeoutMin: 15,
   model: 'opus', // explicit: agents ignore ~/.claude/settings.json, and the CLI default (Fable) needs usage credits on Pro
+  gateModel: 'sonnet', // the gate only reads and scores; a cheaper model is enough
   triggers: { explore: 'agent:explore', implement: 'agent:implement', review: 'agent:review', merge: 'agent:merge' },
   states: { inProgress: 'agent:in-progress', needsHuman: 'agent:needs-human', done: 'agent:done' },
 };

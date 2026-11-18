@@ -114,9 +114,11 @@ Nothing is ever retried on its own.
 ## Statistics
 
 ```sh
-node stats.mjs <target>                      # all time
-node stats.mjs <target> --since 2026-11-01   # pull requests opened and comments made on or after that day
+npm run stats                                     # every target in targets/, one after another
+npm run stats -- <target> --since 2026-11-01      # one target; only pull requests opened and comments made on or after that day
 ```
+
+Without a target it prints each target under its own heading; `--since` applies to all of them. A target that cannot be read prints `<target>: could not read stats: <reason>`, the others still print, and the exit code is 1.
 
 It prints how many pull requests from `factory/issue-*` branches of the target repo (no forks) were opened, merged, closed unmerged and are still open, and how often the factory stopped, grouped by a short label for each stop reason. It counts your own "Factory stopped" and "Factory did not start" comments on every issue and pull request; "no new comments" stops are left out. A reason without a label shows as `other:` and its first 60 characters. Use these numbers before changing `confidenceThreshold`. It only reads from GitHub.
 
