@@ -37,6 +37,7 @@ if (step.replaceHead) { // what a hostile session could do: show a commit withou
   git('replace', 'HEAD', fake);
 }
 for (const [key, value] of Object.entries(step.gitConfig ?? {})) git('config', key, value); // what a hostile session could do
+for (const args of step.git ?? []) git(...args); // likewise: any git command on the shared git data
 if (step.placeholders) { // what a killed sandbox leaves behind
   const gitDir = resolve(cwd, git('rev-parse', '--git-common-dir'));
   mkdirSync(join(cwd, '.claude'), { recursive: true });
