@@ -43,7 +43,7 @@ test("a merged pull request's worktree is removed", async () => {
     const dir = join(w.runDir, 'worktrees', `issue-${n}`);
     assert.ok(existsSync(dir));
     w.merge(p);
-    await w.until(() => f.output().includes(`#${n} finished; worktree removed`), 10000, 'the cleanup');
+    await w.until(() => new RegExp(`#${n} +(?:│ ✔ )?finished; worktree removed`).test(f.output()), 10000, 'the cleanup');
     assert.ok(!existsSync(dir));
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
