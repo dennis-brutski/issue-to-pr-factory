@@ -7,6 +7,6 @@ export default {
   checks: [['npm', ['test']]],
   testDirs: ['test/'],
   protectedFiles: ['lib/agent.mjs', 'lib/brakes.mjs', 'lib/checks.mjs', 'lib/confine.mjs', 'lib/eligibility.mjs', 'lib/names.mjs', 'lib/workspace.mjs', 'lib/verify.mjs',
-    'prompts/_rules.md', 'config.mjs', 'package.json'],
-  protectedDirs: ['targets/', 'smoke/', 'docs/adr/'],
+    'prompts/_rules.md', 'config.mjs', 'package.json', 'sync-skills.mjs'],
+  protectedDirs: ['targets/', 'smoke/', 'docs/adr/', 'skills/'],
 };
