@@ -49,6 +49,7 @@ try {
       number: i.number, title: i.title, body: i.body, lastEditedAt: i.lastEditedAt ?? null, author: actor(i.author),
       labels: { nodes: i.labels.map((name) => ({ name })) },
       timelineItems: { nodes: i.labelEvents.map((e) => ({ createdAt: e.at, actor: actor(e.actor), label: { name: e.label } })) },
+      renames: { nodes: (i.renames ?? []).map((e) => ({ createdAt: e.at, actor: actor(e.actor) })) },
       comments: { nodes: i.comments.filter((c) => !c.path).map((c) => ({ author: actor(c.author), body: c.body, createdAt: c.at })) },
       ...(i.kind === 'pr' ? {
         headRefName: i.headRefName, headRepository: i.headRepo ? { nameWithOwner: i.headRepo } : null,

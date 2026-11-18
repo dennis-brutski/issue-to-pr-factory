@@ -79,3 +79,7 @@ test('listLabels and createLabel round-trip', async () => {
   await gh.createLabel(cfg, 'agent:implement');
   assert.deepEqual(await gh.listLabels(cfg), ['agent:implement']);
 });
+test('listCandidates sees who renamed an issue', async () => {
+  const s = state(); s.items[0].renames = [{ actor: 'mallory', at: T }]; write(s);
+  assert.deepEqual((await gh.listCandidates(cfg))[0].renames, [{ actor: 'mallory', at: T }]);
+});

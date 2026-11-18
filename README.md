@@ -69,7 +69,7 @@ Comments you write on a labelled issue or pull request are instructions for the 
 | draft because it touches protected files | The agent changed existing tests, CI, config or a protected file. Review that part yourself. |
 | changes CI workflow files, so the factory did not push it | GitHub would run that workflow the moment it is pushed. Read the diff in the comment; if it is right, push the branch from `runs/<target>/worktrees/issue-<n>` yourself. |
 | the worktree's .git link / the clone's git config was changed | A session tried to change where git looks or what it runs. The factory stops entirely. Read the session log, fix or delete `runs/<target>/repo`, then start again. |
-| issue text was edited after it was approved | Someone else edited their issue after you labelled it. Re-read it, remove the label. |
+| issue text was edited / issue title was changed after it was approved | Someone else edited the issue after you labelled it. Re-read it, remove the label. |
 | timed out / max_turns / usage limit | Remove the label when you want it to continue. |
 
 Nothing is ever retried on its own.

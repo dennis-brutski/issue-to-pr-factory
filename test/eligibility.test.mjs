@@ -68,3 +68,9 @@ test('promptInput returns title and body', () => {
 });
 test("promptInput leaves out the factory's own comments, which gh posts as the owner", () =>
   assert.deepEqual(promptInput(item({ comments: [c('dennis-brutski', '🏭 **Factory stopped (review).**', T), c('dennis-brutski', 'rename it', T)] }), config).comments, ['rename it']));
+test('a title changed by someone else after approval is parked', () =>
+  assert.deepEqual(classify(item({ renames: [{ actor: 'mallory', at: T2 }] }), config), { action: 'park', reason: 'issue title was changed after it was approved' }));
+test('a title changed before approval, or by the owner, runs', () => {
+  assert.equal(classify(item({ renames: [{ actor: 'mallory', at: T0 }] }), config).action, 'run');
+  assert.equal(classify(item({ renames: [{ actor: 'dennis-brutski', at: T2 }] }), config).action, 'run');
+});

@@ -54,3 +54,7 @@ test('run kills on timeout', async () => {
 });
 test('run reports a missing program without throwing', async () =>
   assert.notEqual((await run('definitely-not-a-program-xyz', [])).code, 0));
+test('renames carry who changed the title and when', () => {
+  const data = { data: { repository: { issues: { nodes: [{ number: 1, title: 't', renames: { nodes: [{ createdAt: '2026-11-02T12:00:00Z', actor: { login: 'mallory' } }, null] } }] } } } };
+  assert.deepEqual(toItems(data)[0].renames, [{ actor: 'mallory', at: '2026-11-02T12:00:00Z' }]);
+});
