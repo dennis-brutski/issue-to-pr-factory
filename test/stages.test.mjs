@@ -53,7 +53,9 @@ function fakes(o = {}) {
       paths,
       ensureWorktree: async (root, n) => { d.worktrees.push(n); return { dir: `/f/worktrees/issue-${n}`, created: true }; },
       headInfo: async () => ({ sha: o.noNewCommits ? 'abc' : `abc${d.agentCalls.filter((a) => !a.readOnly).length}`, committedAt: T }),
-      changesAgainstBase: async (dir, base, since) => (since && o.reworkChanges) || o.changes || [{ status: 'M', path: 'src/state.js' }],
+      // Before setup: what the branch held when the run began (o.setupChanges); after it, what the sessions left.
+      changesAgainstBase: async (dir, base, since) => (!d.installs.length ? o.setupChanges ?? []
+        : (since && o.reworkChanges) || o.changes || [{ status: 'M', path: 'src/state.js' }]),
       commitMessagesAgainstBase: async () => o.messages ?? ['Fix undo on empty ledger'],
       isClean: async () => o.clean ?? true,
       diffAgainstBase: async () => o.diff ?? '',
