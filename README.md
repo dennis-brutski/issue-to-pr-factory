@@ -152,6 +152,7 @@ What stays outside:
 ## Files
 
 - `config.mjs` — shared defaults: limits (2 at a time, confidence 70, timeouts), model, labels.
+  `gateModel` is the model for the gate alone (it only reads and scores); unset, the gate uses `model`.
 - `local.mjs` — your own settings over those defaults (not in git).
 - `targets/` — one settings file per repo.
 - `prompts/` — what each agent step is told.
