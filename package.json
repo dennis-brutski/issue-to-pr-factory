@@ -9,6 +9,7 @@
     "smoke": "node smoke/containment.mjs",
     "smoke:checks": "node smoke/checks.mjs",
     "smoke:skills": "node smoke/skills.mjs",
+    "stats": "node stats.mjs",
     "sync-skills": "node sync-skills.mjs"
   }
 }
