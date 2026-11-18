@@ -26,11 +26,13 @@ function useFakeClaude({ script, log }, steps) {
   if (!process.env.PATH.startsWith(FAKES_BIN)) process.env.PATH = `${FAKES_BIN}:${process.env.PATH}`;
 }
 const cfg = { ...config, maxTurns: 1, sessionTimeoutMin: 1 };
+// Sessions get no ambient environment, so the fake's script and log go in like a target's env.
+const fakeEnv = () => ({ FAKE_CLAUDE_SCRIPT: process.env.FAKE_CLAUDE_SCRIPT, FAKE_CLAUDE_LOG: process.env.FAKE_CLAUDE_LOG });
 
 test('the fake claude follows its script and logs the call', async () => {
   const r0 = await scratchRepo();
   useFakeClaude(r0, { 3: [{ session: 'implement', write: { 'x.txt': 'x' }, commit: 'Add x', output: ok('s') }] });
-  const r = await runAgent({ cwd: r0.dir, prompt: '# Implement issue #3\n\nDo it.', schema, cfg });
+  const r = await runAgent({ cwd: r0.dir, prompt: '# Implement issue #3\n\nDo it.', schema, cfg, env: fakeEnv() });
   assert.equal(r.ok, true, r.reason);
   assert.equal(r.output.status, 'complete');
   assert.equal((await run('git', ['-C', r0.dir, 'log', '-1', '--format=%s'])).stdout.trim(), 'Add x');
@@ -40,7 +42,7 @@ test('the fake claude follows its script and logs the call', async () => {
 test('a session out of script order fails', async () => {
   const r0 = await scratchRepo();
   useFakeClaude(r0, { 3: [{ session: 'implement', output: ok('s') }] });
-  const r = await runAgent({ cwd: r0.dir, prompt: '# Can issue #3 be built as written?', schema, cfg });
+  const r = await runAgent({ cwd: r0.dir, prompt: '# Can issue #3 be built as written?', schema, cfg, env: fakeEnv() });
   assert.equal(r.ok, false);
   assert.match(r.reason, /expected implement/);
 });

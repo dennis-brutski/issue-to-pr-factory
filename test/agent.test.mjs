@@ -98,3 +98,29 @@ test('agentSettings lets the session read its own run folder, not the factory fo
   assert.ok(without.includes('/w/issue-1') && !without.includes(factoryRoot), 'without a run folder, only the worktree');
 });
 
+// A session gets an allowlist of the factory's environment: no tokens, keys or agent sockets.
+test('runAgent passes on only allowlisted variables, plus the target env and git identity', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync, chmodSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { runAgent } = await import('../lib/agent.mjs');
+  const bin = mkdtempSync(join(tmpdir(), 'env-claude-')), dump = join(bin, 'env.json');
+  writeFileSync(join(bin, 'claude'), `#!/usr/bin/env node
+require('fs').writeFileSync(${JSON.stringify(dump)}, JSON.stringify(process.env));
+process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify({ terminal_reason: 'completed', is_error: false, structured_output: {} })));
+`);
+  chmodSync(join(bin, 'claude'), 0o755);
+  const saved = { ...process.env };
+  Object.assign(process.env, { PATH: `${bin}:${process.env.PATH}`, GH_TOKEN: 'secret', SSH_AUTH_SOCK: '/x', ANTHROPIC_API_KEY: 'key', AWS_SECRET_ACCESS_KEY: 'aws' });
+  try {
+    const r = await runAgent({ cwd: bin, prompt: 'p', schema: { type: 'object' }, cfg: { ...config, env: { MY_VAR: 'v' } }, port: 4201 });
+    assert.equal(r.ok, true, r.reason);
+    const env = JSON.parse(readFileSync(dump, 'utf8'));
+    for (const k of ['GH_TOKEN', 'SSH_AUTH_SOCK', 'ANTHROPIC_API_KEY', 'AWS_SECRET_ACCESS_KEY']) assert.equal(env[k], undefined, k);
+    for (const k of ['PATH', 'HOME', 'GIT_AUTHOR_NAME', 'CLAUDE_CODE_DISABLE_CRON']) assert.ok(env[k], k);
+    assert.equal(env.MY_VAR, 'v'); assert.equal(env.CI, '1');
+  } finally {
+    for (const k of Object.keys(process.env)) if (!(k in saved)) delete process.env[k];
+    Object.assign(process.env, saved);
+  }
+});
