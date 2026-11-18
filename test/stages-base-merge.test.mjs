@@ -3,8 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../config.mjs';
 import scorePad from '../targets/gin-rummy-score-pad.mjs';
-import { paths } from '../lib/workspace.mjs';
 import { runItem } from '../lib/stages.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
 
 const T = '2026-11-01T10:00:00Z';
 const ok = (output) => ({ ok: true, output, reason: '', sessionId: 's' });
@@ -33,22 +33,12 @@ function fakes(merge) {
       openPullRequest: async () => ({ number: 50, url: 'https://github.com/x/y/pull/50' }),
       setDraft: async () => {}, updatePullRequestBody: async () => {},
     },
-    ws: {
-      paths,
-      ensureWorktree: async (root, n) => ({ dir: `/f/worktrees/issue-${n}`, created: false }),
-      headInfo: async () => ({ sha: 'abc', committedAt: T }),
-      changesAgainstBase: async () => [{ status: 'M', path: 'src/state.js' }],
-      commitMessagesAgainstBase: async () => ['Fix undo'],
-      isClean: async () => true,
-      diffAgainstBase: async () => '',
-      mergeBase: async (dir, base) => { d.events.push(`mergeBase ${dir} ${base}`); return merge; },
+    ws: fakeWorkspace({
+      ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: false }),
+      mergeBase: async (dir) => { d.events.push(`mergeBase ${dir}`); return merge; },
       abortMerge: async (dir) => { d.events.push(`abortMerge ${dir}`); },
-      mergeResolved: async () => true,
       push: async () => { d.events.push('push'); },
-      currentBranch: async () => 'factory/issue-1',
-      checkCloneConfig: async () => {},
-      checkGitLink: async () => {},
-    },
+    }),
   };
   return d;
 }
@@ -57,7 +47,7 @@ for (const stage of ['implement', 'explore']) {
   test(`${stage}: the base branch is merged in before the first session`, async () => {
     const d = fakes('clean');
     await runItem({ ...issue, labels: [`agent:${stage}`] }, stage, d.deps, 4201);
-    const merged = d.events.indexOf('mergeBase /f/worktrees/issue-1 master');
+    const merged = d.events.indexOf('mergeBase /f/worktrees/issue-1');
     assert.ok(merged >= 0, d.events.join(', '));
     assert.ok(merged < d.events.indexOf('agent'), d.events.join(', '));
   });

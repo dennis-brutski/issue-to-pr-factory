@@ -25,6 +25,7 @@ Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or 
 | `lib/settings.mjs`, `config.mjs`, `targets/` | Shared defaults and one settings file per target repo. |
 | `prompts/` | What each agent session is told. `_rules.md` and `_commit.md` are shared. |
 | `test/*.test.mjs` | Unit tests, one file per `lib/` area. |
+| `test/fakes/workspace.mjs` | The in-memory workspace the stage and loop unit tests share; pass the methods a test cares about. |
 | `test/behavior/` | The real `factory.mjs` against a fake `gh` and fake `claude` (`fakes/`), driven through `world.mjs`. |
 | `smoke/` | Live checks with real Claude. |
 | `docs/adr/` | Decisions already made, and why. |
@@ -33,8 +34,8 @@ Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or 
 
 1. **Test first.** Write a failing test, see it fail, then write the code. Decisions get a unit test; anything the factory does end to end gets a behaviour test in `test/behavior/`.
 2. **No dependencies.** Node's standard library, `gh`, `git`, `bwrap`, `claude` only.
-3. **A new `gh` call needs the fake to learn it.** The fake `gh` in `test/behavior/fakes/gh.mjs` refuses unknown commands; add the command there and a contract test in `test/behavior/fake-gh.test.mjs` that runs the real adapter against it. The same goes for a new agent session: add its prompt's first line to `SESSIONS` in `fakes/claude.mjs`.
-4. **Never loosen confinement.** Do not touch the protected files: `lib/agent.mjs`, `lib/brakes.mjs`, `lib/checks.mjs`, `lib/confine.mjs`, `lib/eligibility.mjs`, `lib/names.mjs`, `prompts/_rules.md`, `config.mjs`, `package.json`, `targets/`, `smoke/`, `docs/adr/`, `AGENTS.md`, `.github/`. Do not modify, rename or delete existing tests; adding tests is expected. If the right fix needs a protected file or a change to an existing test, don't work around it: stop and say which file and why.
+3. **A new `gh` call needs the fake to learn it.** The fake `gh` in `test/behavior/fakes/gh.mjs` refuses unknown commands; add the command there and a contract test in `test/behavior/fake-gh.test.mjs` that runs the real adapter against it. A new workspace method goes into `test/fakes/workspace.mjs` as well; a test checks both have the same methods. The same goes for a new agent session: add its prompt's first line to `SESSIONS` in `fakes/claude.mjs`.
+4. **Never loosen confinement.** Do not touch the protected files: `lib/agent.mjs`, `lib/brakes.mjs`, `lib/checks.mjs`, `lib/confine.mjs`, `lib/eligibility.mjs`, `lib/names.mjs`, `lib/workspace.mjs`, `prompts/_rules.md`, `config.mjs`, `package.json`, `targets/`, `smoke/`, `docs/adr/`, `AGENTS.md`, `.github/`. Do not modify, rename or delete existing tests; adding tests is expected. If the right fix needs a protected file or a change to an existing test, don't work around it: stop and say which file and why.
 5. **Small, readable changes.** Match the style of the file you are in. No drive-by refactors.
 6. **Plain wording.** Comments, log lines and GitHub comments are read by one person in a hurry: short sentences, no jargon.
 7. **Read the decisions.** Before changing a module, read the records in `docs/adr/` that concern it. Do not undo a recorded decision; if your change needs to, stop and say which record and why.

@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../config.mjs';
 import scorePad from '../targets/gin-rummy-score-pad.mjs';
-import { paths } from '../lib/workspace.mjs';
 import { runItem } from '../lib/stages.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
 
 const T = '2026-11-01T10:00:00Z';
 const ok = (output) => ({ ok: true, output, reason: '', sessionId: 's' });
@@ -27,21 +27,10 @@ function deps(agent) {
       openPullRequest: async () => ({ number: 50, url: 'https://github.com/x/y/pull/50' }),
       setDraft: async () => {}, updatePullRequestBody: async () => {},
     },
-    ws: {
-      paths,
-      ensureWorktree: async (root, n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
+    ws: fakeWorkspace({
       headInfo: async () => ({ sha: `abc${calls.filter((a) => !a.readOnly).length}`, committedAt: T }),
-      changesAgainstBase: async () => [{ status: 'M', path: 'src/state.js' }],
       commitMessagesAgainstBase: async () => ['Fix undo on empty ledger'],
-      isClean: async () => true,
-      diffAgainstBase: async () => '',
-      mergeBase: async () => 'clean',
-      mergeResolved: async () => true,
-      push: async () => {},
-      currentBranch: async () => 'factory/issue-1',
-      checkCloneConfig: async () => {},
-      checkGitLink: async () => {},
-    },
+    }),
   };
   return { d, calls };
 }

@@ -2,8 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../config.mjs';
 import scorePad from '../targets/gin-rummy-score-pad.mjs';
-import { paths } from '../lib/workspace.mjs';
 import { runItem } from '../lib/stages.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
 
 const T = '2026-11-01T10:00:00Z';
 const ok = (output) => ({ ok: true, output, reason: '', sessionId: 's' });
@@ -26,17 +26,10 @@ function deps(testDiff) {
       openPullRequest: async (cfg, pr) => { opened.push(pr); return { number: 50, url: 'https://github.com/x/y/pull/50' }; },
       setDraft: async () => {}, updatePullRequestBody: async () => {},
     },
-    ws: {
-      paths,
-      ensureWorktree: async (root, n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
-      headInfo: async () => ({ sha: 'abc', committedAt: T }),
+    ws: fakeWorkspace({
       changesAgainstBase: async () => [{ status: 'A', path: 'test/undo.test.js' }],
-      commitMessagesAgainstBase: async () => ['Fix undo'],
-      isClean: async () => true,
-      diffAgainstBase: async (dir, base, pathspec) => { diffs.push(pathspec); return testDiff; },
-      mergeBase: async () => 'clean', mergeResolved: async () => true, push: async () => {},
-      currentBranch: async () => 'factory/issue-1', checkCloneConfig: async () => {}, checkGitLink: async () => {},
-    },
+      diffAgainstBase: async (dir, pathspec) => { diffs.push(pathspec); return testDiff; },
+    }),
   };
   return { d, opened, diffs };
 }

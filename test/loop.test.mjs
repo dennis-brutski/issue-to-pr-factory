@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
 import { recover, tick, cleanup, acquireLock, preflight } from '../lib/loop.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
 
 const T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
 const issue = (number, o = {}) => ({
@@ -30,7 +31,7 @@ function fakes(o = {}) {
       isFinished: async (c, n) => (o.finished ?? []).includes(n),
       authenticatedLogin: async () => o.login ?? 'dennis-brutski',
     },
-    ws: { listWorktrees: async () => o.worktrees ?? [], removeWorktree: async (root, n) => { d.removed.push(n); } },
+    ws: fakeWorkspace({ listWorktrees: async () => o.worktrees ?? [], removeWorktree: async (n) => { d.removed.push(n); } }),
     run: async (cmd) => ({ code: (o.failing ?? []).includes(cmd) ? 1 : 0, stdout: '', stderr: 'nope', timedOut: false }),
   };
   return d;

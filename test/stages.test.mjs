@@ -5,8 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
 import scorePad from '../targets/gin-rummy-score-pad.mjs';
-import { paths } from '../lib/workspace.mjs';
 import { runItem, renderPrompt, schemas } from '../lib/stages.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
+
+// Wraps the fake's worktree commands: when broken() is true they throw message(), as the real checks do.
+const guarded = (broken, methods, message) => Object.fromEntries(Object.entries(methods).map(([k, fn]) =>
+  [k, k === 'ensureWorktree' ? fn : async (...a) => { if (broken()) throw new Error(message()); return fn(...a); }]));
 import { runChecks } from '../lib/checks.mjs';
 import { execFileSync } from 'node:child_process';
 
@@ -49,12 +53,13 @@ function fakes(o = {}) {
       setDraft: async (c, n, v) => { d.drafts.push(v); },
       updatePullRequestBody: async (c, n, b) => { d.bodies.push(b); },
     },
-    ws: {
-      paths,
-      ensureWorktree: async (root, n) => { d.worktrees.push(n); return { dir: `/f/worktrees/issue-${n}`, created: true }; },
+    // After an agent session the real workspace finds a planted config or .git link
+    // before its next git command; here every worktree command after a session throws.
+    ws: fakeWorkspace(guarded(() => d.agentCalls.length && (o.configChanged || o.gitLinkChanged), {
+      ensureWorktree: async (n) => { d.worktrees.push(n); return { dir: `/f/worktrees/issue-${n}`, created: true }; },
       headInfo: async () => ({ sha: o.noNewCommits ? 'abc' : `abc${d.agentCalls.filter((a) => !a.readOnly).length}`, committedAt: T }),
       // Before setup: what the branch held when the run began (o.setupChanges); after it, what the sessions left.
-      changesAgainstBase: async (dir, base, since) => (!d.installs.length ? o.setupChanges ?? []
+      changesAgainstBase: async (dir, since) => (!d.installs.length ? o.setupChanges ?? []
         : (since && o.reworkChanges) || o.changes || [{ status: 'M', path: 'src/state.js' }]),
       commitMessagesAgainstBase: async () => o.messages ?? ['Fix undo on empty ledger'],
       isClean: async () => o.clean ?? true,
@@ -63,9 +68,7 @@ function fakes(o = {}) {
       mergeResolved: async () => o.resolved ?? true,
       push: async (dir, b, sha) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); d.pushedSha = sha; },
       currentBranch: async () => (o.detached ? null : 'factory/issue-1'),
-      checkCloneConfig: async () => { d.configChecks = (d.configChecks ?? 0) + 1; if (o.configChanged) throw new Error("the clone's git config at /f/repo was changed: credential.helper"); },
-      checkGitLink: async () => { if (o.gitLinkChanged) throw new Error("the worktree's .git link at /f/worktrees/issue-1 was changed"); },
-    },
+    }, () => (o.configChanged ? "the clone's git config at /f/repo was changed: credential.helper" : "the worktree's .git link at /f/worktrees/issue-1 was changed"))),
   };
   return d;
 }
@@ -407,11 +410,7 @@ test('a changed clone config after an agent session parks and never pushes', asy
   assert.deepEqual(d.pushed, []);
   assert.match(d.comments.at(-1), /credential\.helper/);
 });
-test('the clone config is checked after every agent session and before the push', async () => {
-  const d = fakes({ agent: [gate(90), work(), review()] });
-  await runItem(issue, 'implement', d.deps, 4201);
-  assert.equal(d.configChecks, 5); // after setup's worktree, 3 sessions, before push
-});
+// That the real workspace checks before every git command: test/workspace-guard.test.mjs.
 test('a worktree left dirty by a killed run parks before the first session, saying so', async () => {
   const d = fakes({ agent: [gate(90)], clean: false });
   const r = await runItem(issue, 'implement', d.deps, 4201);

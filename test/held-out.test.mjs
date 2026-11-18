@@ -8,8 +8,8 @@ import { join } from 'node:path';
 import { config } from '../config.mjs';
 import { runChecks } from '../lib/checks.mjs';
 import { agentSettings } from '../lib/agent.mjs';
-import { paths } from '../lib/workspace.mjs';
 import { runItem } from '../lib/stages.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
 
 const bwrapWorks = (() => { try { execFileSync('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true'], { stdio: 'ignore' }); return true; } catch { return false; } })();
 const real = { skip: bwrapWorks ? false : 'bwrap probe failed on this machine' };
@@ -54,12 +54,7 @@ test('a failed held-out check parks without its output; the output goes to the t
     runAgent: async () => queue.shift(),
     runChecks: async () => ({ ok: false, failed: 'sh /h/check.sh', output: 'SECRET-ASSERTION', heldOut: true }),
     gh: { addLabel: async () => {}, removeLabel: async () => {}, comment: async (c, n, b) => comments.push(b), findPullRequest: async () => null },
-    ws: {
-      paths, ensureWorktree: async () => ({ dir: '/f/worktrees/issue-1', created: true }),
-      headInfo: async () => ({ sha: 'abc', committedAt: T }), changesAgainstBase: async () => [{ status: 'M', path: 'src/a.js' }],
-      commitMessagesAgainstBase: async () => ['Fix'], isClean: async () => true, diffAgainstBase: async () => '',
-      mergeBase: async () => 'clean', currentBranch: async () => 'factory/issue-1', checkCloneConfig: async () => {}, checkGitLink: async () => {},
-    },
+    ws: fakeWorkspace({ changesAgainstBase: async () => [{ status: 'M', path: 'src/a.js' }] }),
   };
   const issue = { number: 1, kind: 'issue', title: 'T', body: 'B', author: 'dennis-brutski', bodyEditedAt: null, labels: ['agent:implement'],
     labelEvents: [{ label: 'agent:implement', actor: 'dennis-brutski', at: T }], comments: [], headRef: null, headRepo: null };

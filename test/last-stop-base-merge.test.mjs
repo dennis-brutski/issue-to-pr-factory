@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
 import scorePad from '../targets/gin-rummy-score-pad.mjs';
-import { paths } from '../lib/workspace.mjs';
 import { runItem } from '../lib/stages.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
 
 const T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z', T3 = '2026-11-01T12:00:00Z';
 const ok = (output) => ({ ok: true, output, reason: '', sessionId: 's' });
@@ -35,21 +35,13 @@ test('a base merge after the park does not hide the stop reason from implement',
       openPullRequest: async () => ({ number: 50, url: 'https://github.com/x/y/pull/50' }),
       setDraft: async () => {}, updatePullRequestBody: async () => {},
     },
-    ws: {
-      paths,
-      ensureWorktree: async (r, n) => ({ dir: join(r, 'worktrees', `issue-${n}`), created: false }),
+    ws: fakeWorkspace({
+      ensureWorktree: async (n) => ({ dir: join(root, 'worktrees', `issue-${n}`), created: false }),
       headInfo: async () => ({ sha: `abc-${committedAt}`, committedAt }),
-      changesAgainstBase: async () => [{ status: 'M', path: 'src/state.js' }],
       commitMessagesAgainstBase: async () => ['Fix undo on empty ledger'],
-      isClean: async () => true,
-      diffAgainstBase: async () => '',
       // main moved while the item waited: merging it makes a merge commit newer than the park comment.
       mergeBase: async () => { if (posted.length) committedAt = T3; return 'clean'; },
-      mergeResolved: async () => true,
-      push: async () => {},
-      currentBranch: async () => 'factory/issue-1',
-      checkCloneConfig: async () => {}, checkGitLink: async () => {},
-    },
+    }, root),
   };
   assert.equal((await runItem(issue, 'implement', deps, 4201)).outcome, 'parked');
   calls.length = 0;

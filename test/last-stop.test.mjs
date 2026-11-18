@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
 import scorePad from '../targets/gin-rummy-score-pad.mjs';
-import { paths } from '../lib/workspace.mjs';
 import { runItem, renderPrompt, lastStopReason } from '../lib/stages.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
 
 const T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
 const ok = (output) => ({ ok: true, output, reason: '', sessionId: 's' });
@@ -49,21 +49,12 @@ function factory(o = {}) {
       openPullRequest: async () => ({ number: 50, url: 'https://github.com/x/y/pull/50' }),
       setDraft: async () => {}, updatePullRequestBody: async () => {},
     },
-    ws: {
-      paths,
-      ensureWorktree: async (r, n) => ({ dir: join(r, 'worktrees', `issue-${n}`), created: true }),
-      headInfo: async () => ({ sha: `abc${commits}`, committedAt: d.o.pushedAt ?? T }),
-      changesAgainstBase: async () => [{ status: 'M', path: 'src/state.js' }],
+    ws: fakeWorkspace({
+      ensureWorktree: async (n) => ({ dir: join(root, 'worktrees', `issue-${n}`), created: true }),
+      headInfo: async () => { if (d.o.crash) { d.o.crash = false; throw new Error('disk on fire'); } return { sha: `abc${commits}`, committedAt: d.o.pushedAt ?? T }; },
       commitMessagesAgainstBase: async () => ['Fix undo on empty ledger'],
-      isClean: async () => true,
-      diffAgainstBase: async () => '',
       mergeBase: async () => d.o.merge ?? 'clean',
-      mergeResolved: async () => true,
-      push: async () => {},
-      currentBranch: async () => 'factory/issue-1',
-      checkCloneConfig: async () => {},
-      checkGitLink: async () => { if (d.o.crash) { d.o.crash = false; throw new Error('disk on fire'); } },
-    },
+    }, root),
   };
   // The item as the next poll sees it: with the comments the factory posted.
   d.seen = (it) => ({ ...it, comments: [...it.comments, ...d.posted] });
