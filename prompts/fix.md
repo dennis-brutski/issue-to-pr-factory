@@ -1,3 +1,4 @@
+<!-- session: fix -->
 # Fix review findings for issue #{{number}}
 
 A reviewer found the problems below in this branch's change. Fix each one, test-first where behaviour changes.

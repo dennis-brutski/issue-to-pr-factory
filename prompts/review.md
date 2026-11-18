@@ -1,3 +1,4 @@
+<!-- session: review -->
 # Review the change for issue #{{number}}
 
 Review the diff of this branch against `origin/{{base}}`: run `git diff origin/{{base}}...HEAD`. Do not change any file.
