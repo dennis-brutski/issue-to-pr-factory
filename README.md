@@ -28,11 +28,12 @@ Then:
    ```js
    export default {
      repo: 'you/your-repo', baseBranch: 'main',
-     setup: [['npm', ['ci']]], checks: [['npm', ['test']]], testDirs: ['test/'],
+     setup: [['npm', ['ci', '--ignore-scripts']]], checks: [['npm', ['test']]], testDirs: ['test/'],
+     protectedFiles: ['package.json', 'package-lock.json'],
      env: { npm_config_cache: '{runDir}/npm-cache' }, setupWrite: ['{runDir}/npm-cache'],
    };
    ```
-   Setup has network but no home folder; checks have no network at all.
+   Setup has network but no home folder; checks have no network at all. Install scripts run with network, so turn them off unless the repo needs them.
 3. Give your repo an `AGENTS.md`: how to run its tests, where things go, its rules. Copy `.github/ISSUE_TEMPLATE/agent-task.md` into it, so issues come with acceptance criteria.
 4. Run `npm run smoke` once, and `npm run smoke:checks -- <name>` for each target. Both use Claude usage.
 5. `npm start -- <name>`.
@@ -100,6 +101,7 @@ Comments you write on a labelled issue or pull request are instructions for the 
 | the worktree has uncommitted changes | A run was killed mid-session. Commit or discard the changes in `runs/<target>/worktrees/issue-<n>`, remove the label. |
 | the branch conflicts with the latest base | Merge the base branch in by hand in the worktree, remove the label. |
 | a check failed / setup failed | The output is in the comment. Remove the label for another attempt on the same branch. |
+| the branch changes protected files, so the factory did not run setup | An earlier run committed a change to a protected file, and setup has network. Review it in the worktree; merge or revert it, remove the label. |
 | draft because it touches protected files | The agent changed existing tests, skipped or singled out a test, or changed CI, config or a protected file. Review that part yourself. |
 | a held-out check failed | The output is in the factory's terminal, not in the comment. Sharpen the issue or fix it by hand, remove the label. |
 | changes CI workflow files, so the factory did not push it | GitHub would run that workflow the moment it is pushed. Read the diff in the comment; if it is right, push the branch from `runs/<target>/worktrees/issue-<n>` yourself. |
