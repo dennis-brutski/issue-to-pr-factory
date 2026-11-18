@@ -16,7 +16,7 @@ if (!session) die(`unknown prompt: ${prompt.split('\n')[0]}`);
 
 const scriptFile = process.env.FAKE_CLAUDE_SCRIPT, logFile = process.env.FAKE_CLAUDE_LOG;
 if (!scriptFile || !logFile) die('FAKE_CLAUDE_SCRIPT and FAKE_CLAUDE_LOG must be set');
-appendFileSync(logFile, `${JSON.stringify({ issue, session, cwd, prompt, hadNodeModules: existsSync(join(cwd, 'node_modules')), pid: process.pid })}\n`);
+appendFileSync(logFile, `${JSON.stringify({ issue, session, cwd, prompt, args: process.argv.slice(2), hadNodeModules: existsSync(join(cwd, 'node_modules')), pid: process.pid })}\n`);
 
 const script = JSON.parse(readFileSync(scriptFile, 'utf8'));
 const step = (script[issue] ?? []).shift();

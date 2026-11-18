@@ -124,3 +124,18 @@ process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify
     Object.assign(process.env, saved);
   }
 });
+
+test('buildArgs loads the skills plugin when given, before --disallowedTools', () => {
+  const a = buildArgs({ ...base, pluginDir: '/f/skills' });
+  assert.equal(a[a.indexOf('--plugin-dir') + 1], '/f/skills');
+  assert.ok(a.indexOf('--plugin-dir') < a.indexOf('--disallowedTools'));
+  assert.ok(!buildArgs(base).includes('--plugin-dir'));
+});
+test('agentSettings lets agents read the skills, never write them', () => {
+  const s = agentSettings('/r/worktrees/issue-1', { ...config, runDir: '/r', skillsDir: '/f/skills' });
+  assert.ok(s.permissions.allow.includes('Read(//f/skills/**)'));
+  assert.ok(!s.permissions.allow.some((p) => /^(Edit|Write)\(\/\/f\/skills/.test(p)));
+  assert.ok(s.sandbox.filesystem.allowRead.includes('/f/skills'));
+  const none = agentSettings('/r/worktrees/issue-1', { ...config, runDir: '/r' });
+  assert.ok(!JSON.stringify(none).includes('skills'));
+});

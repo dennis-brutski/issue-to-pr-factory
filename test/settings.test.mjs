@@ -87,3 +87,10 @@ test('without local.mjs the defaults from config.mjs apply', async () => {
   const cfg = await loadSettings('one', { factoryRoot: root({ one: target() }) });
   assert.deepEqual([cfg.owner, cfg.ownerName], [config.owner, config.ownerName]);
 });
+
+test('skillsDir is set only when <factory>/skills exists', async () => {
+  const r = root({ one: target() });
+  assert.equal((await loadSettings('one', { factoryRoot: r })).skillsDir, undefined);
+  mkdirSync(join(r, 'skills'));
+  assert.equal((await loadSettings('one', { factoryRoot: r })).skillsDir, join(r, 'skills'));
+});

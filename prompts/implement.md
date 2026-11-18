@@ -4,10 +4,14 @@
 {{rules}}
 {{commit}}
 
+Use these skills (Skill tool): `factory:test-driven-development`, `factory:verification-before-completion`.
+Where a skill says to ask your human partner: you cannot ask. Stop, report `incomplete`, and put the question in `detail`.
+Where a skill lists exceptions that need your human partner's permission (configuration, generated code): use your judgement, and say in `summary` what you did without a test.
+
 {{lastStop}}## How to work
 
 1. Read the issue and the code it concerns. Write yourself a short plan.
-2. Work test-first: for each behaviour change, write a failing test, run it and see it fail, then write the code that makes it pass.
+2. Work test-first, as `factory:test-driven-development` says.
 3. Run these checks before you finish; all must pass:
 {{checks}}
 
