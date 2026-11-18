@@ -1,11 +1,12 @@
 #!/usr/bin/env node
-// How the factory is doing for one target: node stats.mjs <target> [--since YYYY-MM-DD]
+// How the factory is doing: node stats.mjs [<target>] [--since YYYY-MM-DD]; no target means all of them.
 // Read only: it changes nothing on GitHub.
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { issueOfBranch, issueOfWorktree } from './lib/names.mjs';
 import { addUp, count, usageOf } from './lib/usage.mjs';
+import { loadSettings, targetNames } from './lib/settings.mjs';
 
 const same = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
 const after = (at, since) => !since || Date.parse(at) >= Date.parse(since);
@@ -149,9 +150,19 @@ export function agentUseSection(logs, since = null) {
   return formatAgentUse(sessions && groupAgentUse(sessions, since), since);
 }
 
-async function main(argv) {
-  const { loadSettings } = await import('./lib/settings.mjs');
-  const gh = await import('./lib/github.mjs');
+// One target's stats as text, under the repo as its heading.
+async function statsOf(cfg, gh, since) {
+  const [prs, comments] = await Promise.all([gh.listAllPullRequests(cfg), gh.listAllIssueComments(cfg)]);
+  return [
+    `${cfg.repo}${since ? ` since ${since}` : ''}`,
+    agentUseSection(join(cfg.runDir, 'logs'), since),
+    formatStats(countPullRequests(prs, cfg, since), groupStops(comments, cfg, since)),
+  ].join('\n');
+}
+
+// With a target: its stats. Without: every target in targets/, one blank line apart; a target
+// that fails prints one line and the others still print. Returns false if any target failed.
+export async function runStats(argv, { factoryRoot, gh, log = console.log }) {
   const args = [...argv];
   let since = null;
   const i = args.indexOf('--since');
@@ -160,11 +171,29 @@ async function main(argv) {
     args.splice(i, 2);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(since ?? '') || Number.isNaN(Date.parse(since))) throw new Error('--since needs a date: YYYY-MM-DD');
   }
-  const cfg = await loadSettings(args[0], { factoryRoot: dirname(fileURLToPath(import.meta.url)) });
-  const [prs, comments] = await Promise.all([gh.listAllPullRequests(cfg), gh.listAllIssueComments(cfg)]);
-  console.log(`${cfg.repo}${since ? ` since ${since}` : ''}`);
-  console.log(agentUseSection(join(cfg.runDir, 'logs'), since));
-  console.log(formatStats(countPullRequests(prs, cfg, since), groupStops(comments, cfg, since)));
+  if (args[0] !== undefined) {
+    log(await statsOf(await loadSettings(args[0], { factoryRoot }), gh, since));
+    return true;
+  }
+  const names = targetNames(join(factoryRoot, 'targets'));
+  if (!names.length) throw new Error('no targets in targets/');
+  let ok = true;
+  for (const [n, name] of names.entries()) {
+    if (n > 0) log('');
+    try {
+      log(await statsOf(await loadSettings(name, { factoryRoot }), gh, since));
+    } catch (e) {
+      ok = false;
+      log(`${name}: could not read stats: ${e.message}`);
+    }
+  }
+  return ok;
+}
+
+async function main(argv) {
+  const gh = await import('./lib/github.mjs');
+  const ok = await runStats(argv, { factoryRoot: dirname(fileURLToPath(import.meta.url)), gh });
+  if (!ok) process.exitCode = 1;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
