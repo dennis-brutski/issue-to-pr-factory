@@ -3,3 +3,4 @@ worktrees/
 logs/
 factory.lock
 runs/
+local.mjs

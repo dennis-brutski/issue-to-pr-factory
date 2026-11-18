@@ -77,3 +77,13 @@ test("the score pad's setup caches live in its run folder, not in ~/.npm", async
   assert.deepEqual(cfg.setupWrite, ['{runDir}/npm-cache']);
   assert.equal(cfg.env.npm_config_cache, '{runDir}/npm-cache');
 });
+test('local.mjs holds your own settings: over the defaults, under the target', async () => {
+  const r = root({ one: target({ maxParallel: 1 }) });
+  writeFileSync(join(r, 'local.mjs'), "export default { owner: 'alex', ownerName: 'Alex', maxParallel: 3, pollSec: 60 };\n");
+  const cfg = await loadSettings('one', { factoryRoot: r });
+  assert.deepEqual([cfg.owner, cfg.ownerName, cfg.pollSec, cfg.maxParallel], ['alex', 'Alex', 60, 1]);
+});
+test('without local.mjs the defaults from config.mjs apply', async () => {
+  const cfg = await loadSettings('one', { factoryRoot: root({ one: target() }) });
+  assert.deepEqual([cfg.owner, cfg.ownerName], [config.owner, config.ownerName]);
+});
