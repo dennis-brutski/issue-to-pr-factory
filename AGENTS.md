@@ -7,9 +7,11 @@ Claude Code agents confined in a sandbox.
 ## Commands
 
 ```sh
-npm test          # unit and behaviour tests (node --test), about 10 seconds
-npm run smoke     # one real agent session: containment, 8/8 (uses Claude usage)
+npm test          # unit and behaviour tests (node --test), about 10 seconds; no network or logins needed
+npm run smoke     # for the human, not agents: one real Claude session checks 8 ways out of the worktree are closed (uses Claude usage)
 ```
+
+Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or network skip themselves where those are missing.
 
 `npm test` must pass before any change is done.
 
@@ -30,8 +32,8 @@ npm run smoke     # one real agent session: containment, 8/8 (uses Claude usage)
 
 1. **Test first.** Write a failing test, see it fail, then write the code. Decisions get a unit test; anything the factory does end to end gets a behaviour test in `test/behavior/`.
 2. **No dependencies.** Node's standard library, `gh`, `git`, `bwrap`, `claude` only.
-3. **A new `gh` call needs the fake to learn it.** The fake `gh` in `test/behavior/fakes/gh.mjs` refuses unknown commands; add the command there and a contract test in `test/behavior/fake-gh.test.mjs` that runs the real adapter against it.
-4. **Never loosen confinement.** Do not touch the protected files: `lib/agent.mjs`, `lib/brakes.mjs`, `lib/checks.mjs`, `lib/confine.mjs`, `lib/eligibility.mjs`, `prompts/_rules.md`, `config.mjs`, `package.json`, `targets/`, `smoke/`, `AGENTS.md`, `.github/`. Do not modify, rename or delete existing tests; adding tests is expected.
+3. **A new `gh` call needs the fake to learn it.** The fake `gh` in `test/behavior/fakes/gh.mjs` refuses unknown commands; add the command there and a contract test in `test/behavior/fake-gh.test.mjs` that runs the real adapter against it. The same goes for a new agent session: add its prompt's first line to `SESSIONS` in `fakes/claude.mjs`.
+4. **Never loosen confinement.** Do not touch the protected files: `lib/agent.mjs`, `lib/brakes.mjs`, `lib/checks.mjs`, `lib/confine.mjs`, `lib/eligibility.mjs`, `prompts/_rules.md`, `config.mjs`, `package.json`, `targets/`, `smoke/`, `AGENTS.md`, `.github/`. Do not modify, rename or delete existing tests; adding tests is expected. If the right fix needs a protected file or a change to an existing test, don't work around it: stop and say which file and why.
 5. **Small, readable changes.** Match the style of the file you are in. No drive-by refactors.
 6. **Plain wording.** Comments, log lines and GitHub comments are read by one person in a hurry: short sentences, no jargon.
 
