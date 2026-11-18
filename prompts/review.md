@@ -17,6 +17,6 @@ Check, in this order: does it do what the issue asks and nothing else; is every 
 
 {{body}}
 
-### Comments from Dennis
+### Comments from {{ownerName}}
 
 {{comments}}

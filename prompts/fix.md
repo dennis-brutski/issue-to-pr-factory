@@ -24,6 +24,6 @@ A reviewer found the problems below in this branch's change. Fix each one, test-
 
 {{body}}
 
-### Comments from Dennis
+### Comments from {{ownerName}}
 
 {{comments}}

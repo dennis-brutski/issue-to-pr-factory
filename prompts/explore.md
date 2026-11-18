@@ -16,6 +16,6 @@ Investigate this issue in the repository. Do not change any file.
 
 {{body}}
 
-### Comments from Dennis
+### Comments from {{ownerName}}
 
 {{comments}}

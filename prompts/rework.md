@@ -1,6 +1,6 @@
 # Rework the pull request for issue #{{number}}
 
-Dennis reviewed this branch's pull request and left the comments below. Change the branch to address each one, test-first where behaviour changes.
+{{ownerName}} reviewed this branch's pull request and left the comments below. Change the branch to address each one, test-first where behaviour changes.
 
 {{rules}}
 {{commit}}
@@ -14,7 +14,7 @@ Dennis reviewed this branch's pull request and left the comments below. Change t
 - `summary`: what you changed, one line per comment.
 - `detail`: when incomplete, exactly what is missing. Otherwise empty.
 
-## Comments from Dennis
+## Comments from {{ownerName}}
 
 {{comments}}
 

@@ -22,6 +22,6 @@
 
 {{body}}
 
-### Comments from Dennis
+### Comments from {{ownerName}}
 
 {{comments}}
