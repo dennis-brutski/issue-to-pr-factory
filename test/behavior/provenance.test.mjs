@@ -18,7 +18,7 @@ test('the pull request ends with the factory commit, model, gate score and log f
     const f = w.start();
     await w.until(settled(w, n, 'agent:done'), 20000, 'agent:done without agent:in-progress');
     const last = w.pr().body.trimEnd().split('\n').at(-1);
-    assert.match(last, new RegExp(`^🏭 Built by issue-to-pr-factory ${commit()} · model \\S+ · gate confidence 91 · checks: .+ · session logs: runs/[^/]+/logs/issue-${n}/$`));
+    assert.match(last, new RegExp(`^🏭 Built by issue-to-pr-factory ${commit()} · model \\S+( \\(gate \\S+\\))? · gate confidence 91 · checks: .+ · session logs: runs/[^/]+/logs/issue-${n}/$`));
     assert.match(w.pr().body, /\n---\n🏭 Built by/);
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
