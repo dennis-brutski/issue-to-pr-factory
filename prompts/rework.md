@@ -5,7 +5,7 @@ Dennis reviewed this branch's pull request and left the comments below. Change t
 {{rules}}
 {{commit}}
 
-Run these checks before you finish; all must pass:
+{{lastStop}}Run these checks before you finish; all must pass:
 {{checks}}
 
 ## What to report
