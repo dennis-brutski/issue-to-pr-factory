@@ -420,3 +420,25 @@ test('a worktree left dirty by a killed run parks before the first session, sayi
   assert.match(d.comments[0], /uncommitted changes/);
   assert.match(d.comments[0], /worktrees\/issue-1/);
 });
+test('a branch that already changes a protected file parks before setup, in every stage', async () => {
+  for (const [item, stage] of [[issue, 'explore'], [issue, 'implement'], [pr(), 'review'], [pr(), 'merge']]) {
+    const d = fakes({ setupChanges: [{ status: 'M', path: 'package-lock.json' }, { status: 'M', path: 'src/state.js' }] });
+    const r = await runItem(item, stage, d.deps, 4201);
+    assert.equal(r.outcome, 'parked', stage);
+    assert.equal(d.installs.length, 0, stage);
+    assert.equal(d.agentCalls.length, 0, stage);
+    assert.match(d.comments[0], /The branch changes protected files, so the factory did not run setup with network on it:\n- protected file changed: package-lock\.json\nReview them in `.*worktrees\/issue-1`; to go ahead, merge or revert them, then remove the label\./, stage);
+  }
+});
+test('a changed existing test does not stop setup: tests do not run there', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], setupChanges: [{ status: 'M', path: 'test/unit/scoring.test.js' }] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(d.installs.length, 1);
+});
+test('a branch without protected changes runs setup as before', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()], setupChanges: [{ status: 'M', path: 'src/state.js' }] });
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'done');
+  assert.equal(d.installs.length, 1);
+  assert.equal(d.installs[0].agentCallsSoFar, 0);
+});
