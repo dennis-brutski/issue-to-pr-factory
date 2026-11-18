@@ -1,3 +1,4 @@
+<!-- session: gate -->
 # Can issue #{{number}} be built as written?
 
 Read the issue and the code it concerns. Do not change any file.

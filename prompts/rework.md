@@ -1,3 +1,4 @@
+<!-- session: rework -->
 # Rework the pull request for issue #{{number}}
 
 {{ownerName}} reviewed this branch's pull request and left the comments below. Change the branch to address each one, test-first where behaviour changes.

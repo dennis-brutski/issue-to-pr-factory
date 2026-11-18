@@ -1,3 +1,4 @@
+<!-- session: explore -->
 # Explore issue #{{number}}
 
 Investigate this issue in the repository. Do not change any file.
