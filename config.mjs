@@ -6,6 +6,8 @@ export const config = {
   runDir: null, // null = runs/<target>
   setup: [], // [cmd, [args]] run before the first agent session, confined, with network
   checks: [], // [cmd, [args]] run before every push, confined, without network
+  heldOutChecks: [], // [cmd, [args]] run after checks; '{heldOut}' becomes heldOutDir. Agents never see these tests
+  heldOutDir: null, // folder with the held-out tests, outside runs/ (agents can read the run folder)
   env: {}, // for setup, checks and agent sessions; '{port}' becomes the run's port, '{runDir}' its run folder
   runtimeRead: ['~/.nvm'], // home folders everything may read (the Node install)
   sandboxRead: [], // extra home folders agents, setup and checks may read

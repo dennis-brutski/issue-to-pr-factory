@@ -33,7 +33,7 @@ Then:
    };
    ```
    Setup has network but no home folder; checks have no network at all.
-3. Give your repo an `AGENTS.md`: how to run its tests, where things go, its rules.
+3. Give your repo an `AGENTS.md`: how to run its tests, where things go, its rules. Copy `.github/ISSUE_TEMPLATE/agent-task.md` into it, so issues come with acceptance criteria.
 4. Run `npm run smoke` once, and `npm run smoke:checks -- <name>` for each target. Both use Claude usage.
 5. `npm start -- <name>`.
 
@@ -59,7 +59,8 @@ One file per repo in `targets/`, on top of the shared defaults in `config.mjs`:
 | `setup` — run before the first agent session | `[['npm', ['ci']]]` |
 | `checks` — run before every push; agents are told to run them too | `[['npm', ['test']], ['npm', ['run', 'e2e']]]` |
 | `env` — `{port}` becomes the run's own port, `{runDir}` its run folder | `{ E2E_PORT: '{port}', npm_config_cache: '{runDir}/npm-cache' }` |
-| `testDirs` — changing an existing test there is flagged | `['test/', 'e2e/']` |
+| `testDirs` — changing an existing test there, or adding a skip or `.only`, is flagged | `['test/', 'e2e/']` |
+| `heldOutChecks`, `heldOutDir` — checks with tests agents never see, kept outside `runs/`; `{heldOut}` is the folder. A failure parks without its output, which goes to the terminal | `[['node', ['--test', '{heldOut}/']]]`, `'~/held-out/score-pad'` |
 | `protectedFiles`, `protectedDirs` — flagged when changed | `['playwright.config.js', 'package.json', …]` |
 | `sandboxRead` — extra home folders agents, setup and checks may read | `['~/.cache/ms-playwright']` |
 | `setupWrite` — caches setup may write; keep them in `{runDir}`, never your own (`~/.npm`) | `['{runDir}/npm-cache']` |
@@ -99,7 +100,8 @@ Comments you write on a labelled issue or pull request are instructions for the 
 | the worktree has uncommitted changes | A run was killed mid-session. Commit or discard the changes in `runs/<target>/worktrees/issue-<n>`, remove the label. |
 | the branch conflicts with the latest base | Merge the base branch in by hand in the worktree, remove the label. |
 | a check failed / setup failed | The output is in the comment. Remove the label for another attempt on the same branch. |
-| draft because it touches protected files | The agent changed existing tests, CI, config or a protected file. Review that part yourself. |
+| draft because it touches protected files | The agent changed existing tests, skipped or singled out a test, or changed CI, config or a protected file. Review that part yourself. |
+| a held-out check failed | The output is in the factory's terminal, not in the comment. Sharpen the issue or fix it by hand, remove the label. |
 | changes CI workflow files, so the factory did not push it | GitHub would run that workflow the moment it is pushed. Read the diff in the comment; if it is right, push the branch from `runs/<target>/worktrees/issue-<n>` yourself. |
 | the worktree's .git link / the clone's git config was changed | A session tried to change where git looks or what it runs. The factory stops entirely. Read the session log, fix or delete `runs/<target>/repo`, then start again. |
 | issue text was edited / issue title was changed after it was approved | Someone else edited the issue after you labelled it. Re-read it, remove the label. |
