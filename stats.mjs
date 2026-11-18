@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 // How the factory is doing for one target: node stats.mjs <target> [--since YYYY-MM-DD]
 // Read only: it changes nothing on GitHub.
-import { dirname, resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { issueOfBranch } from './lib/names.mjs';
+import { issueOfBranch, issueOfWorktree } from './lib/names.mjs';
+import { addUp, count, usageOf } from './lib/usage.mjs';
 
 const same = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
 const after = (at, since) => !since || Date.parse(at) >= Date.parse(since);
@@ -66,6 +68,85 @@ export function formatStats(p, stops) {
   ].join('\n');
 }
 
+// The stages in the order a run uses them; any other session name comes after, by name.
+const STAGES = ['explore', 'gate', 'implement', 'review', 'fix', 'rework', 'merge'];
+const stageRank = (s) => (STAGES.includes(s) ? STAGES.indexOf(s) : STAGES.length);
+
+// Sessions ({ issue, stage, at, usage }) → what they used by stage, the top 3 issues by
+// output tokens, early stops by reason, unreadable sessions and refused tool calls. Pure.
+export function groupAgentUse(sessions, since = null) {
+  const ours = sessions.filter((s) => !since || s.at >= Date.parse(since));
+  const byStage = new Map();
+  for (const s of ours) byStage.set(s.stage, [...(byStage.get(s.stage) ?? []), s]);
+  const sum = (list) => ({ sessions: list.length, ...addUp(list.map((s) => s.usage)) });
+  const stages = [...byStage]
+    .sort(([a], [b]) => stageRank(a) - stageRank(b) || a.localeCompare(b))
+    .map(([name, list]) => [name, sum(list)]);
+  const outByIssue = new Map();
+  for (const s of ours) if (s.usage?.tokensOut !== undefined) outByIssue.set(s.issue, (outByIssue.get(s.issue) ?? 0) + s.usage.tokensOut);
+  const top = [...outByIssue].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 3);
+  const early = new Map();
+  for (const s of ours) {
+    const reason = s.usage?.reason;
+    if (reason !== undefined && reason !== 'completed') early.set(reason, (early.get(reason) ?? 0) + 1);
+  }
+  return {
+    stages,
+    total: sum(ours),
+    top,
+    early: [...early].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])),
+    unreadable: ours.filter((s) => s.usage === null).length,
+    denials: ours.reduce((n, s) => n + (s.usage?.denials ?? 0), 0),
+  };
+}
+
+const cached = (u) => (u.tokensIn > 0 && u.cachedIn !== undefined ? ` (${Math.round((100 * u.cachedIn) / u.tokensIn)}%)` : '');
+const row = (name, u) => `  ${name.padEnd(12)}${String(u.sessions).padStart(8)}${String(u.turns ?? '-').padStart(8)}`
+  + `${(u.tokensIn === undefined ? '-' : count(u.tokensIn) + cached(u)).padStart(21)}${(u.tokensOut === undefined ? '-' : count(u.tokensOut)).padStart(9)}`;
+
+// The "agent use" section. g is null when there is no log folder.
+export function formatAgentUse(g, since = null) {
+  if (!g || (!g.total.sessions && !since)) return 'agent use: no session logs yet';
+  if (!g.total.sessions) return `agent use: no sessions since ${since}`;
+  const early = [...g.early.map(([reason, n]) => `${n} ${reason}`), ...(g.unreadable ? [`${g.unreadable} unreadable (timed out or crashed)`] : [])];
+  return [
+    'agent use (from session logs)',
+    `  ${'stage'.padEnd(12)}${'sessions'.padStart(8)}${'turns'.padStart(8)}${'tokens in (cached)'.padStart(21)}${'out'.padStart(9)}`,
+    ...g.stages.map(([name, u]) => row(name, u)),
+    row('total', g.total),
+    ...(g.top.length ? [`  most used: ${g.top.map(([n, out]) => `#${n} ${count(out)} out`).join(' · ')}`] : []),
+    `  stopped early: ${early.join(' · ') || 'none'}`,
+    `  tool calls refused: ${g.denials}`,
+  ].join('\n');
+}
+
+// Session logs are <logs>/issue-<n>/<ms>-<seq>-<session>.json; other files are left out.
+const LOG = /^(\d+)-\d+-(.+)\.json$/;
+
+// Every session log under the logs folder, or null when there is no such folder.
+export function readSessions(logs) {
+  let dirs;
+  try { dirs = readdirSync(logs, { withFileTypes: true }); } catch { return null; }
+  const sessions = [];
+  for (const d of dirs) {
+    const issue = issueOfWorktree(d.name);
+    if (!d.isDirectory() || issue === null) continue;
+    for (const f of readdirSync(join(logs, d.name))) {
+      const m = LOG.exec(f);
+      if (!m) continue;
+      let text = '';
+      try { text = readFileSync(join(logs, d.name, f), 'utf8'); } catch { /* unreadable */ }
+      sessions.push({ issue, stage: m[2], at: Number(m[1]), usage: usageOf(text) });
+    }
+  }
+  return sessions;
+}
+
+export function agentUseSection(logs, since = null) {
+  const sessions = readSessions(logs);
+  return formatAgentUse(sessions && groupAgentUse(sessions, since), since);
+}
+
 async function main(argv) {
   const { loadSettings } = await import('./lib/settings.mjs');
   const gh = await import('./lib/github.mjs');
@@ -80,6 +161,7 @@ async function main(argv) {
   const cfg = await loadSettings(args[0], { factoryRoot: dirname(fileURLToPath(import.meta.url)) });
   const [prs, comments] = await Promise.all([gh.listAllPullRequests(cfg), gh.listAllIssueComments(cfg)]);
   console.log(`${cfg.repo}${since ? ` since ${since}` : ''}`);
+  console.log(agentUseSection(join(cfg.runDir, 'logs'), since));
   console.log(formatStats(countPullRequests(prs, cfg, since), groupStops(comments, cfg, since)));
 }
 
