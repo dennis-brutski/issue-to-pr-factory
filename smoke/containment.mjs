@@ -54,7 +54,7 @@ const schema = {
 let failed = 0;
 try {
   console.log('running one agent session (a few minutes)…');
-  const res = await runAgent({ cwd: wt, prompt, schema, cfg: { ...config, maxTurns: 40, sessionTimeoutMin: 10 }, logFile });
+  const res = await runAgent({ cwd: wt, prompt, schema, cfg: { ...config, runDir: base, maxTurns: 40, sessionTimeoutMin: 10 }, logFile });
   if (!res.ok) throw new Error(`agent session did not complete: ${res.reason}`);
   const log = readFileSync(logFile, 'utf8');
   const denials = JSON.stringify(JSON.parse(log.split('\n--- stderr ---')[0]).permission_denials ?? []);

@@ -85,3 +85,16 @@ test('agentSettings adds the runtime and target read folders', () => {
   const fs = agentSettings('/w', { runtimeRead: ['~/.sdkman'], sandboxRead: ['~/.gradle'] }).sandbox.filesystem;
   assert.ok(fs.allowRead.includes('~/.sdkman') && fs.allowRead.includes('~/.gradle'));
 });
+
+// Own target's run folder only: never the factory folder, which holds every target's clones and logs.
+test('agentSettings lets the session read its own run folder, not the factory folder', async () => {
+  const { fileURLToPath } = await import('node:url');
+  const { dirname, join } = await import('node:path');
+  const factoryRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const withRunDir = agentSettings('/f/runs/a/worktrees/issue-1', { ...config, runDir: '/f/runs/a' }).sandbox.filesystem.allowRead;
+  assert.ok(withRunDir.includes('/f/runs/a'));
+  assert.ok(!withRunDir.includes(factoryRoot) && !withRunDir.includes('/f/runs/b'));
+  const without = agentSettings('/w/issue-1', { ...config }).sandbox.filesystem.allowRead;
+  assert.ok(without.includes('/w/issue-1') && !without.includes(factoryRoot), 'without a run folder, only the worktree');
+});
+
