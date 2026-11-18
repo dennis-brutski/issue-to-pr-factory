@@ -111,6 +111,15 @@ Comments you write on a labelled issue or pull request are instructions for the 
 
 Nothing is ever retried on its own.
 
+## Statistics
+
+```sh
+node stats.mjs <target>                      # all time
+node stats.mjs <target> --since 2026-11-01   # pull requests opened and comments made on or after that day
+```
+
+It prints how many pull requests from `factory/issue-*` branches of the target repo (no forks) were opened, merged, closed unmerged and are still open, and how often the factory stopped, grouped by a short label for each stop reason. It counts your own "Factory stopped" and "Factory did not start" comments on every issue and pull request; "no new comments" stops are left out. A reason without a label shows as `other:` and its first 60 characters. Use these numbers before changing `confidenceThreshold`. It only reads from GitHub.
+
 ## How a run works
 
 - **Polling:** every 5 minutes it lists all open issues and pull requests with a factory label (paged, oldest first) and starts up to 2 at a time.
