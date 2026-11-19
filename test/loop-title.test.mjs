@@ -54,3 +54,8 @@ test('the start line stays as it was without a title', async () => {
   assert.equal(await startLog(issue(3, { title: '' })), '#3 implement started');
   assert.equal(await startLog(issue(3, { title: undefined })), '#3 implement started');
 });
+
+test('shortTitle counts and cuts by code points, not UTF-16 units', () => {
+  assert.equal(shortTitle(`${'a'.repeat(78)}😀😀😀`), `${'a'.repeat(78)}😀…`);
+  assert.equal(shortTitle(`${'a'.repeat(78)}😀😀`), `${'a'.repeat(78)}😀😀`);
+});
