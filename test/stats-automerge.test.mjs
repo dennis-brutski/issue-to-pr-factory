@@ -8,8 +8,8 @@ const cfg = { repo: 'dennis-brutski/demo', owner: 'dennis-brutski' };
 const url = (n) => `https://github.com/dennis-brutski/demo/pull/${n}`;
 const c = (body, extra = {}) => ({ author: 'dennis-brutski', body, at: '2026-11-10T10:00:00Z', ...extra });
 const handed = (n, extra) => c(autoMerged(url(n), { reviewed: 'clean', lines: 12 }), extra);
-// GitHub's revert button opens a branch revert-<number>-<head branch>.
-const pr = (number, ref, merged, extra = {}) => ({ number, ref, repo: 'dennis-brutski/demo', state: merged ? 'closed' : 'open', merged, at: '2026-11-11T10:00:00Z', ...extra });
+// GitHub's revert button opens a pull request titled Revert "<title>".
+const pr = (number, title, merged, extra = {}) => ({ number, title, repo: 'dennis-brutski/demo', merged, ...extra });
 
 test('countAutoMerges counts the owner\'s Auto-merge comments and the merged reverts of those pull requests', () => {
   const comments = [
@@ -19,18 +19,19 @@ test('countAutoMerges counts the owner\'s Auto-merge comments and the merged rev
     c(`🏭 Pull request: ${url(15)}`),
   ];
   const prs = [
-    pr(10, 'factory/issue-1', true), pr(11, 'factory/issue-2', true), pr(12, 'factory/issue-3', true),
-    pr(20, 'revert-10-factory/issue-1', true), // reverted
-    pr(21, 'revert-11-factory/issue-2', false), // revert opened, not merged
-    pr(22, 'revert-14-factory/issue-5', true), // revert of a pull request not counted
-    pr(23, 'revert-12-factory/issue-3', true, { repo: 'mallory/demo' }), // a fork
+    pr(10, 'Fix undo', true), pr(11, 'Add redo', true), pr(12, 'Show score', true), pr(14, 'Rename it', true),
+    pr(20, 'Revert "Fix undo"', true), // reverted
+    pr(21, 'Revert "Add redo"', false), // revert opened, not merged
+    pr(22, 'Revert "Rename it"', true), // revert of a pull request not counted
+    pr(23, 'Revert "Show score"', true, { repo: 'mallory/demo' }), // a fork
+    pr(24, 'Revert "Fix undo" again', true), // not the revert title
   ];
   assert.deepEqual(countAutoMerges(comments, prs, cfg), { autoMerged: 3, reverted: 1 });
 });
 
 test('countAutoMerges with since leaves out older Auto-merge comments', () => {
   const comments = [handed(10, { at: '2026-11-01T10:00:00Z' }), handed(11, { at: '2026-11-02T00:00:00Z' })];
-  const prs = [pr(20, 'revert-10-factory/issue-1', true)];
+  const prs = [pr(10, 'Fix undo', true), pr(11, 'Add redo', true), pr(20, 'Revert "Fix undo"', true)];
   assert.deepEqual(countAutoMerges(comments, prs, cfg, '2026-11-02'), { autoMerged: 1, reverted: 0 });
 });
 
@@ -46,7 +47,11 @@ test('the stats of a target show the auto-merge line', async () => {
   const root = mkdtempSync(join(tmpdir(), 'factory-stats-automerge-'));
   mkdirSync(join(root, 'targets'));
   writeFileSync(join(root, 'targets', 'demo.mjs'), `export default ${JSON.stringify({ ...cfg, baseBranch: 'main' })};\n`);
-  const gh = { listAllPullRequests: async () => [pr(20, 'revert-10-factory/issue-1', true)], listAllIssueComments: async () => [handed(10), handed(11)] };
+  const gh = {
+    listAllPullRequests: async () => [],
+    listAllPullRequestTitles: async () => [pr(10, 'Fix undo', true), pr(11, 'Add redo', true), pr(20, 'Revert "Fix undo"', true)],
+    listAllIssueComments: async () => [handed(10), handed(11)],
+  };
   const lines = [];
   assert.equal(await runStats(['demo'], { factoryRoot: root, gh, log: (s) => lines.push(s) }), true);
   assert.match(lines.join('\n'), /^auto-merged: 2 · reverted: 1$/m);

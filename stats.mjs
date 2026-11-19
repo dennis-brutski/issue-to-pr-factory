@@ -24,11 +24,16 @@ export function countPullRequests(prs, cfg, since = null) {
 }
 
 // The owner's Auto-merge comments, and how many of those pull requests a merged revert undid.
-// GitHub's revert button opens its pull request from a branch revert-<number>-<head branch>. Pure.
+// `prs` carry titles: GitHub's revert button opens a pull request titled Revert "<title>". Pure.
+const handedOver = (comments, cfg, since) => comments.filter((c) => same(c.author, cfg.owner) && after(c.at, since)).map((c) => autoMergedPull(c.body)).filter((n) => n !== null);
 export function countAutoMerges(comments, prs, cfg, since = null) {
-  const handed = comments.filter((c) => same(c.author, cfg.owner) && after(c.at, since)).map((c) => autoMergedPull(c.body)).filter((n) => n !== null);
-  const reverts = new Set(prs.filter((p) => p.merged && same(p.repo, cfg.repo)).map((p) => /^revert-(\d+)-/.exec(p.ref ?? '')?.[1]).filter(Boolean).map(Number));
-  return { autoMerged: handed.length, reverted: new Set(handed.filter((n) => reverts.has(n))).size };
+  const handed = handedOver(comments, cfg, since);
+  const reverts = new Set(prs.filter((p) => p.merged && same(p.repo, cfg.repo)).map((p) => p.title));
+  const reverted = new Set(handed.filter((n) => {
+    const title = prs.find((p) => p.number === n)?.title;
+    return title !== undefined && reverts.has(`Revert "${title}"`);
+  }));
+  return { autoMerged: handed.length, reverted: reverted.size };
 }
 
 export const formatAutoMerges = (a) => `auto-merged: ${a.autoMerged} · reverted: ${a.reverted}`;
@@ -164,10 +169,12 @@ export function agentUseSection(logs, since = null) {
 // One target's stats as text, under the repo as its heading.
 async function statsOf(cfg, gh, since) {
   const [prs, comments] = await Promise.all([gh.listAllPullRequests(cfg), gh.listAllIssueComments(cfg)]);
+  // The titles are only needed to find reverts, so they are fetched only when something was auto-merged.
+  const titled = handedOver(comments, cfg, since).length ? await gh.listAllPullRequestTitles(cfg) : [];
   return [
     `${cfg.repo}${since ? ` since ${since}` : ''}`,
     agentUseSection(join(cfg.runDir, 'logs'), since),
-    formatAutoMerges(countAutoMerges(comments, prs, cfg, since)),
+    formatAutoMerges(countAutoMerges(comments, titled, cfg, since)),
     formatStats(countPullRequests(prs, cfg, since), groupStops(comments, cfg, since)),
   ].join('\n');
 }
