@@ -11,7 +11,7 @@ import { runAgent } from './lib/agent.mjs';
 import { runChecks, runSetup } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
 import { recover, tick, cleanup, acquireLock, lockHolder, preflight } from './lib/loop.mjs';
-import { driftWarnings, oldLayoutWarning } from './lib/startup.mjs';
+import { driftWarnings, oldLayoutWarning, pollText } from './lib/startup.mjs';
 import { look, paint } from './lib/look.mjs';
 import { screen } from './lib/screen.mjs';
 
@@ -62,7 +62,7 @@ try {
   for (const l of [...Object.values(cfg.triggers), ...Object.values(cfg.states)])
     if (!labels.includes(l)) { await gh.createLabel(cfg, l); log(`created label ${l}`); }
   await recover(deps);
-  log(`factory started for ${cfg.repo} (${cfg.target}) — polling every ${cfg.pollSec}s, up to ${cfg.maxParallel} at a time`);
+  log(`factory started for ${cfg.repo} (${cfg.target}) — polling every ${pollText(cfg.pollSec)}, up to ${cfg.maxParallel} at a time`);
   while (!stopping) {
     await ws.checkClone(); // a session may have planted config: stop the whole factory, not just one run
     await cleanup(deps, running);
