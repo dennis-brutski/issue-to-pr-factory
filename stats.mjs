@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { issueOfBranch, issueOfWorktree } from './lib/names.mjs';
 import { addUp, count, usageOf } from './lib/usage.mjs';
 import { loadSettings, targetNames } from './lib/settings.mjs';
+import { autoMergedPull } from './lib/comments.mjs';
 
 const same = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
 const after = (at, since) => !since || Date.parse(at) >= Date.parse(since);
@@ -21,6 +22,21 @@ export function countPullRequests(prs, cfg, since = null) {
     open: ours.filter((p) => p.state === 'open').length,
   };
 }
+
+// The owner's Auto-merge comments, and how many of those pull requests a merged revert undid.
+// `prs` carry titles: GitHub's revert button opens a pull request titled Revert "<title>". Pure.
+const handedOver = (comments, cfg, since) => comments.filter((c) => same(c.author, cfg.owner) && after(c.at, since)).map((c) => autoMergedPull(c.body)).filter((n) => n !== null);
+export function countAutoMerges(comments, prs, cfg, since = null) {
+  const handed = handedOver(comments, cfg, since);
+  const reverts = new Set(prs.filter((p) => p.merged && same(p.repo, cfg.repo)).map((p) => p.title));
+  const reverted = new Set(handed.filter((n) => {
+    const title = prs.find((p) => p.number === n)?.title;
+    return title !== undefined && reverts.has(`Revert "${title}"`);
+  }));
+  return { autoMerged: handed.length, reverted: reverted.size };
+}
+
+export const formatAutoMerges = (a) => `auto-merged: ${a.autoMerged} · reverted: ${a.reverted}`;
 
 // The stop reasons lib/stages.mjs and lib/loop.mjs write, checked in order: the first match wins.
 const LABELS = [
@@ -154,9 +170,12 @@ export function agentUseSection(logs, since = null) {
 // One target's stats as text, under the repo as its heading.
 async function statsOf(cfg, gh, since) {
   const [prs, comments] = await Promise.all([gh.listAllPullRequests(cfg), gh.listAllIssueComments(cfg)]);
+  // The titles are only needed to find reverts, so they are fetched only when something was auto-merged.
+  const titled = handedOver(comments, cfg, since).length ? await gh.listAllPullRequestTitles(cfg) : [];
   return [
     `${cfg.repo}${since ? ` since ${since}` : ''}`,
     agentUseSection(join(cfg.runDir, 'logs'), since),
+    formatAutoMerges(countAutoMerges(comments, titled, cfg, since)),
     formatStats(countPullRequests(prs, cfg, since), groupStops(comments, cfg, since)),
   ].join('\n');
 }

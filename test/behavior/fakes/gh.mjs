@@ -2,7 +2,7 @@
 // uses and keeps the "GitHub" state in the JSON file named by FAKE_GH_STATE.
 // Anything else fails loudly, so a new gh call in the factory breaks the tests.
 import { readFileSync, writeFileSync, renameSync, openSync, closeSync, rmSync } from 'node:fs';
-import { PULLS_JQ, COMMENTS_JQ } from '../../../lib/github.mjs';
+import { PULLS_JQ, PULL_TITLES_JQ, COMMENTS_JQ } from '../../../lib/github.mjs';
 
 const argv = process.argv.slice(2);
 const file = process.env.FAKE_GH_STATE;
@@ -98,6 +98,8 @@ try {
   } else if (pos[0] === 'api' && !opt.method && opt.paginate && opt.jq === PULLS_JQ && /^repos\/[^/]+\/[^/]+\/pulls\?state=all&per_page=100$/.test(pos[1])) {
     out = s.items.filter((i) => i.kind === 'pr').map((i) => JSON.stringify({ number: i.number, ref: i.headRefName, repo: i.headRepo ?? null,
       state: i.state === 'OPEN' ? 'open' : 'closed', merged: i.state === 'MERGED', at: i.createdAt ?? now() })).join('\n');
+  } else if (pos[0] === 'api' && !opt.method && opt.paginate && opt.jq === PULL_TITLES_JQ && /^repos\/[^/]+\/[^/]+\/pulls\?state=all&per_page=100$/.test(pos[1])) {
+    out = s.items.filter((i) => i.kind === 'pr').map((i) => JSON.stringify({ number: i.number, title: i.title, repo: i.headRepo ?? null, merged: i.state === 'MERGED' })).join('\n');
   } else if (pos[0] === 'api' && !opt.method && opt.paginate && opt.jq === COMMENTS_JQ && /^repos\/[^/]+\/[^/]+\/issues\/comments\?per_page=100$/.test(pos[1])) {
     // Review comments (with a path) live elsewhere on GitHub, so this list leaves them out.
     out = s.items.flatMap((i) => i.comments.filter((c) => !c.path).map((c) => JSON.stringify({ author: c.author, body: c.body, at: c.at }))).join('\n');
@@ -110,6 +112,13 @@ try {
     s.items.push({ number: n, kind: 'pr', title: opt.title, body: stdin(), author: s.login, state: 'OPEN', labels: [], labelEvents: [],
       comments: [], headRefName: opt.head, headRepo: opt.repo, baseRefName: opt.base, isDraft: !!opt.draft });
     out = url(opt.repo, n);
+  } else if (pos[0] === 'pr' && pos[1] === 'view' && opt.json === 'additions,deletions') {
+    const i = item(pos[2]);
+    out = JSON.stringify({ additions: i.additions ?? 0, deletions: i.deletions ?? 0 });
+  } else if (pos[0] === 'pr' && pos[1] === 'merge' && opt.squash && opt.auto) {
+    const i = item(pos[2]);
+    if (s.autoMergeAllowed === false) die('GraphQL: Auto merge is not allowed for this repository (enablePullRequestAutoMerge)');
+    i.autoMerge = 'squash';
   } else if (pos[0] === 'pr' && pos[1] === 'ready') {
     item(pos[2]).isDraft = !!opt.undo;
   } else unsupported();

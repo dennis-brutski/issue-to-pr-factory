@@ -91,6 +91,24 @@ test('createLabel gives each factory label its colour and description', async ()
     'agent:needs-human': { color: 'd93f0b', description: 'Factory stopped; see its comment. Remove to retry' },
   });
 });
+test('pullRequestSize reads additions and deletions of a pull request', async () => {
+  await gh.openPullRequest(cfg, { branch: 'factory/issue-1', title: 't', body: 'b', draft: false });
+  const s = state(); Object.assign(s.items.find((i) => i.number === 2), { additions: 12, deletions: 3 }); write(s);
+  assert.deepEqual(await gh.pullRequestSize(cfg, 2), { additions: 12, deletions: 3 });
+  assert.deepEqual(state().calls.at(-1), ['pr', 'view', '2', '--repo', 'dennis-brutski/demo', '--json', 'additions,deletions']);
+});
+test('autoMerge asks for a squash merge once GitHub allows it', async () => {
+  await gh.openPullRequest(cfg, { branch: 'factory/issue-1', title: 't', body: 'b', draft: false });
+  await gh.autoMerge(cfg, 2);
+  assert.deepEqual(state().calls.at(-1), ['pr', 'merge', '2', '--repo', 'dennis-brutski/demo', '--squash', '--auto']);
+  assert.equal(state().items.find((i) => i.number === 2).autoMerge, 'squash');
+});
+test('autoMerge fails when the repo does not allow auto-merge', async () => {
+  await gh.openPullRequest(cfg, { branch: 'factory/issue-1', title: 't', body: 'b', draft: false });
+  const s = state(); s.autoMergeAllowed = false; write(s);
+  await assert.rejects(gh.autoMerge(cfg, 2), /Auto merge is not allowed/);
+  assert.equal(state().items.find((i) => i.number === 2).autoMerge, undefined);
+});
 test('listPullRequests sees every open pull request, labelled or not, with mergeable', async () => {
   const s = state();
   const pr = (number, o = {}) => ({ number, kind: 'pr', title: 't', body: 'b', author: 'dennis-brutski', state: 'OPEN', labels: [], labelEvents: [],
