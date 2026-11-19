@@ -34,9 +34,13 @@ flowchart LR
 
 Blue is you, grey is the factory, orange is a stop.
 
+Two words for two kinds of stopping:
+- **A stop (park):** one issue or pull request waits with a 🏭 comment saying why and the `agent:needs-human` label. Nothing retries it until you remove the label. Other issues go on.
+- **The factory stops:** the whole process exits. It does that on Ctrl-C, when it cannot start (no sandbox, `gh` logged in as someone else), and when an agent changed the clone's git config.
+
 ![The factory's terminal during an implement run: one line per agent session, with turns, time, tokens and cost](docs/img/terminal-run.png)
 
-Until the screenshot is there, this is what the terminal shows for one implement run:
+Until the screenshot is there, this is what the terminal shows for one implement run. Its first step is **the gate**: a read-only session scores how clear the issue is from 0 to 100, parks it with questions below `confidenceThreshold`, and rates its difficulty, which picks the model (details under *How a run works*).
 
 ```text
 23:44:10  🏭 factory started for you/your-repo (your-repo) — polling every 5 min, up to 2 at a time
@@ -81,7 +85,7 @@ You need:
 - **A git identity** (`git config --global user.name` and `user.email`).
 
 Then:
-1. Create `local.mjs` next to `config.mjs` for your own settings. It is git-ignored and goes over `config.mjs`; a target file goes over both.
+1. Create `local.mjs` next to `config.mjs` for your own settings. It is git-ignored and goes over `config.mjs`; the file for one repository (step 2) goes over both.
    ```js
    export default { owner: 'your-github-login', ownerName: 'Alex' };
    ```
@@ -114,9 +118,7 @@ npm start -- gin-rummy-score-pad   # one factory per target; several can run sid
 - **Ctrl-C** stops picking up work and lets running agents finish.
 - **Ctrl-C again** kills them at once. Their commits are kept and resume on the next start; uncommitted changes park the issue.
 
-Two words for two kinds of stopping:
-- **A stop (park):** one issue or pull request waits with a 🏭 comment saying why and the `agent:needs-human` label. Nothing retries it until you remove the label. Other issues go on.
-- **The factory stops:** the whole process exits. It does that on Ctrl-C, when it cannot start (no sandbox, `gh` logged in as someone else), and when an agent changed the clone's git config.
+For *a stop (park)* versus *the factory stops*, see *A day with the factory*.
 
 ## Labels
 
@@ -232,7 +234,7 @@ flowchart TD
 | changes CI workflow files, so the factory did not push it | GitHub would run that workflow the moment it is pushed. Read the diff in the comment; if it is right, push the branch from `runs/<target>/worktrees/issue-<n>` yourself. |
 | commits must not carry attribution lines | An agent added a co-author or similar trailer. Reword the commits in the worktree, remove the label. |
 | the worktree's .git link / the clone's git config was changed | A session tried to change where git looks or what it runs. The factory stops entirely. Read the session log, fix or delete `runs/<target>/repo`, then start again. |
-| **Factory did not start:** issue text was edited / issue title was changed after it was approved | Someone else edited or renamed the issue after you labelled it, so the factory did not run it. Re-read it, remove the label to approve it again. |
+| **Factory did not start:** issue text was edited / issue title was changed after it was approved | An issue someone else opened was edited after you labelled it (by anyone, you included), or someone else renamed it, so the factory did not run it. Re-read it, remove the label to approve it again. |
 | timed out / max_turns / usage limit / spent its budget | Remove the label when you want it to continue. A budget stop comes from `maxBudgetUsd`. |
 
 Nothing is ever retried on its own.
