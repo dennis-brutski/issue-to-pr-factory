@@ -1,8 +1,9 @@
 # issue-to-pr-factory
 
 Turns labelled GitHub issues into checked pull requests, for any repository you
-add as a target. It runs only while you have started it. It never merges and
-never pushes to a target's base branch.
+add as a target. It runs only while you have started it. It never merges unless
+you turn on `autoMerge` for a target, and then only small, simple, cleanly
+reviewed pull requests. It never pushes to a target's base branch.
 
 Design and plan: `docs/superpowers/specs/2026-11-17-multi-target-design.md` and
 `docs/superpowers/plans/2026-11-17-multi-target.md` (earlier: the score pad's
@@ -65,6 +66,7 @@ One file per repo in `targets/`, on top of the shared defaults in `config.mjs`:
 | `protectedFiles`, `protectedDirs` — flagged when changed | `['playwright.config.js', 'package.json', …]` |
 | `sandboxRead` — extra home folders agents, setup and checks may read | `['~/.cache/ms-playwright']` |
 | `setupWrite` — caches setup may write; keep them in `{runDir}`, never your own (`~/.npm`) | `['{runDir}/npm-cache']` |
+| `autoMerge` — hand small, simple, cleanly reviewed pull requests to GitHub's auto-merge (see *How a run works*). Off unless set; turn it on in `local.mjs` | `true` |
 
 `AGENTS.md`, `CLAUDE.md`, `.github/` and `.claude/` are protected on every target; a target can add to that list, never remove from it.
 
@@ -120,7 +122,7 @@ npm run stats -- <target> --since 2026-11-01      # one target; only pull reques
 
 Without a target it prints each target under its own heading; `--since` applies to all of them. A target that cannot be read prints `<target>: could not read stats: <reason>`, the others still print, and the exit code is 1.
 
-It prints how many pull requests from `factory/issue-*` branches of the target repo (no forks) were opened, merged, closed unmerged and are still open, and how often the factory stopped, grouped by a short label for each stop reason. It counts your own "Factory stopped" and "Factory did not start" comments on every issue and pull request; "no new comments" stops are left out. A reason without a label shows as `other:` and its first 60 characters. Use these numbers before changing `confidenceThreshold`. It only reads from GitHub.
+It prints how many pull requests from `factory/issue-*` branches of the target repo (no forks) were opened, merged, closed unmerged and are still open, and how often the factory stopped, grouped by a short label for each stop reason. The line `auto-merged: N · reverted: M` counts your "Auto-merge" comments and how many of those pull requests a merged revert undid (the branch GitHub's revert button makes, `revert-<n>-…`). It counts your own "Factory stopped" and "Factory did not start" comments on every issue and pull request; "no new comments" stops are left out. A reason without a label shows as `other:` and its first 60 characters. Use these numbers before changing `confidenceThreshold`. It only reads from GitHub.
 
 ## How a run works
 
@@ -128,6 +130,16 @@ It prints how many pull requests from `factory/issue-*` branches of the target r
 - **Worktree:** one per issue, `runs/<target>/worktrees/issue-<n>` on branch `factory/issue-<n>`; a pull request shares its issue's. Before `explore` and `implement` the latest base branch is merged in, never rebased; a conflict parks.
 - **Port:** each run gets a free port from the operating system, the same one for setup, sessions and checks.
 - **Implement:** gate (read-only, confidence score) → implement → review (read-only) → fix, if there were findings → the factory's own checks → push of exactly the checked commit → pull request, a draft if protected files changed.
+- **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request only when all of these hold, and says so in a comment:
+  1. the pull request is not a draft;
+  2. the gate rated the issue `simple`;
+  3. the review was clean, or it had findings, the fix finished and a second review after the fix was clean (that second review runs only with `autoMerge`);
+  4. fewer than 100 lines changed (additions + deletions, as GitHub counts them);
+  5. it is an `implement` run: `agent:review` and `agent:merge` runs never auto-merge.
+
+  Otherwise the terminal line says which one failed (`not auto-merged: …`), with no comment. If GitHub refuses (auto-merge not allowed in the repo settings, or anything else), a comment says why and asks you to merge it by hand; the run still ends `done`. With required checks, GitHub waits for them.
+
+  ⚠ Auto-merged code reaches the base branch before you read it. Read the merged pull requests afterwards and revert what you do not like.
 - **Retry:** the steps that change code (`implement`, `fix`, `rework`, `merge`) are told why the last run stopped: the newest "Factory stopped" comment since the last commit, marked as information. Gate, review and explore judge without it.
 - **Brakes:** workflow files, protected files and attribution lines are checked against the base commit GitHub reports (`git ls-remote`), not the clone's own ref.
 
