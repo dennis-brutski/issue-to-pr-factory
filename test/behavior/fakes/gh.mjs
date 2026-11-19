@@ -107,6 +107,13 @@ try {
     s.items.push({ number: n, kind: 'pr', title: opt.title, body: stdin(), author: s.login, state: 'OPEN', labels: [], labelEvents: [],
       comments: [], headRefName: opt.head, headRepo: opt.repo, baseRefName: opt.base, isDraft: !!opt.draft });
     out = url(opt.repo, n);
+  } else if (pos[0] === 'pr' && pos[1] === 'view' && opt.json === 'additions,deletions') {
+    const i = item(pos[2]);
+    out = JSON.stringify({ additions: i.additions ?? 0, deletions: i.deletions ?? 0 });
+  } else if (pos[0] === 'pr' && pos[1] === 'merge' && opt.squash && opt.auto) {
+    const i = item(pos[2]);
+    if (s.autoMergeAllowed === false) die('GraphQL: Auto merge is not allowed for this repository (enablePullRequestAutoMerge)');
+    i.autoMerge = 'squash';
   } else if (pos[0] === 'pr' && pos[1] === 'ready') {
     item(pos[2]).isDraft = !!opt.undo;
   } else unsupported();
