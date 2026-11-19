@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { issueOfBranch, issueOfWorktree } from './lib/names.mjs';
 import { addUp, count, usageOf } from './lib/usage.mjs';
 import { loadSettings, targetNames } from './lib/settings.mjs';
+import { autoMergedPull } from './lib/comments.mjs';
 
 const same = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
 const after = (at, since) => !since || Date.parse(at) >= Date.parse(since);
@@ -21,6 +22,16 @@ export function countPullRequests(prs, cfg, since = null) {
     open: ours.filter((p) => p.state === 'open').length,
   };
 }
+
+// The owner's Auto-merge comments, and how many of those pull requests a merged revert undid.
+// GitHub's revert button opens its pull request from a branch revert-<number>-<head branch>. Pure.
+export function countAutoMerges(comments, prs, cfg, since = null) {
+  const handed = comments.filter((c) => same(c.author, cfg.owner) && after(c.at, since)).map((c) => autoMergedPull(c.body)).filter((n) => n !== null);
+  const reverts = new Set(prs.filter((p) => p.merged && same(p.repo, cfg.repo)).map((p) => /^revert-(\d+)-/.exec(p.ref ?? '')?.[1]).filter(Boolean).map(Number));
+  return { autoMerged: handed.length, reverted: new Set(handed.filter((n) => reverts.has(n))).size };
+}
+
+export const formatAutoMerges = (a) => `auto-merged: ${a.autoMerged} · reverted: ${a.reverted}`;
 
 // The stop reasons lib/stages.mjs and lib/loop.mjs write, checked in order: the first match wins.
 const LABELS = [
@@ -156,6 +167,7 @@ async function statsOf(cfg, gh, since) {
   return [
     `${cfg.repo}${since ? ` since ${since}` : ''}`,
     agentUseSection(join(cfg.runDir, 'logs'), since),
+    formatAutoMerges(countAutoMerges(comments, prs, cfg, since)),
     formatStats(countPullRequests(prs, cfg, since), groupStops(comments, cfg, since)),
   ].join('\n');
 }
