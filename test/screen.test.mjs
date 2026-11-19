@@ -193,5 +193,5 @@ test('with colour, wrapping uses the full visible width', () => withColour(() =>
 
 test('session ended keeps its padding when columns is known', () => noColour(() => {
   const { show } = setup({ columns: 100 });
-  assert.equal(show(T, '#39 gate session ended · 4 turns · 6s · ≈ $0.13'), `${T}  #39 │ gate       · 4 turns · 6s · ≈ $0.13`);
+  assert.equal(show(T, '#39 gate session ended · 4 turns · 6s · ≈ $0.13'), `${T}  #39 │   gate       ·   4 turns ·      6s ·  ≈ $0.13`);
 }));
