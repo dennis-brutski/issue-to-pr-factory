@@ -79,7 +79,7 @@ You set one of these. Only labels **you** applied count.
 | `agent:explore` | issue | A write-up is posted. If the change is easy to undo and small, it moves on to implement by itself. |
 | `agent:implement` | issue | It is built test-first, reviewed once, checked, and opened as a pull request. |
 | `agent:review` | pull request | Your comments since the last push are addressed and answered. The label is removed when done. |
-| `agent:merge` | pull request | The base branch is merged in and conflicts are resolved. The label is removed when done. |
+| `agent:merge` | pull request | The base branch is merged in and conflicts are resolved. The label is removed when done. The factory also does this by itself, without the label, when one of its own pull requests conflicts with the base branch. |
 
 The factory sets these:
 
@@ -125,6 +125,7 @@ It prints how many pull requests from `factory/issue-*` branches of the target r
 ## How a run works
 
 - **Polling:** every 5 minutes it lists all open issues and pull requests with a factory label (paged, oldest first) and starts up to 2 at a time.
+- **Conflicts:** each poll also lists all open pull requests. One of its own (`factory/issue-<n>` branch in the target repo, opened by you) that GitHub reports as conflicting and that has no factory label gets a `merge` run, as if you had added `agent:merge`. If that stops, it waits for you to remove `agent:needs-human`.
 - **Worktree:** one per issue, `runs/<target>/worktrees/issue-<n>` on branch `factory/issue-<n>`; a pull request shares its issue's. Before `explore` and `implement` the latest base branch is merged in, never rebased; a conflict parks.
 - **Port:** each run gets a free port from the operating system, the same one for setup, sessions and checks.
 - **Implement:** gate (read-only, confidence score) → implement → review (read-only) → fix, if there were findings → the factory's own checks → push of exactly the checked commit → pull request, a draft if protected files changed.
