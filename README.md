@@ -177,3 +177,7 @@ rm -rf repo worktrees logs factory.lock
 ```
 
 On its next start each target clones afresh into `runs/<target>/`. Branches already pushed (`factory/issue-<n>`) are picked up from GitHub again.
+
+## License
+
+MIT, see `LICENSE`.
