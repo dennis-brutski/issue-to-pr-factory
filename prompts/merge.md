@@ -5,6 +5,7 @@
 
 {{rules}}
 {{commit}}
+Stay on branch `{{branch}}`: do not check out other branches or commits.
 
 Use these skills (Skill tool): `factory:verification-before-completion`.
 Where a skill says to ask your human partner: you cannot ask. Stop, report `incomplete`, and put the question in `detail`.

@@ -5,6 +5,7 @@ A reviewer found the problems below in this branch's change. Fix each one, test-
 
 {{rules}}
 {{commit}}
+Stay on branch `{{branch}}`: do not check out other branches or commits.
 
 Use these skills (Skill tool): `factory:receiving-code-review`, `factory:systematic-debugging`, `factory:verification-before-completion`.
 Where a skill says to ask your human partner: you cannot ask. Stop, report `incomplete`, and put the question in `detail`.
