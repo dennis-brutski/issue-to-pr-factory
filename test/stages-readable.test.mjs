@@ -61,6 +61,13 @@ test('a failing setup parks with its first sentence and one line of output folde
   assert.ok(lastStopReason({ comments: [asComment(comments.at(-1))] }, d.cfg).includes('npm ERR! missing lock'));
 });
 
+test('a trailing newline in the output does not count as another line', async () => {
+  const { d } = deps({ runSetup: async () => ({ ok: false, failed: 'npm ci', output: 'npm ERR! missing lock\n' }) });
+  const r = await runItem(issue, 'implement', d, 4201);
+  assert.match(r.detail, /<summary>Output \(1 line\)<\/summary>/);
+  assert.ok(r.detail.includes('npm ERR! missing lock'));
+});
+
 test('the pull request body has headings, one tick per check, and the footer last', async () => {
   const { d, opened } = deps({ factoryCommit: 'f00ba12' });
   await runItem(issue, 'implement', d, 4201);
