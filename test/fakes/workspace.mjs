@@ -28,6 +28,7 @@ export function fakeWorkspace(over = {}, root = '/f') {
     mergeResolved: async () => true,
     push: async () => {},
     currentBranch: async (dir) => `factory/${basename(dir)}`,
+    attachBranch: async () => false,
     ...over,
   };
 }
