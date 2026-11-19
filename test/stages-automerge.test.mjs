@@ -20,7 +20,7 @@ const work = ok({ status: 'complete', summary: 'Changed undo.', detail: '' });
 const clean = ok({ verdict: 'clean', findings: [] });
 const findings = ok({ verdict: 'findings', findings: ['Missing test for redo'] });
 
-function deps({ sessions, autoMerge = true, size = { additions: 30, deletions: 10 }, mergeFails = null, protectedChange = false } = {}) {
+function deps({ sessions, autoMerge = true, size = { additions: 30, deletions: 10 }, mergeFails = null, protectedChange = false, existing = null } = {}) {
   const calls = [], comments = [], labels = [], seen = [];
   const queue = [...sessions];
   let commits = 0;
@@ -36,7 +36,7 @@ function deps({ sessions, autoMerge = true, size = { additions: 30, deletions: 1
     gh: {
       addLabel: async (c, n, l) => { labels.push(l); }, removeLabel: async () => {},
       comment: async (c, n, body) => { comments.push(body); },
-      findPullRequest: async () => null,
+      findPullRequest: async () => existing,
       openPullRequest: async (c, a) => { calls.push(['open', a.draft]); return { number: 50, url: 'https://github.com/x/y/pull/50' }; },
       setDraft: async () => {}, updatePullRequestBody: async () => {},
       pullRequestSize: async (c, n) => { calls.push(['size', n]); return size; },
@@ -90,6 +90,15 @@ test('a draft is not auto-merged', async () => {
   const r = await runItem(issue, 'implement', x.d, 4201);
   assert.equal(r.outcome, 'parked'); // as today: a draft parks
   assert.deepEqual(x.calls.filter((c) => c[0] !== 'open'), []);
+});
+
+test('a pull request left a draft by an earlier run is not auto-merged, and the log line says so', async () => {
+  const x = deps({ sessions: [ok(gate()), work, clean], existing: { number: 50, url: 'https://github.com/x/y/pull/50', isDraft: true } });
+  const r = await runItem(issue, 'implement', x.d, 4201);
+  assert.equal(r.outcome, 'done', r.detail);
+  assert.deepEqual(merges(x), []);
+  assert.match(r.detail, /\(not auto-merged: draft\)$/);
+  assert.ok(!x.comments.some((b) => b.includes('Auto-merge')));
 });
 
 test('a review whose findings come back after the fix is not auto-merged; the pull request still opens', async () => {
