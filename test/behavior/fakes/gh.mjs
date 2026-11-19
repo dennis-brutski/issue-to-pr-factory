@@ -44,6 +44,7 @@ try {
 
   if (pos[0] === 'api' && pos[1] === 'graphql') {
     delay = s.listDelayMs ?? 0; // slow GitHub, outside the lock
+    const query = field('query')[0] ?? '';
     const wanted = field('labels[]');
     const actor = (l) => (l ? { login: l } : null);
     const node = (i) => ({
@@ -56,16 +57,18 @@ try {
         headRefName: i.headRefName, headRepository: i.headRepo ? { nameWithOwner: i.headRepo } : null,
         reviews: { nodes: [] },
         reviewThreads: { nodes: i.comments.filter((c) => c.path).map((c) => ({ comments: { nodes: [{ author: actor(c.author), body: c.body, path: c.path, createdAt: c.at }] } })) },
+        ...(/\bmergeable\b/.test(query) ? { mergeable: i.mergeable ?? 'MERGEABLE' } : {}),
       } : {}),
     });
     // Pages like GitHub: at most `first:` nodes, starting after the cursor (here: how many came before).
-    const query = field('query')[0] ?? '';
     const connection = (name, kind) => {
       const args = new RegExp(`\\b${name}\\(([^)]*)\\)`).exec(query);
       if (!args) return undefined;
       const first = Number(/first:\s*(\d+)/.exec(args[1])?.[1] ?? 100);
       const start = /after:/.test(args[1]) ? Number(field('after')[0] ?? 0) : 0;
-      const all = s.items.filter((i) => i.kind === kind && i.state === 'OPEN' && i.labels.some((l) => wanted.includes(l)));
+      // Without a labels: argument (the conflicts query), every open one.
+      const labelled = (i) => !/labels:/.test(args[1]) || i.labels.some((l) => wanted.includes(l));
+      const all = s.items.filter((i) => i.kind === kind && i.state === 'OPEN' && labelled(i));
       const nodes = all.slice(start, start + first).map(node);
       return { pageInfo: { hasNextPage: start + nodes.length < all.length, endCursor: String(start + nodes.length) }, nodes };
     };

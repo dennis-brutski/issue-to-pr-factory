@@ -91,3 +91,14 @@ test('createLabel gives each factory label its colour and description', async ()
     'agent:needs-human': { color: 'd93f0b', description: 'Factory stopped; see its comment. Remove to retry' },
   });
 });
+test('listPullRequests sees every open pull request, labelled or not, with mergeable', async () => {
+  const s = state();
+  const pr = (number, o = {}) => ({ number, kind: 'pr', title: 't', body: 'b', author: 'dennis-brutski', state: 'OPEN', labels: [], labelEvents: [],
+    comments: [], headRefName: `factory/issue-${number}`, headRepo: 'dennis-brutski/demo', ...o });
+  s.items.push(pr(2, { mergeable: 'CONFLICTING' }), pr(3, { labels: ['agent:review'] }), pr(4, { state: 'MERGED', mergeable: 'CONFLICTING' }));
+  write(s);
+  const items = await gh.listPullRequests(cfg);
+  assert.deepEqual(items.map((i) => [i.number, i.kind, i.headRef, i.mergeable]),
+    [[2, 'pr', 'factory/issue-2', 'CONFLICTING'], [3, 'pr', 'factory/issue-3', 'MERGEABLE']]);
+  assert.equal((await gh.listCandidates(cfg)).find((i) => i.number === 3).mergeable, null);
+});
