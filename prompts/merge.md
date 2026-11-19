@@ -7,6 +7,10 @@
 {{commit}}
 Stay on branch `{{branch}}`: do not check out other branches or commits.
 
+Use these skills (Skill tool): `factory:verification-before-completion`.
+Where a skill says to ask your human partner: you cannot ask. Stop, report `incomplete`, and put the question in `detail`.
+Where a skill lists exceptions that need your human partner's permission (configuration, generated code): use your judgement, and say in `summary` what you did without a test.
+
 {{lastStop}}Run these checks before you finish; all must pass:
 {{checks}}
 

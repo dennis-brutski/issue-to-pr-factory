@@ -7,7 +7,7 @@ A reviewer found the problems below in this branch's change. Fix each one, test-
 {{commit}}
 Stay on branch `{{branch}}`: do not check out other branches or commits.
 
-Use these skills (Skill tool): `factory:systematic-debugging`, `factory:verification-before-completion`.
+Use these skills (Skill tool): `factory:receiving-code-review`, `factory:systematic-debugging`, `factory:verification-before-completion`.
 Where a skill says to ask your human partner: you cannot ask. Stop, report `incomplete`, and put the question in `detail`.
 Where a skill lists exceptions that need your human partner's permission (configuration, generated code): use your judgement, and say in `summary` what you did without a test.
 
