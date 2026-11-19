@@ -18,6 +18,7 @@ export const config = {
   confidenceThreshold: 70,
   maxTurns: 150,
   sessionTimeoutMin: 45,
+  maxBudgetUsd: null, // per agent session, Claude Code's estimate; null = no cap. Set yours in local.mjs
   checkTimeoutMin: 15,
   model: 'opus', // explicit: agents ignore ~/.claude/settings.json, and the CLI default (Fable) needs usage credits on Pro
   gateModel: 'sonnet', // the gate only reads and scores; a cheaper model is enough

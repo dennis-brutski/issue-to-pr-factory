@@ -107,7 +107,7 @@ Comments you write on a labelled issue or pull request are instructions for the 
 | changes CI workflow files, so the factory did not push it | GitHub would run that workflow the moment it is pushed. Read the diff in the comment; if it is right, push the branch from `runs/<target>/worktrees/issue-<n>` yourself. |
 | the worktree's .git link / the clone's git config was changed | A session tried to change where git looks or what it runs. The factory stops entirely. Read the session log, fix or delete `runs/<target>/repo`, then start again. |
 | issue text was edited / issue title was changed after it was approved | Someone else edited the issue after you labelled it. Re-read it, remove the label. |
-| timed out / max_turns / usage limit | Remove the label when you want it to continue. |
+| timed out / max_turns / usage limit / spent its budget | Remove the label when you want it to continue. A budget stop comes from `maxBudgetUsd`. |
 
 Nothing is ever retried on its own.
 
@@ -153,6 +153,7 @@ What stays outside:
 
 - `config.mjs` — shared defaults: limits (2 at a time, confidence 70, timeouts), model, labels.
   `gateModel` is the model for the gate alone (it only reads and scores); unset, the gate uses `model`.
+  `maxBudgetUsd` caps what one agent session may spend, by Claude Code's own estimate; `null` means no cap. Set it in `local.mjs`.
 - `local.mjs` — your own settings over those defaults (not in git).
 - `targets/` — one settings file per repo.
 - `prompts/` — what each agent step is told.
