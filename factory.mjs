@@ -22,7 +22,7 @@ let cfg;
 try { cfg = await loadSettings(process.argv[2], { factoryRoot }); } catch (e) { cannotRun(e.message); process.exit(1); }
 const root = cfg.runDir;
 const ws = workspace({ root, url: cloneUrl(cfg), base: cfg.baseBranch }); // checks the clone before each git command
-const show = screen({ repo: cfg.repo, columns: process.stdout.columns, stream: process.stdout, now: Date.now });
+const show = screen({ repo: cfg.repo, columns: process.stdout.columns, stream: process.stdout, now: Date.now, pollSec: cfg.pollSec });
 const log = (msg) => { const line = show(new Date().toTimeString().slice(0, 8), msg); if (line !== null) console.log(line); };
 // Read once: which version of the factory built each pull request.
 const head = await run('git', ['-C', factoryRoot, 'rev-parse', '--short', 'HEAD']);
