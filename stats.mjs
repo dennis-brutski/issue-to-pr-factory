@@ -50,6 +50,7 @@ const LABELS = [
   [/(edited|changed) after it was approved/, 'edited after approval'],
   [/agent could not (finish|fix)/, 'agent could not finish'],
   [/produced no changes/, 'no changes'],
+  [/spent its budget/, 'budget cap'],
   [/step failed: (timed out|the agent session stopped)|usage limit/i, 'timed out / max turns / usage limit'],
   [/worktree has uncommitted changes/, 'worktree dirty'],
   [/conflicts with the latest/, 'conflicts with base'],

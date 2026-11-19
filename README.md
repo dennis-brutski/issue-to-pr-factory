@@ -81,7 +81,7 @@ You set one of these. Only labels **you** applied count.
 | `agent:explore` | issue | A write-up is posted. If the change is easy to undo and small, it moves on to implement by itself. |
 | `agent:implement` | issue | It is built test-first, reviewed once, checked, and opened as a pull request. |
 | `agent:review` | pull request | Your comments since the last push are addressed and answered. The label is removed when done. |
-| `agent:merge` | pull request | The base branch is merged in and conflicts are resolved. The label is removed when done. |
+| `agent:merge` | pull request | The base branch is merged in and conflicts are resolved. The label is removed when done. The factory also does this by itself, without the label, when one of its own pull requests conflicts with the base branch. |
 
 The factory sets these:
 
@@ -109,7 +109,7 @@ Comments you write on a labelled issue or pull request are instructions for the 
 | changes CI workflow files, so the factory did not push it | GitHub would run that workflow the moment it is pushed. Read the diff in the comment; if it is right, push the branch from `runs/<target>/worktrees/issue-<n>` yourself. |
 | the worktree's .git link / the clone's git config was changed | A session tried to change where git looks or what it runs. The factory stops entirely. Read the session log, fix or delete `runs/<target>/repo`, then start again. |
 | issue text was edited / issue title was changed after it was approved | Someone else edited the issue after you labelled it. Re-read it, remove the label. |
-| timed out / max_turns / usage limit | Remove the label when you want it to continue. |
+| timed out / max_turns / usage limit / spent its budget | Remove the label when you want it to continue. A budget stop comes from `maxBudgetUsd`. |
 
 Nothing is ever retried on its own.
 
@@ -127,6 +127,7 @@ It prints how many pull requests from `factory/issue-*` branches of the target r
 ## How a run works
 
 - **Polling:** every 5 minutes it lists all open issues and pull requests with a factory label (paged, oldest first) and starts up to 2 at a time.
+- **Conflicts:** each poll also lists all open pull requests. One of its own (`factory/issue-<n>` branch in the target repo, opened by you) that GitHub reports as conflicting and that has no factory label gets a `merge` run, as if you had added `agent:merge`. If that stops, it waits for you to remove `agent:needs-human`.
 - **Worktree:** one per issue, `runs/<target>/worktrees/issue-<n>` on branch `factory/issue-<n>`; a pull request shares its issue's. Before `explore` and `implement` the latest base branch is merged in, never rebased; a conflict parks.
 - **Port:** each run gets a free port from the operating system, the same one for setup, sessions and checks.
 - **Implement:** gate (read-only, confidence score) → implement → review (read-only) → fix, if there were findings → the factory's own checks → push of exactly the checked commit → pull request, a draft if protected files changed.
@@ -165,6 +166,7 @@ What stays outside:
 
 - `config.mjs` — shared defaults: limits (2 at a time, confidence 70, timeouts), model, labels.
   `gateModel` is the model for the gate alone (it only reads and scores); unset, the gate uses `model`.
+  `maxBudgetUsd` caps what one agent session may spend, by Claude Code's own estimate; `null` means no cap. Set it in `local.mjs`.
 - `local.mjs` — your own settings over those defaults (not in git).
 - `targets/` — one settings file per repo.
 - `prompts/` — what each agent step is told.
@@ -189,3 +191,7 @@ rm -rf repo worktrees logs factory.lock
 ```
 
 On its next start each target clones afresh into `runs/<target>/`. Branches already pushed (`factory/issue-<n>`) are picked up from GitHub again.
+
+## License
+
+MIT, see `LICENSE`.

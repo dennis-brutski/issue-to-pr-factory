@@ -5,6 +5,7 @@
 
 {{rules}}
 {{commit}}
+Stay on branch `{{branch}}`: do not check out other branches or commits.
 
 {{lastStop}}Run these checks before you finish; all must pass:
 {{checks}}
