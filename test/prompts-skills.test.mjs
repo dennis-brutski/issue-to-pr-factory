@@ -17,7 +17,7 @@ test('each code prompt names its skills', () => {
 });
 
 test('every skill a prompt names is vendored', () => {
-  for (const f of readdirSync(join(root, 'prompts')))
+  for (const f of readdirSync(join(root, 'prompts')).filter((f) => f.endsWith('.md'))) // a sandbox may leave folders here
     for (const [, name] of read(`prompts/${f}`).matchAll(/factory:([a-z-]+)/g))
       assert.ok(existsSync(join(root, 'skills', 'skills', name, 'SKILL.md')), `${f} names factory:${name}, which is not in skills/`);
 });

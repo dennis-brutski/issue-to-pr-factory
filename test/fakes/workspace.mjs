@@ -29,6 +29,7 @@ export function fakeWorkspace(over = {}, root = '/f') {
     push: async () => {},
     currentBranch: async (dir) => `factory/${basename(dir)}`,
     attachBranch: async () => false,
+    removeSandboxLeftovers: async () => {},
     ...over,
   };
 }
