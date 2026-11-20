@@ -17,10 +17,10 @@ test('0 eligible shows what the factory waits for and when it looks again', () =
   assert.equal(show('23:42:26', '0 eligible'), '23:42:26  ◦ waiting for labelled issues · next check at 23:47:26');
 }));
 
-test('a second 0 eligible right after shows nothing', () => noColour(() => {
+test('a second 0 eligible right after replaces the waiting line', () => noColour(() => {
   const show = setup();
   show('23:42:26', '0 eligible');
-  assert.equal(show('23:47:26', '0 eligible'), null);
+  assert.equal(show('23:47:26', '0 eligible'), '\x1b[1A\x1b[2K23:47:26  ◦ waiting for labelled issues · next check at 23:52:26');
 }));
 
 test('the waiting line comes back after any other line', () => noColour(() => {
