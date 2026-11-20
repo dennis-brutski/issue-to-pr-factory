@@ -328,6 +328,15 @@ It prints how many pull requests from `factory/issue-*` branches of the target r
 
 ![The output of npm run stats for one target: pull requests opened and merged, and stops by reason](docs/img/stats.png)
 
+## Inbox
+
+```sh
+node inbox.mjs              # every target in targets/
+node inbox.mjs <target>     # one target
+```
+
+It prints one JSON array of every open issue and pull request labelled `agent:needs-human`, oldest stop first, for the `/factory-inbox` skill. Each entry has the newest "Factory stopped" or "Factory did not start" comment (`stop`, `stage`, `label`, `stoppedAt`), your own comments since then (`since`), the worktree (a pull request gets its issue's) and whether it exists, and the link. A label you set by hand, with no factory comment, shows as `no factory comment`. `notebookId` (from `local.mjs` or the target's settings, `null` when unset) lets the skill ask a NotebookLM notebook for background. A target that cannot be read prints `<target>: could not read the inbox: <reason>` on stderr, the others are still listed, and the exit code is 1. It only reads from GitHub.
+
 ## Files
 
 - `config.mjs` — shared defaults (see *Settings you change*), labels.
