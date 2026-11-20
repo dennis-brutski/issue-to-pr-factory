@@ -24,7 +24,7 @@ test('buildArgs carries schema, settings, turn cap and no user settings', () => 
   assert.ok(a.includes('-p') && a.includes('--no-session-persistence'));
 });
 test('buildArgs always disallows asking, subagents, waiting and the web', () =>
-  assert.match(buildArgs(base).join(' '), /--disallowedTools AskUserQuestion,Agent,Monitor,ScheduleWakeup,WebFetch,WebSearch$/));
+  assert.match(buildArgs(base).join(' '), /--disallowedTools AskUserQuestion,Agent,Monitor,ScheduleWakeup,WebFetch,WebSearch,ListAgents,ReportFindings$/));
 test('readOnly disallows the file-writing tools', () =>
   assert.match(buildArgs({ ...base, readOnly: true }).join(' '), /Write,Edit,NotebookEdit/));
 test('model is passed only when set', () => {
