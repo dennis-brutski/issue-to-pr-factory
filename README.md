@@ -10,7 +10,7 @@ review and merge pull requests and answer comments in one batch.
 
 Two hard guarantees:
 - **It runs only while you have started it.** No service, no schedule, no webhook.
-- **It never pushes to the base branch.** It pushes `factory/issue-<n>` branches only. It never merges either, unless you turn on `autoMerge` for a repository you point it at; then it hands only small, simple, cleanly reviewed pull requests to GitHub's auto-merge.
+- **It never pushes to the base branch.** It pushes `factory/issue-<n>` branches only. It never merges either, unless you turn on `autoMerge` (see *How a run works*).
 
 The factory has no dependencies: Node's standard library, `gh`, `git`, `bwrap` and `claude`.
 
@@ -34,27 +34,7 @@ flowchart TD
 
 Blue is you, grey is the factory, orange is a stop.
 
-Two words for two kinds of stopping:
-- **A stop (park):** one issue or pull request waits with a 🏭 comment saying why and the `agent:needs-human` label. Nothing retries it until you remove the label. Other issues go on.
-- **The factory stops:** the whole process exits. It does that on Ctrl-C, when it cannot start (no sandbox, `gh` logged in as someone else), and when an agent changed the clone's git config.
-
 ![The factory's terminal during an implement run: one line per agent session, with turns, time, tokens and cost](docs/img/terminal-run.png)
-
-Until the screenshot is there, this is what the terminal shows for one implement run. Its first step is **the gate**: a read-only session scores how clear the issue is from 0 to 100, parks it with questions below `confidenceThreshold`, and rates its difficulty, which picks the model (details under *How a run works*).
-
-```text
-23:44:10  🏭 factory started for you/your-repo (your-repo) — polling every 5 min, up to 2 at a time
-23:44:12  #47 │ ▶ implement started (Show the score after each round)
-23:44:13  #47 │   gate       ·   started
-23:44:16  #47 │   gate       ·   3 turns ·      3s ·   37k in  (63% cached) ·  260 out ·  ≈ $0.06
-23:44:16  #47 │   implement  ·   started
-23:45:07  #47 │   implement  ·  13 turns ·     51s ·  280k in  (90% cached) · 3.9k out ·  ≈ $0.35
-23:45:07  #47 │   review     ·   started
-23:45:47  #47 │   review     ·   6 turns ·     40s ·  120k in  (85% cached) · 1.2k out ·  ≈ $0.12
-23:46:30  #47 │ ✔ implement done in 2m 17s · 3 sessions · ≈ $0.53:
-          #47 │   https://github.com/you/your-repo/pull/48
-23:46:30  ◦ waiting for labelled issues · next check at 23:51:30
-```
 
 ## Trust model
 
@@ -104,8 +84,6 @@ Then:
 4. Run `npm run smoke` once, and `npm run smoke:checks -- <name>` for each target. Each runs one real agent session (uses your Claude plan).
 5. `npm start -- <name>`.
 
-Day to day: write an issue as clearly as for a colleague, add `agent:implement` (or `agent:explore` when unsure), and do something else. It ends in a pull request (`agent:done`) or a stop (`agent:needs-human`, with a comment saying why). Review the pull request; to have it changed, comment and add `agent:review`. You merge, unless `autoMerge` is on.
-
 ## Use
 
 ```sh
@@ -117,8 +95,6 @@ npm start -- gin-rummy-score-pad   # one factory per target; several can run sid
 - **One factory per target.** A lock in `runs/<target>/factory.lock` holds it; a second start for the same target refuses with `already running (pid <n>)`. A lock left by a process that died is taken over.
 - **Ctrl-C** stops picking up work and lets running agents finish.
 - **Ctrl-C again** kills them at once. Their commits are kept and resume on the next start; uncommitted changes park the issue.
-
-For *a stop (park)* versus *the factory stops*, see *A day with the factory*.
 
 ## Labels
 
@@ -140,38 +116,6 @@ The factory sets these:
 | `agent:done` | The pull request is open. |
 
 Comments you write on a labelled issue or pull request are instructions for the agent's next run, its review and its fix step. The factory's own comments start with 🏭 and are not passed on as requests.
-
-```mermaid
-stateDiagram-v2
-  direction LR
-  state "agent:explore" as explore
-  state "agent:implement" as implement
-  state "agent:in-progress" as working
-  state "agent:needs-human" as parked
-  state "agent:done, pull request open" as opened
-  state "agent:review on the pull request" as rework
-  state "pull request conflicts" as conflict
-  state "merged" as merged
-  [*] --> explore
-  [*] --> implement
-  explore --> working
-  implement --> working
-  working --> implement : explore found it small and easy to undo
-  working --> parked : stop
-  parked --> working : you remove the label
-  working --> opened : pull request opened
-  opened --> rework : you comment and add the label
-  rework --> opened : rework pushed, label removed
-  opened --> conflict : the base branch moved on
-  conflict --> opened : the factory merges the base in
-  opened --> merged : you merge, or auto-merge
-  classDef you fill:#1d76db,stroke:#0b4f99,color:#ffffff
-  classDef factory fill:#eeeeee,stroke:#888888,color:#222222
-  classDef stop fill:#f0883e,stroke:#b35900,color:#ffffff
-  class explore,implement,rework you
-  class working,opened,conflict,merged factory
-  class parked stop
-```
 
 ## How a run works
 
@@ -206,16 +150,10 @@ flowchart TD
 - **Explore:** one read-only session writes up the cause or the shape of the change, the files it touches and its side effects. It needs no network: it reads the code and history, and can run the tests in its sandbox to reproduce a bug. If it judges the change easy to undo (one `git revert`) and small in reach, it swaps `agent:explore` for `agent:implement`; otherwise it stops for your decision.
 - **The gate:** the first step of `implement`. A read-only session scores how clearly the issue can be built as written, from 0 to 100. Below `confidenceThreshold` (70) it parks with its questions. It also rates the difficulty (`simple`, `normal`, `hard`): a `simple` issue gets its first draft from `simpleModel`, unless it is likely to touch protected files or the last run stopped. Review and fixes always use `model`.
 - **Implement:** implement → review (read-only) → fix, if there were findings → the brakes and the factory's own checks → push of exactly the checked commit → pull request. The pull request is a **draft** only when the branch changes protected files; the run then stops so you read that part. Mark it ready yourself after reading; the factory never does. Removing `agent:needs-human` from the issue starts another implement run on the same branch.
-- **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request only when all of these hold, and says so in a comment:
-  1. the pull request is not a draft;
-  2. the gate rated the issue `simple`;
-  3. the review was clean, or it had findings, the fix finished and a second review after the fix was clean (that second review runs only with `autoMerge`);
-  4. fewer than 100 lines changed (additions + deletions, as GitHub counts them);
-  5. it is an `implement` run: `agent:review` and `agent:merge` runs never auto-merge.
-
-  Otherwise the terminal line says which one failed (`not auto-merged: …`), with no comment. If GitHub refuses (auto-merge not allowed in the repo settings, or anything else), a comment says why and asks you to merge it by hand; the run still ends `done`. With required checks, GitHub waits for them.
+  ![A pull request opened by the factory: what changed, the checks it ran, and how it was built](docs/img/pull-request.png)
+- **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request, and says so in a comment, only when all of these hold: the pull request is not a draft; the gate rated the issue `simple`; the review was clean, or it had findings, the fix finished and a second review after the fix was clean (that second review runs only with `autoMerge`); fewer than 100 lines changed (additions + deletions, as GitHub counts them). `agent:review` and `agent:merge` runs never auto-merge. Otherwise the terminal line says which one failed (`not auto-merged: …`), with no comment. If GitHub refuses (auto-merge not allowed in the repo settings, or anything else), a comment says why and asks you to merge it by hand; the run still ends `done`. With required checks, GitHub waits for them.
 - **Retry:** the steps that change code (`implement`, `fix`, `rework`, `merge`) are told why the last run stopped: the newest "Factory stopped" comment since the last commit, marked as information. Gate, review and explore judge without it.
-- **Brakes:** before every push the branch is checked against the base commit GitHub reports (`git ls-remote`), not the clone's own ref. Changed workflow files stop the push; commits with **attribution lines** (`Co-Authored-By`, "Generated with", `Claude-Session` trailers, which commits must not carry) stop it too; changed protected files, changed existing tests and added skips or `.only` make the pull request a draft. Lines only added to a `testSupport` file are listed in the pull request instead.
+- **Brakes:** what stops a push or makes the pull request a draft is under *Confinement and brakes*.
 
 ## When it stops (`agent:needs-human`)
 
@@ -242,8 +180,6 @@ Nothing is ever retried on its own.
 ![A stop comment from the factory on an issue, saying why it stopped and to remove agent:needs-human to try again](docs/img/stop-comment.png)
 
 ![An explore write-up comment: the cause, checked by running the code, and the proposed change](docs/img/explore-writeup.png)
-
-![A pull request opened by the factory: what changed, the checks it ran, and how it was built](docs/img/pull-request.png)
 
 ## Targets
 
@@ -302,11 +238,8 @@ To add a repo, follow *Getting started*. Missing `agent:*` labels are created on
 - ✅ **What agents can read**, all of it in one place: their worktree; the target's run folder `runs/<target>/` (its clone, the other worktrees and the logs), never the factory folder, which holds every target's; the `runtimeRead` and `sandboxRead` folders; the factory's `skills/` folder, read-only. Claude Code itself reads your login in `~/.claude`. The rest of the home folder is hidden.
 - ✅ Agents get only an allowlisted environment: no tokens, API keys or agent sockets.
 - ✅ **Setup and checks**, which run the branch's code before you have read it, run under `bwrap`: the system read-only, the home folder hidden except `runtimeRead` and `sandboxRead`, `/run` and `/tmp` empty, the clone's git data read-only, writes only to the worktree (and, for setup, `setupWrite`). Setup has network, to download dependencies; checks have none. Held-out checks also read `heldOutDir`.
-- ✅ Setup does not run on a branch that already changes protected files, since it has network.
-- ✅ **Workflow files** under `.github/workflows/` are never pushed by the factory.
-- ✅ Workflow files, protected files and attribution lines are checked against the base commit GitHub reports (`git ls-remote`), not the clone's own ref.
+- ✅ **Brakes:** before every push the branch is checked against the base commit GitHub reports (`git ls-remote`), not the clone's own ref. Changed **workflow files** under `.github/workflows/` stop the push: the factory never pushes them. Commits with **attribution lines** (`Co-Authored-By`, "Generated with", `Claude-Session` trailers, which commits must not carry) stop it too. Changed protected files, changed existing tests and added skips or `.only` make the pull request a draft. Lines only added to a `testSupport` file are listed in the pull request instead. Setup does not run on a branch that already changes protected files, since it has network. The factory pushes exactly the commit it checked.
 - ✅ **Git itself:** the factory's own git commands read the clone's `.git/config`, which agents can write. Before any git command runs on a worktree (and on every poll) the config must hold only what a plain clone holds and `origin` must be the target repo; otherwise the issue parks and the factory stops. The factory's git also ignores replace refs and grafts, which could show a different history than the one pushed.
-- ✅ The factory pushes exactly the commit it checked.
 - ✅ If the sandbox cannot start, the factory refuses to start.
 
 What stays outside: see *⚠ Risks you accept* above.
@@ -318,14 +251,7 @@ What stays outside: see *⚠ Risks you accept* above.
 
 ## Statistics
 
-```sh
-npm run stats                                     # every target in targets/, one after another
-npm run stats -- <target> --since 2026-11-01      # one target; only pull requests opened and comments made on or after that day
-```
-
-Without a target it prints each target under its own heading; `--since` applies to all of them. A target that cannot be read prints `<target>: could not read stats: <reason>`, the others still print, and the exit code is 1.
-
-It prints how many pull requests from `factory/issue-*` branches of the target repo (no forks) were opened, merged, closed unmerged and are still open, and how often the factory stopped, grouped by a short label for each stop reason. The line `auto-merged: N · reverted: M` counts your "Auto-merge" comments and how many of those pull requests a merged revert undid: a merged pull request titled `Revert "<title>"` (the title GitHub's revert button gives it) counts as a revert. It counts your own "Factory stopped" and "Factory did not start" comments on every issue and pull request; "no new comments" stops are left out. A reason without a label shows as `other:` and its first 60 characters. Use these numbers before changing `confidenceThreshold`. It only reads from GitHub.
+`npm run stats` prints, for every target in `targets/`, the factory's pull requests (opened, merged, closed unmerged, still open), how many were auto-merged and reverted, and its stops grouped by reason; a reason without a label shows as `other:`. It only reads from GitHub. `npm run stats -- <target> --since 2026-11-01` prints one target, counting only pull requests opened and comments made on or after that day. A target that cannot be read prints `<target>: could not read stats: <reason>` and the exit code is 1.
 
 ![The output of npm run stats for one target: pull requests opened and merged, and stops by reason](docs/img/stats.png)
 
