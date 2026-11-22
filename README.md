@@ -79,7 +79,7 @@ Then:
      env: { npm_config_cache: '{runDir}/npm-cache' }, setupWrite: ['{runDir}/npm-cache'],
    };
    ```
-   Setup has network but no home folder; checks have no network at all. Install scripts run during setup, with network, on code nobody has read yet, so this example turns them off with `--ignore-scripts`. The score pad's target uses plain `npm ci`, because its dependencies need their install scripts.
+   Setup has network, checks have none, and `--ignore-scripts` stops install scripts from running unread code with network.
 3. Give your repo an `AGENTS.md`: how to run its tests, where things go, its rules. Copy `.github/ISSUE_TEMPLATE/agent-task.md` into the target repo at the same path, so issues come with acceptance criteria.
 4. Run `npm run smoke` once, and `npm run smoke:checks -- <name>` for each target. Each runs one real agent session (uses your Claude plan).
 5. `npm start -- <name>`.
@@ -92,8 +92,7 @@ npm start                          # the only target, when there is just one
 npm start -- gin-rummy-score-pad   # one factory per target; several can run side by side
 ```
 
-- With several targets and no name, `npm start` does not start: it prints `factory cannot run: choose a target: <names> (npm start -- <target>)` and exits.
-- **One factory per target.** A lock in `runs/<target>/factory.lock` holds it; a second start for the same target refuses with `already running (pid <n>)`. A lock left by a process that died is taken over.
+- With several targets, name one (or it says `choose a target: <names>`); a second start of a target says `already running (pid <n>)` unless the process holding `runs/<target>/factory.lock` died.
 - **Ctrl-C** stops picking up work and lets running agents finish.
 - **Ctrl-C again** kills them at once. Their commits are kept and resume on the next start; uncommitted changes park the issue.
 
@@ -143,15 +142,14 @@ flowchart TD
   classDef stop fill:#f0883e,stroke:#b35900,color:#ffffff
 ```
 
-- **Polling:** every `pollSec` (5 minutes) it lists all open issues and pull requests with a factory label (paged, oldest first) and starts up to `maxParallel` (2) at a time.
-- **Conflicts:** each poll also lists all open pull requests. One of its own (`factory/issue-<n>` branch in the target repo, opened by you) that GitHub reports as conflicting and that has no factory label gets a `merge` run, as if you had added `agent:merge`. If that stops, it waits for you to remove `agent:needs-human`.
-- **Worktree:** one per issue, `runs/<target>/worktrees/issue-<n>` on branch `factory/issue-<n>`; a pull request shares its issue's. Before `explore` and `implement` the latest base branch is merged in, never rebased; a conflict parks. The worktree is removed once the issue is closed or its pull request merged or closed.
-- **Setup** runs before every run's first agent session, confined, with network: the agents' sandbox has none, so dependencies are installed first.
-- **Port:** each run gets a free port from the operating system, the same one for setup, sessions and checks.
+- **Polling:** every `pollSec` it lists labelled issues and pull requests, oldest first, and runs up to `maxParallel` at a time.
+- **Conflicts:** its own unlabelled pull requests (`factory/issue-<n>`, opened by you) that conflict get a `merge` run, as with `agent:merge`.
+- **Worktree:** one per issue, `runs/<target>/worktrees/issue-<n>`, shared by its pull request; the base is merged in (never rebased) before `explore` and `implement`, and it is removed when the issue or pull request closes.
+- **Setup** runs confined, with network, before each run's first session, since agents have no network.
+- **Port:** each run gets one free port for setup, sessions and checks.
 - **Explore:** one read-only session writes up the cause or the shape of the change, the files it touches and its side effects. It needs no network: it reads the code and history, and can run the tests in its sandbox to reproduce a bug. If it judges the change easy to undo (one `git revert`) and small in reach, it swaps `agent:explore` for `agent:implement`; otherwise it stops for your decision.
 - **The gate:** the first step of `implement`. A read-only session scores how clearly the issue can be built as written, from 0 to 100. Below `confidenceThreshold` (70) it parks with its questions. It also rates the difficulty (`simple`, `normal`, `hard`): a `simple` issue gets its first draft from `simpleModel`, unless it is likely to touch protected files or the last run stopped. Review and fixes always use `model`.
 - **Implement:** implement → review (read-only) → fix, if there were findings → the brakes and the factory's own checks → push of exactly the checked commit → pull request. The pull request is a **draft** only when the branch changes protected files; the run then stops so you read that part. Mark it ready yourself after reading; the factory never does. Removing `agent:needs-human` from the issue starts another implement run on the same branch.
-  ![A pull request opened by the factory: what changed, the checks it ran, and how it was built](docs/img/pull-request.png)
 - **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request, and says so in a comment, only when all of these hold: the pull request is not a draft; the gate rated the issue `simple`; the review was clean, or it had findings, the fix finished and a second review after the fix was clean (that second review runs only with `autoMerge`); fewer than 100 lines changed (additions + deletions, as GitHub counts them). `agent:review` and `agent:merge` runs never auto-merge. Otherwise the terminal line says which one failed (`not auto-merged: …`), with no comment. If GitHub refuses (auto-merge not allowed in the repo settings, or anything else), a comment says why and asks you to merge it by hand; the run still ends `done`. With required checks, GitHub waits for them.
 - **Retry:** the steps that change code (`implement`, `fix`, `rework`, `merge`) are told why the last run stopped: the newest "Factory stopped" comment since the last commit, marked as information. Gate, review and explore judge without it.
 - **Brakes:** what stops a push or makes the pull request a draft is under *Confinement and brakes*.
@@ -177,10 +175,6 @@ flowchart TD
 | timed out / max_turns / usage limit / spent its budget | Remove the label when you want it to continue. A budget stop comes from `maxBudgetUsd`. |
 
 Nothing is ever retried on its own.
-
-![A stop comment from the factory on an issue, saying why it stopped and to remove agent:needs-human to try again](docs/img/stop-comment.png)
-
-![An explore write-up comment: the cause, checked by running the code, and the proposed change](docs/img/explore-writeup.png)
 
 ## Targets
 
@@ -240,7 +234,7 @@ To add a repo, follow *Getting started*. Missing `agent:*` labels are created on
 - ✅ Agents get only an allowlisted environment: no tokens, API keys or agent sockets.
 - ✅ **Setup and checks**, which run the branch's code before you have read it, run under `bwrap`: the system read-only, the home folder hidden except `runtimeRead` and `sandboxRead`, `/run` and `/tmp` empty, the clone's git data read-only, writes only to the worktree (and, for setup, `setupWrite`). Setup has network, to download dependencies; checks have none. Held-out checks also read `heldOutDir`.
 - ✅ **Brakes:** before every push the branch is checked against the base commit GitHub reports (`git ls-remote`), not the clone's own ref. Changed **workflow files** under `.github/workflows/` stop the push: the factory never pushes them. Commits with **attribution lines** (`Co-Authored-By`, "Generated with", `Claude-Session` trailers, which commits must not carry) stop it too. Changed protected files, changed existing tests and added skips or `.only` make the pull request a draft. Lines only added to a `testSupport` file are listed in the pull request instead. Setup does not run on a branch that already changes protected files, since it has network. The factory pushes exactly the commit it checked.
-- ✅ **Git itself:** the factory's own git commands read the clone's `.git/config`, which agents can write. Before any git command runs on a worktree (and on every poll) the config must hold only what a plain clone holds and `origin` must be the target repo; otherwise the issue parks and the factory stops. The factory's git also ignores replace refs and grafts, which could show a different history than the one pushed.
+- ✅ **Git itself:** agents can write the clone's `.git/config`, so before git runs on a worktree, and on every poll, it must hold only what a plain clone holds with `origin` the target repo, or the issue parks and the factory stops. The factory's git ignores replace refs and grafts, which could show a history other than the one pushed.
 - ✅ If the sandbox cannot start, the factory refuses to start.
 
 What stays outside: see *⚠ Risks you accept* above.
@@ -270,12 +264,8 @@ What stays outside: see *⚠ Risks you accept* above.
 ```sh
 npm test                           # unit and behaviour tests; no network or logins needed
 npm run smoke                      # proves an agent cannot escape its worktree; runs one real agent session (uses your Claude plan)
-npm run smoke:checks -- <target>   # the target's setup and checks, inside the agent sandbox and confined; runs one real agent session (uses your Claude plan)
+npm run smoke:checks -- <target>   # setup confined with network, as in a real run, then the checks twice without network: in an agent session's sandbox and confined by the factory; runs one real agent session (uses your Claude plan)
 ```
-
-In `smoke:checks`, setup runs confined with network, as in a real run. Then the checks run twice without network: once inside an agent session's sandbox, once confined by the factory.
-
-When the suite runs inside an agent sandbox (no nested bwrap, no network), the bwrap and network tests skip or use a stand-in. The factory's own check run outside the sandbox runs them for real.
 
 ## License
 

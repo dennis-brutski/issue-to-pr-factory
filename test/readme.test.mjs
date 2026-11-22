@@ -40,7 +40,7 @@ test('two Mermaid diagrams, coloured, without HTML in them', () => {
 });
 
 test('every screenshot slot has alt text and points into docs/img/', () => {
-  for (const name of ['terminal-run', 'pull-request', 'stop-comment', 'explore-writeup', 'stats'])
+  for (const name of ['terminal-run', 'stats'])
     assert.match(README, new RegExp(`!\\[[^\\]]+\\]\\(docs/img/${name}\\.png\\)`), name);
 });
 
