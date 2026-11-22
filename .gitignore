@@ -4,3 +4,7 @@ logs/
 factory.lock
 runs/
 local.mjs
+# Your own targets stay local; only the two examples the tests use are tracked.
+targets/*
+!targets/gin-rummy-score-pad.mjs
+!targets/issue-to-pr-factory.mjs
