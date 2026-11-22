@@ -241,7 +241,7 @@ Nothing is ever retried on its own.
 
 ![A stop comment from the factory on an issue, saying why it stopped and to remove agent:needs-human to try again](docs/img/stop-comment.png)
 
-![An explore write-up comment, ending with whether the change is easy to undo and small in reach](docs/img/explore-writeup.png)
+![An explore write-up comment: the cause, checked by running the code, and the proposed change](docs/img/explore-writeup.png)
 
 ![A pull request opened by the factory: what changed, the checks it ran, and how it was built](docs/img/pull-request.png)
 
