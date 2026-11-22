@@ -38,11 +38,15 @@ test('stopLabel gives each reason function its own label, never other', () => {
   }
 });
 
-test('the six reasons stats used to show as other get labels of their own', () => {
-  const labels = new Set(Object.values(reasons).map((fn) => fn.label));
-  for (const name of ['readOnlyChanged', 'notOnBranch', 'uncommitted', 'mergeUnresolved'])
-    assert.ok(labels.has(reasons[name].label), name);
-  assert.notEqual(reasons.notOnBranch.label, reasons.uncommitted.label);
+// The two verify.mjs reasons (attribution lines, protected files before setup) are asserted in
+// test/comments-protected-reasons.test.mjs, where they are produced the real way.
+test('the four stages.mjs reasons stats used to show as other get labels of their own', () => {
+  const label = (reason) => stopLabel(stopped('implement', reason, 'agent:needs-human', 'factory/issue-1'));
+  assert.equal(label(reasons.readOnlyChanged('gate')), 'read-only step changed files');
+  assert.equal(label(reasons.notOnBranch('factory/issue-1', null)), 'worktree not on its branch');
+  assert.equal(label(reasons.notOnBranch('factory/issue-1', 'main')), 'worktree not on its branch');
+  assert.equal(label(reasons.uncommitted()), 'agent left uncommitted changes');
+  assert.equal(label(reasons.mergeUnresolved('Gave up.')), 'merge unresolved');
 });
 
 test('the reason texts stay as the owner knows them', () => {
