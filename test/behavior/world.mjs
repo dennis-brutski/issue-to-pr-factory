@@ -98,7 +98,9 @@ export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) 
     start(extraArgs = []) {
       // node --test marks its children with NODE_TEST_CONTEXT; a project's own `node --test`
       // inheriting it reports to us instead and exits 0 even when its tests fail.
-      const { NODE_TEST_CONTEXT, ...env } = process.env;
+      // node --test in a terminal sets FORCE_COLOR; the factory would then colour its piped
+      // output and the tests, which match plain text, would fail.
+      const { NODE_TEST_CONTEXT, FORCE_COLOR, ...env } = process.env;
       const proc = spawn(process.execPath, [FACTORY, settingsFile, ...extraArgs], {
         env: { ...env, PATH: `${BINS}:${env.PATH}`, FAKE_GH_STATE: ghState, FAKE_CLAUDE_SCRIPT: script, FAKE_CLAUDE_LOG: log,
           npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' },
