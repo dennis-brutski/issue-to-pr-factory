@@ -167,7 +167,7 @@ test('protected path opens a draft with a warning and needs-human', async () => 
   const r = await runItem(issue, 'implement', d.deps, 4201);
   assert.equal(r.outcome, 'parked');
   assert.equal(d.opened[0].draft, true);
-  assert.match(d.opened[0].body, /^> ⚠ This change touches protected files:/);
+  assert.match(d.opened[0].body, /^> ⚠ This pull request changes files you should check:/);
   assert.match(d.opened[0].body, /test\/unit\/scoring\.test\.js/);
   assert.ok(d.labelsAdded.includes('1:agent:needs-human'));
   assert.ok(!d.labelsAdded.includes('1:agent:done'));

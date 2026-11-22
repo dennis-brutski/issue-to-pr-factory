@@ -83,7 +83,7 @@ test('park reasons leave an empty line before each list', async () => {
 
   const touched = deps({ changes: [{ status: 'M', path: 'test/unit/scoring.test.js' }] });
   const r2 = await runItem(issue, 'implement', touched.d, 4201);
-  assert.match(r2.detail, /is a draft because it touches protected files:\n\n- /);
+  assert.match(r2.detail, /is a draft because it changes files you should check:\n\n- /);
 });
 
 test('rework and merge parks leave an empty line before the list of protected files', async () => {
@@ -98,5 +98,5 @@ test('rework and merge parks leave an empty line before the list of protected fi
   let n = 0;
   reworked.d.ws.headInfo = async () => ({ sha: `abc${n++}`, committedAt: '2026-11-01T10:00:00Z' });
   const r2 = await runItem(asked, 'review', reworked.d, 4201);
-  assert.match(r2.detail, /it touches protected files, so the pull request is now a draft:\n\n- /);
+  assert.match(r2.detail, /it changes files you should check, so the pull request is now a draft:\n\n- /);
 });
