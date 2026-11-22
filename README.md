@@ -242,7 +242,6 @@ What stays outside: see *⚠ Risks you accept* above.
 ## Startup warnings
 
 - `` warning: `spec/` is in targets/<name>.mjs but not on main — update the target file `` — the target file no longer matches the repo; a protection or test folder does nothing until you fix it.
-- `` warning: an old single-target clone is at …/repo — see "Moving to runs/" in the README `` — see *Moving to runs/* at the end.
 
 ## Statistics
 
@@ -275,6 +274,3 @@ MIT, see `LICENSE`.
 
 Design notes and plans are in `docs/superpowers/`.
 
-## Moving to runs/
-
-Before targets, the clone, worktrees and logs lived at the top of this folder. Stop the factory, finish or park open work, run `rm -rf repo worktrees logs factory.lock`; each target clones afresh into `runs/<target>/`.
