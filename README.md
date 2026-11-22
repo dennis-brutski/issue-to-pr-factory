@@ -92,7 +92,7 @@ npm start                          # the only target, when there is just one
 npm start -- gin-rummy-score-pad   # one factory per target; several can run side by side
 ```
 
-- With several targets, name one, or it exits with `choose a target: <names>`. One factory per target: a second start refuses with `already running (pid <n>)` while `runs/<target>/factory.lock` is held; a lock from a dead process is taken over.
+- With several targets, name one (or it says `choose a target: <names>`); a second start of a target says `already running (pid <n>)` unless the process holding `runs/<target>/factory.lock` died.
 - **Ctrl-C** stops picking up work and lets running agents finish.
 - **Ctrl-C again** kills them at once. Their commits are kept and resume on the next start; uncommitted changes park the issue.
 
@@ -264,10 +264,8 @@ What stays outside: see *⚠ Risks you accept* above.
 ```sh
 npm test                           # unit and behaviour tests; no network or logins needed
 npm run smoke                      # proves an agent cannot escape its worktree; runs one real agent session (uses your Claude plan)
-npm run smoke:checks -- <target>   # the target's setup and checks, inside the agent sandbox and confined; runs one real agent session (uses your Claude plan)
+npm run smoke:checks -- <target>   # setup confined with network, as in a real run, then the checks twice without network: in an agent session's sandbox and confined by the factory; runs one real agent session (uses your Claude plan)
 ```
-
-In `smoke:checks`, setup runs confined with network, as in a real run. Then the checks run twice without network: once inside an agent session's sandbox, once confined by the factory.
 
 ## License
 
