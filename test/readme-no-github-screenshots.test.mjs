@@ -40,3 +40,32 @@ test('Use keeps the target choice and the lock in one sentence', () => {
 test('Testing the factory leaves the sandbox note to AGENTS.md', () => {
   assert.doesNotMatch(section('Testing the factory'), /inside an agent sandbox \(no nested bwrap/);
 });
+
+test('Use says the target choice and the lock in one short sentence', () => {
+  const line = section('Use').split('\n').find((l) => l.includes('factory.lock'));
+  assert.ok(line, 'lock line');
+  for (const part of ['choose a target', 'already running (pid <n>)', 'runs/<target>/factory.lock', 'died'])
+    assert.ok(line.includes(part), part);
+  assert.equal((line.match(/[.!?](\s|$)/g) ?? []).length, 1, line);
+  assert.ok(line.length <= 200, `${line.length} characters`);
+});
+
+test('the Polling, Conflicts, Worktree, Setup and Port bullets are one line each', () => {
+  const run = section('How a run works').split('\n');
+  for (const name of ['Polling:', 'Conflicts:', 'Worktree:', 'Setup**', 'Port:']) {
+    const at = run.findIndex((l) => l.startsWith(`- **${name}`));
+    assert.ok(at >= 0, name);
+    assert.match(run[at + 1], /^- \*\*/, `${name} is followed by the next bullet`);
+  }
+  const polling = run.find((l) => l.startsWith('- **Polling:'));
+  assert.match(polling, /`pollSec`/);
+  assert.match(polling, /`maxParallel`/);
+});
+
+test('the Git itself bullet has two sentences and keeps what it guards', () => {
+  const line = section('Confinement and brakes').split('\n').find((l) => l.includes('**Git itself:**'));
+  assert.ok(line, 'Git itself line');
+  assert.equal((line.match(/[.!?](\s|$)/g) ?? []).length, 2, line);
+  for (const part of ['.git/config', '`origin`', 'replace refs and grafts'])
+    assert.ok(line.includes(part), part);
+});

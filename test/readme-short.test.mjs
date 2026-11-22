@@ -13,9 +13,9 @@ const section = (heading) => {
 };
 const count = (text, re) => (text.match(re) ?? []).length;
 
-test('the README is at most 282 lines', () => {
+test('the README is at most 280 lines', () => {
   const lines = README.split('\n').length - (README.endsWith('\n') ? 1 : 0);
-  assert.ok(lines <= 282, `${lines} lines`);
+  assert.ok(lines <= 280, `${lines} lines`);
 });
 
 test('the terminal screenshot has no text stand-in any more', () => {
