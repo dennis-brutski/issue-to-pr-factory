@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { issueOfBranch, issueOfWorktree } from './lib/names.mjs';
 import { addUp, count, usageOf } from './lib/usage.mjs';
 import { loadSettings, targetNames } from './lib/settings.mjs';
-import { autoMergedPull } from './lib/comments.mjs';
+import { autoMergedPull, isCountedStop, stopLabel } from './lib/comments.mjs';
 
 const same = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
 const after = (at, since) => !since || Date.parse(at) >= Date.parse(since);
@@ -38,40 +38,14 @@ export function countAutoMerges(comments, prs, cfg, since = null) {
 
 export const formatAutoMerges = (a) => `auto-merged: ${a.autoMerged} · reverted: ${a.reverted}`;
 
-// The stop reasons lib/stages.mjs and lib/loop.mjs write, checked in order: the first match wins.
-const LABELS = [
-  [/not clear enough to build without guessing/, 'not clear enough'],
-  [/needs your decision/, 'needs a decision (explore)'],
-  [/held-out check failed/, 'a held-out check failed'],
-  [/failed when the factory ran the checks/, 'a check failed'],
-  [/failed in the worktree \(setup\)/, 'setup failed'],
-  [/touches protected files/, 'protected files (draft)'],
-  [/CI workflow files/, 'workflow files'],
-  [/(edited|changed) after it was approved/, 'edited after approval'],
-  [/agent could not (finish|fix)/, 'agent could not finish'],
-  [/produced no changes/, 'no changes'],
-  [/spent its budget/, 'budget cap'],
-  [/step failed: (timed out|the agent session stopped)|usage limit/i, 'timed out / max turns / usage limit'],
-  [/worktree has uncommitted changes/, 'worktree dirty'],
-  [/conflicts with the latest/, 'conflicts with base'],
-  [/^The factory hit an error/, 'factory error'],
-];
-
-const STOP = ['🏭 **Factory stopped', '🏭 **Factory did not start'];
-const NO_NEW_COMMENTS = 'There are no new comments from you since the last push.';
-
-// A stop comment → its short label. The reason is the paragraph after the heading. Pure.
-export function stopLabel(body) {
-  const reason = body.split(/\n\s*\n/)[1]?.trim() ?? '';
-  const hit = LABELS.find(([re]) => re.test(reason));
-  return hit ? hit[1] : `other: ${reason.replace(/\s+/g, ' ').slice(0, 60)}`;
-}
+// The stop labels and reasons live in lib/comments.mjs, next to the text they label.
+export { stopLabel };
 
 // The owner's stop comments → [label, count], most first. Pure.
 export function groupStops(comments, cfg, since = null) {
   const counts = new Map();
   for (const c of comments) {
-    if (!same(c.author, cfg.owner) || !STOP.some((s) => c.body.startsWith(s)) || c.body.includes(NO_NEW_COMMENTS) || !after(c.at, since)) continue;
+    if (!same(c.author, cfg.owner) || !isCountedStop(c.body) || !after(c.at, since)) continue;
     const label = stopLabel(c.body);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
