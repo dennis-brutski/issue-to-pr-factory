@@ -17,7 +17,7 @@ The factory has no dependencies: Node's standard library, `gh`, `git`, `bwrap` a
 ## A day with the factory
 
 ```mermaid
-flowchart LR
+flowchart TD
   write["You write issues and label them"]:::you --> start["You start the factory and do something else"]:::you
   start --> work["The factory explores, implements and reviews"]:::factory
   work --> prs["Pull requests wait"]:::factory
