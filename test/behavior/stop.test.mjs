@@ -6,7 +6,7 @@ import { world } from './world.mjs';
 test('Ctrl-C during a poll stops at once, without waiting out pollSec', async () => {
   const w = await world({ settings: { pollSec: 60 } });
   try {
-    w.slowLists(3000); // the first poll's list call is still running when Ctrl-C comes
+    w.slowLists(1000); // the first poll's list call is still running when Ctrl-C comes
     const f = w.start();
     await w.until(() => f.output().includes('factory started'), 20000, 'the start');
     const sent = Date.now();
