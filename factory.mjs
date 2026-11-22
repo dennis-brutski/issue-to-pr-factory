@@ -11,7 +11,7 @@ import { runAgent } from './lib/agent.mjs';
 import { runChecks, runSetup } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
 import { recover, tick, cleanup, acquireLock, lockHolder, preflight } from './lib/loop.mjs';
-import { driftWarnings, oldLayoutWarning, pollText } from './lib/startup.mjs';
+import { driftWarnings, pollText } from './lib/startup.mjs';
 import { look, paint } from './lib/look.mjs';
 import { screen } from './lib/screen.mjs';
 
@@ -57,7 +57,7 @@ try {
   await ws.ensureClone();
   if (!(await ws.hasRemoteBranch())) throw new Error(`base branch "${cfg.baseBranch}" not found on ${cfg.repo}`);
   const onBase = await ws.pathsOnBase();
-  for (const w of [oldLayoutWarning(factoryRoot), ...driftWarnings(cfg, (p) => onBase.has(p))].filter(Boolean)) log(`warning: ${w}`);
+  for (const w of driftWarnings(cfg, (p) => onBase.has(p))) log(`warning: ${w}`);
   const labels = await gh.listLabels(cfg);
   for (const l of [...Object.values(cfg.triggers), ...Object.values(cfg.states)])
     if (!labels.includes(l)) { await gh.createLabel(cfg, l); log(`created label ${l}`); }
