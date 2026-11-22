@@ -23,6 +23,8 @@ const step = (script[issue] ?? []).shift();
 if (!step || step.session !== session) die(`expected ${step?.session ?? 'nothing'} for #${issue}, got ${session}`);
 writeFileSync(scriptFile, JSON.stringify(script));
 
+if (step.testConcerns) step.output = { ...step.output, test_concerns: step.testConcerns }; // what a review found in the test changes
+if (step.testChanges) step.output = { ...step.output, test_changes: step.testChanges }; // existing tests a work session changed
 const git = (...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
 for (const [path, content] of Object.entries(step.write ?? {})) {
   mkdirSync(dirname(join(cwd, path)), { recursive: true });

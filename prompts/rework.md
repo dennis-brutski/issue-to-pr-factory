@@ -19,6 +19,7 @@ Where a skill lists exceptions that need your human partner's permission (config
 - `status`: `complete` only if every comment is addressed, everything is committed, and both test commands pass.
 - `summary`: what you changed, one line per comment.
 - `detail`: when incomplete, exactly what is missing. Otherwise empty.
+- `test_changes`: one entry per existing test you changed or deleted: `file` (its path), `test` (the test's name) and `reason` (one line: why the change needed it). Empty when you changed none.
 
 ## Comments from {{ownerName}}
 
