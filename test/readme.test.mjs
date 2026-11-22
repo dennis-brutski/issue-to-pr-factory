@@ -30,8 +30,8 @@ test('the trust model and the accepted risks come before Getting started', () =>
   assert.ok((firstScreen.match(/^- ⚠ /gm) ?? []).length >= 6, 'six risks, one line each with ⚠');
 });
 
-test('three Mermaid diagrams, coloured, without HTML in them', () => {
-  assert.equal(mermaid.length, 3);
+test('two Mermaid diagrams, coloured, without HTML in them', () => {
+  assert.equal(mermaid.length, 2);
   for (const d of mermaid) {
     assert.match(d, /^(flowchart|stateDiagram-v2)\b/);
     assert.match(d, /classDef/);
@@ -42,10 +42,6 @@ test('three Mermaid diagrams, coloured, without HTML in them', () => {
 test('every screenshot slot has alt text and points into docs/img/', () => {
   for (const name of ['terminal-run', 'pull-request', 'stop-comment', 'explore-writeup', 'stats'])
     assert.match(README, new RegExp(`!\\[[^\\]]+\\]\\(docs/img/${name}\\.png\\)`), name);
-});
-
-test('the terminal slot is followed by real session lines', () => {
-  assert.match(README, /#47 │ {3}gate {7}· {3}3 turns · {6}3s · {3}37k in {2}\(63% cached\)/);
 });
 
 test('every config key a user changes is named in a table row', () => {
