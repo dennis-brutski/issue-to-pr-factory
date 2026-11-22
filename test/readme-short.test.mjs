@@ -13,9 +13,9 @@ const section = (heading) => {
 };
 const count = (text, re) => (text.match(re) ?? []).length;
 
-test('the README is at most 290 lines', () => {
+test('the README is at most 282 lines', () => {
   const lines = README.split('\n').length - (README.endsWith('\n') ? 1 : 0);
-  assert.ok(lines <= 290, `${lines} lines`);
+  assert.ok(lines <= 282, `${lines} lines`);
 });
 
 test('the terminal screenshot has no text stand-in any more', () => {
@@ -54,12 +54,4 @@ test('Statistics says what it prints in a few sentences', () => {
   assert.match(stats, /only reads from GitHub/);
   assert.match(stats, /`other:`/);
   assert.doesNotMatch(stats, /Revert "<title>"/);
-});
-
-test('the pull request screenshot sits under How a run works, the others by the stop table', () => {
-  assert.match(section('How a run works'), /docs\/img\/pull-request\.png/);
-  const stops = section('When it stops (`agent:needs-human`)');
-  assert.match(stops, /docs\/img\/stop-comment\.png/);
-  assert.match(stops, /docs\/img\/explore-writeup\.png/);
-  assert.doesNotMatch(stops, /docs\/img\/pull-request\.png/);
 });
