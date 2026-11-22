@@ -6,6 +6,7 @@ export default {
   setup: [],
   checks: [['npm', ['test']]],
   testDirs: ['test/'],
+  testSupport: ['test/behavior/fakes/', 'test/fakes/', 'test/behavior/fake-gh.test.mjs'], // AGENTS.md rule 3 asks agents to extend these
   protectedFiles: ['lib/agent.mjs', 'lib/brakes.mjs', 'lib/checks.mjs', 'lib/confine.mjs', 'lib/eligibility.mjs', 'lib/names.mjs', 'lib/workspace.mjs', 'lib/verify.mjs',
     'prompts/_rules.md', 'config.mjs', 'package.json', 'sync-skills.mjs'],
   protectedDirs: ['targets/', 'smoke/', 'docs/adr/', 'skills/'],

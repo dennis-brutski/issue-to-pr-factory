@@ -13,6 +13,7 @@ export const config = {
   sandboxRead: [], // extra home folders agents, setup and checks may read
   setupWrite: [], // caches setup may write ('{runDir}/…' keeps them per target, never your own)
   protectedFiles: [], protectedDirs: [], testDirs: [],
+  testSupport: [], // fakes and contract tests in testDirs agents are asked to extend: lines only added there are a note, not a draft
   pollSec: 300,
   maxParallel: 2,
   confidenceThreshold: 70,

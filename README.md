@@ -215,7 +215,7 @@ flowchart TD
 
   Otherwise the terminal line says which one failed (`not auto-merged: …`), with no comment. If GitHub refuses (auto-merge not allowed in the repo settings, or anything else), a comment says why and asks you to merge it by hand; the run still ends `done`. With required checks, GitHub waits for them.
 - **Retry:** the steps that change code (`implement`, `fix`, `rework`, `merge`) are told why the last run stopped: the newest "Factory stopped" comment since the last commit, marked as information. Gate, review and explore judge without it.
-- **Brakes:** before every push the branch is checked against the base commit GitHub reports (`git ls-remote`), not the clone's own ref. Changed workflow files stop the push; commits with **attribution lines** (`Co-Authored-By`, "Generated with", `Claude-Session` trailers, which commits must not carry) stop it too; changed protected files, changed existing tests and added skips or `.only` make the pull request a draft.
+- **Brakes:** before every push the branch is checked against the base commit GitHub reports (`git ls-remote`), not the clone's own ref. Changed workflow files stop the push; commits with **attribution lines** (`Co-Authored-By`, "Generated with", `Claude-Session` trailers, which commits must not carry) stop it too; changed protected files, changed existing tests and added skips or `.only` make the pull request a draft. Lines only added to a `testSupport` file are listed in the pull request instead.
 
 ## When it stops (`agent:needs-human`)
 
@@ -256,6 +256,7 @@ One file per repo in `targets/`, on top of the shared defaults in `config.mjs` a
 | `checks` — run before every push; agents are told to run them too | `[['npm', ['test']], ['npm', ['run', 'e2e']]]` |
 | `env` — for setup, checks and agent sessions | `{ E2E_PORT: '{port}', npm_config_cache: '{runDir}/npm-cache' }` |
 | `testDirs` — changing an existing test there, or adding a skip or `.only`, is flagged | `['test/', 'e2e/']` |
+| `testSupport` — fakes and contract tests in `testDirs` that agents may extend: lines only added there are a note, not a draft | `['test/fakes/']` |
 | `heldOutChecks`, `heldOutDir` — checks with tests agents never see, kept outside `runs/`. A failure parks without its output, which goes to the terminal | `[['node', ['--test', '{heldOut}/']]]`, `'~/held-out/score-pad'` |
 | `protectedFiles`, `protectedDirs` — flagged when changed | `['playwright.config.js', 'package.json', …]` |
 | `runtimeRead` — home folders everything may read: the Node install. Default `['~/.nvm']`; usually set in `local.mjs`, since it is about your machine | `['~/.local/share/fnm']` |
