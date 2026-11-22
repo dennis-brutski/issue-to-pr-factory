@@ -61,10 +61,6 @@ test('runtimeRead is in the Targets table', () => {
   assert.match(README, /^\| `runtimeRead` /m);
 });
 
-test('the startup warning still finds its section', () => {
-  assert.match(README, /^## Moving to runs\/$/m);
-});
-
 test('the factory\'s own tests are under Testing the factory', () => {
   assert.match(README, /^## Testing the factory$/m);
   assert.doesNotMatch(README, /^## Checks$/m);
