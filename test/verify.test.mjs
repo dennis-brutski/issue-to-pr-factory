@@ -98,3 +98,46 @@ test('with since, attribution and workflows still park against the base', async 
   const since = await commit(dir, { 'c.txt': 'x' });
   assert.match((await verifyBranch(ws, cfg, dir, { since })).park, /^Commits must not carry attribution lines/);
 });
+
+// The issue's "## Tests that change" section lists the test files it changes on purpose.
+test('a changed test the issue lists is a note, not a draft', async () => {
+  await commit(dir, { 'test/a.test.mjs': "test('a', () => { changed })\n" });
+  assert.deepEqual(await verifyBranch(ws, cfg, dir, { testsThatChange: ['test/a.test.mjs'] }),
+    { park: null, flags: [], notes: ['test changed as the issue asks (M): test/a.test.mjs'] });
+});
+
+test('a deleted test the issue lists is a note, not a draft', async () => {
+  await git(dir, 'rm', '-q', 'test/a.test.mjs'); await git(dir, 'commit', '-q', '-m', 'drop');
+  assert.deepEqual(await verifyBranch(ws, cfg, dir, { testsThatChange: ['test/a.test.mjs'] }),
+    { park: null, flags: [], notes: ['test changed as the issue asks (D): test/a.test.mjs'] });
+});
+
+test('lines only added to an existing test are a note, not a draft', async () => {
+  await commit(dir, { 'test/a.test.mjs': "test('a', () => {})\ntest('b', () => {})\n" });
+  assert.deepEqual(await verifyBranch(ws, cfg, dir), { park: null, flags: [], notes: ['test cases added: test/a.test.mjs'] });
+});
+
+test('a changed test the issue does not list is still a draft', async () => {
+  await commit(dir, { 'test/a.test.mjs': "test('a', () => { changed })\n" });
+  assert.deepEqual(await verifyBranch(ws, cfg, dir, { testsThatChange: ['test/other.test.mjs'] }),
+    { park: null, flags: ['existing test changed (M): test/a.test.mjs'] });
+});
+
+test('a skip added to a listed test is still a draft', async () => {
+  await commit(dir, { 'test/a.test.mjs': "test.skip('a', () => {})\n" });
+  const { flags } = await verifyBranch(ws, cfg, dir, { testsThatChange: ['test/a.test.mjs'] });
+  assert.equal(flags.length, 1);
+  assert.match(flags[0], /^test skipped or singled out: test\.skip/);
+});
+
+test('a skip added in new lines of an existing test is still a draft', async () => {
+  await commit(dir, { 'test/a.test.mjs': "test('a', () => {})\ntest.only('b', () => {})\n" });
+  const { flags } = await verifyBranch(ws, cfg, dir);
+  assert.deepEqual(flags, ["test skipped or singled out: test.only('b', () => {})"]);
+});
+
+test('a listed path does not lift a protected file', async () => {
+  await commit(dir, { 'lib/brakes.mjs': 'changed\n' });
+  assert.deepEqual(await verifyBranch(ws, cfg, dir, { testsThatChange: ['lib/brakes.mjs'] }),
+    { park: null, flags: ['protected file changed: lib/brakes.mjs'] });
+});

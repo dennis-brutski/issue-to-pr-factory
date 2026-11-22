@@ -46,9 +46,9 @@ test('a removed line in a test support file is still flagged', async () => {
   assert.deepEqual(await verifyBranch(ws, cfg, dir), { park: null, flags: ['existing test changed (M): test/fakes/gh.mjs'] });
 });
 
-test('lines only added to an ordinary existing test are still flagged', async () => {
+test('lines only added to an ordinary existing test are a note, not a draft', async () => {
   await commit(dir, { 'test/a.test.mjs': "test('a', () => {})\ntest('b', () => {})\n" });
-  assert.deepEqual(await verifyBranch(ws, cfg, dir), { park: null, flags: ['existing test changed (M): test/a.test.mjs'] });
+  assert.deepEqual(await verifyBranch(ws, cfg, dir), { park: null, flags: [], notes: ['test cases added: test/a.test.mjs'] });
 });
 
 test('an added skip in a test support file is still flagged', async () => {
