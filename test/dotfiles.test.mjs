@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { strayDotfiles } from '../lib/dotfiles.mjs';
+import { strayDotfiles } from '../lib/brakes.mjs';
 
 test('a commit adding a home dotfile at the root is refused', () => {
   assert.deepEqual(strayDotfiles([{ status: 'A', path: '.bashrc' }]), ['.bashrc']);
