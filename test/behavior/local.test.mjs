@@ -28,3 +28,17 @@ test('an unknown option stops the factory', async () => {
     assert.match(f.output(), /factory cannot run: .*locl/);
   } finally { w.close(); }
 });
+
+test('--local shows "local" for a session, not a cost, and says when the server gave no counts', async () => {
+  const w = await world({ settings: { local: { baseUrl: 'http://127.0.0.1:9', model: 'local-model' } } });
+  try {
+    const n = w.issue({ labels: ['agent:implement'] });
+    const zero = { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 };
+    w.script(n, [{ ...gate(5, ['What exactly?']), result: { num_turns: 2, total_cost_usd: 0, usage: zero } }]);
+    const f = w.start(['--local']);
+    await w.until(() => w.item(n).labels.includes('agent:needs-human'), 20000, 'agent:needs-human');
+    assert.match(f.output(), /gate +· 2 turns · local, no token counts\n/);
+    assert.doesNotMatch(f.output(), /≈ \$/);
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});

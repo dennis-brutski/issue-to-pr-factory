@@ -43,5 +43,6 @@ if (step.placeholders) { // what a killed sandbox leaves behind
   mkdirSync(join(cwd, '.claude'), { recursive: true });
   for (const f of [join(cwd, '.bashrc'), join(cwd, '.claude', 'settings.json'), join(gitDir, 'config.lock')]) { writeFileSync(f, ''); chmodSync(f, 0o444); }
 }
+if (step.result && !step.hang) { process.stdout.write(JSON.stringify({ type: 'result', is_error: false, session_id: 'fake', structured_output: step.output, ...step.result })); process.exit(0); } // what the session used: num_turns, usage, …
 if (step.hang) setTimeout(() => process.exit(0), 60_000); // bounded, so a failed test cannot leak it forever
 else process.stdout.write(JSON.stringify({ type: 'result', is_error: false, session_id: 'fake', structured_output: step.output }));
