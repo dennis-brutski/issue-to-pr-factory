@@ -15,7 +15,7 @@ const issue = (number, o = {}) => ({
 });
 const pr = (number, issueNumber) => issue(number, {
   kind: 'pr', labels: ['agent:review'], labelEvents: [{ label: 'agent:review', actor: 'dennis-brutski', at: T }],
-  headRef: `factory/issue-${issueNumber}`, headRepo: 'dennis-brutski/gin-rummy-score-pad',
+  headRef: `factory/issue-${issueNumber}`, headRepo: 'example/web-app',
 });
 
 function fakes(o = {}) {

@@ -70,7 +70,7 @@ Then:
    export default { owner: 'your-github-login', ownerName: 'Alex' };
    ```
    `owner` is your GitHub login: only labels and comments by that account count, and `gh` must be logged in as it. In the rest of this README, "you" means the owner. `ownerName` is what the agents call you.
-2. Write `targets/<name>.mjs` for your repository, a **target** (fields under *Targets*). Leave the two example targets in place: the tests use them. Your own targets are git-ignored, like `local.mjs`. A minimal one:
+2. Write `targets/<name>.mjs` for your repository, a **target** (fields under *Targets*). Targets are git-ignored, like `local.mjs`. A minimal one:
    ```js
    export default {
      repo: 'you/your-repo', baseBranch: 'main',
@@ -89,8 +89,8 @@ Then:
 
 ```sh
 npm start                          # the only target, when there is just one
-npm start -- gin-rummy-score-pad   # one factory per target; several can run side by side
-npm run start:local gin-rummy-score-pad   # agents on a local model instead of Claude (`local` in local.mjs, under Targets)
+npm start -- my-app                # one factory per target; several can run side by side
+npm run start:local my-app         # agents on a local model instead of Claude (`local` in local.mjs, under Targets)
 ```
 
 - With several targets, name one (or it says `choose a target: <names>`); a second start of a target says `already running (pid <n>)` unless the process holding `runs/<target>/factory.lock` died.
@@ -181,9 +181,9 @@ Nothing is ever retried on its own.
 
 One file per repo in `targets/`, on top of the shared defaults in `config.mjs` and your `local.mjs`:
 
-| Field | Example (score pad) |
+| Field | Example (a web app) |
 |---|---|
-| `repo`, `baseBranch` (required) | `dennis-brutski/gin-rummy-score-pad`, `master` |
+| `repo`, `baseBranch` (required) | `you/my-app`, `master` |
 | `setup` — run before the first agent session | `[['npm', ['ci']]]` |
 | `checks` — run before every push; agents are told to run them too | `[['npm', ['test']], ['npm', ['run', 'e2e']]]` |
 | `env` — for setup, checks and agent sessions | `{ E2E_PORT: '{port}', npm_config_cache: '{runDir}/npm-cache' }` |

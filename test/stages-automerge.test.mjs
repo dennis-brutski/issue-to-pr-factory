@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../config.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 import { runItem } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 
@@ -25,7 +25,7 @@ function deps({ sessions, autoMerge = true, size = { additions: 30, deletions: 1
   const queue = [...sessions];
   let commits = 0;
   const d = {
-    cfg: { ...config, ...scorePad, target: 'gin-rummy-score-pad', autoMerge }, root: '/f', log: () => {},
+    cfg: { ...config, ...scorePad, target: 'web-app', autoMerge }, root: '/f', log: () => {},
     runSetup: async () => ({ ok: true, failed: null, output: '' }),
     runAgent: async (a) => {
       seen.push(a.prompt.match(/<!-- session: (\w+) -->/)[1]);

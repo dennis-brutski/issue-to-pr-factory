@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../config.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 import { runItem } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 
@@ -77,7 +77,7 @@ for (const stage of ['implement', 'explore']) {
 
 test('review runs no merge session', async () => {
   const d = fakes();
-  const pr = { ...issue, number: 4, kind: 'pr', labels: ['agent:review'], headRef: 'factory/issue-1', headRepo: 'dennis-brutski/gin-rummy-score-pad' };
+  const pr = { ...issue, number: 4, kind: 'pr', labels: ['agent:review'], headRef: 'factory/issue-1', headRepo: 'example/web-app' };
   await runItem(pr, 'review', d.deps, 4201);
   assert.ok(!d.sessions.includes('merge'), d.sessions.join(', '));
   assert.ok(!d.events.includes('mergeBase'));

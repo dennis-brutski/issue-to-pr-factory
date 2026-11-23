@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildArgs, interpret, agentSettings } from '../lib/agent.mjs';
 import { config } from '../config.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 
 const base = { schema: { type: 'object' }, settings: { sandbox: { enabled: true } }, maxTurns: 150, model: null, readOnly: false };
 const result = (o = {}) => ({

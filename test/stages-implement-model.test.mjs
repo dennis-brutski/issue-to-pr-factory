@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../config.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 import { runItem, schemas } from '../lib/stages.mjs';
 import { stopped } from '../lib/comments.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
@@ -21,7 +21,7 @@ function deps(gate, models, review = { verdict: 'clean', findings: [] }) {
     ok({ status: 'complete', summary: 'Fixed.', detail: '' })];
   let sessions = 0;
   const d = {
-    cfg: { ...config, ...scorePad, target: 'gin-rummy-score-pad', ...models }, root: '/f', log: () => {},
+    cfg: { ...config, ...scorePad, target: 'web-app', ...models }, root: '/f', log: () => {},
     runSetup: async () => ({ ok: true, failed: null, output: '' }),
     runAgent: async (a) => {
       seen.push({ session: a.prompt.match(/<!-- session: (\w+) -->/)[1], model: a.cfg.model });

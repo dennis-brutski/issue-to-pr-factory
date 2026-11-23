@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 import { runItem, renderPrompt, schemas } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 
@@ -29,7 +29,7 @@ const issue = {
 };
 const pr = (comments = [{ author: 'dennis-brutski', body: 'also handle redo', at: T2 }]) => ({
   ...issue, number: 4, kind: 'pr', labels: ['agent:review'], comments,
-  headRef: 'factory/issue-1', headRepo: 'dennis-brutski/gin-rummy-score-pad',
+  headRef: 'factory/issue-1', headRepo: 'example/web-app',
 });
 
 function fakes(o = {}) {

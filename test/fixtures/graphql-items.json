@@ -39,7 +39,7 @@
           {
             "number": 4, "title": "Fix undo", "body": "Closes #1",
             "author": { "login": "dennis-brutski" }, "lastEditedAt": null,
-            "headRefName": "factory/issue-1", "headRepository": { "nameWithOwner": "dennis-brutski/gin-rummy-score-pad" },
+            "headRefName": "factory/issue-1", "headRepository": { "nameWithOwner": "example/web-app" },
             "labels": { "nodes": [{ "name": "agent:review" }] },
             "timelineItems": { "nodes": [
               { "createdAt": "2026-11-04T10:00:00Z", "actor": { "login": "dennis-brutski" }, "label": { "name": "agent:review" } }

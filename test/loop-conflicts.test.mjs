@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { config as defaults } from '../config.mjs';
 import { tick } from '../lib/loop.mjs';
 
-const config = { ...defaults, repo: 'dennis-brutski/gin-rummy-score-pad' };
+const config = { ...defaults, repo: 'example/web-app' };
 const T = '2026-11-01T10:00:00Z';
 const issue = (number, o = {}) => ({
   number, kind: 'issue', title: `Issue ${number}`, body: '', author: 'dennis-brutski', bodyEditedAt: null,
@@ -13,7 +13,7 @@ const issue = (number, o = {}) => ({
 });
 const pr = (number, issueNumber, o = {}) => issue(number, {
   kind: 'pr', labels: [], labelEvents: [], headRef: `factory/issue-${issueNumber}`,
-  headRepo: 'dennis-brutski/gin-rummy-score-pad', mergeable: 'CONFLICTING', ...o,
+  headRepo: 'example/web-app', mergeable: 'CONFLICTING', ...o,
 });
 
 function fakes({ candidates = [], pulls = [], pullsFail = false, cfg = config } = {}) {

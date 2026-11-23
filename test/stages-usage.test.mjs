@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 import { runItem } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 
@@ -23,7 +23,7 @@ function setup(sessions) {
   const root = mkdtempSync(join(tmpdir(), 'stages-usage-'));
   const logs = [], opened = [];
   const d = {
-    cfg: { ...config, ...scorePad, target: 'gin-rummy-score-pad', model: 'opus-test' }, root, log: (m) => logs.push(m),
+    cfg: { ...config, ...scorePad, target: 'web-app', model: 'opus-test' }, root, log: (m) => logs.push(m),
     factoryCommit: 'f00ba12',
     runSetup: async () => ({ ok: true, failed: null, output: '' }),
     runAgent: async (a) => {
@@ -62,7 +62,7 @@ test('each session logs what it used, and the pull request has the totals of eve
     assert.ok(logs.includes('#7 implement session ended · 20 turns · 4m12s · 1k in (90% cached) · 18k out · ≈ $0.70 · 2 denied'), logs.join('\n'));
     assert.ok(logs.includes('#7 review session ended'), logs.join('\n'));
     const last = opened[0].body.trimEnd().split('\n').at(-1);
-    assert.match(last, / · gate confidence 87 · checks: .+ · agent use so far: 5 sessions · 32 turns · ≈ \$1\.05 · session logs: runs\/gin-rummy-score-pad\/logs\/issue-7\/$/);
+    assert.match(last, / · gate confidence 87 · checks: .+ · agent use so far: 5 sessions · 32 turns · ≈ \$1\.05 · session logs: runs\/web-app\/logs\/issue-7\/$/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

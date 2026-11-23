@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../config.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 import { runItem, lastStopReason } from '../lib/stages.mjs';
 import { stopLabel } from '../stats.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
@@ -19,7 +19,7 @@ function deps({ gate = { confidence: 87, questions: [] }, changes = [{ status: '
   const queue = [ok(gate), ok({ status: 'complete', summary: 'Changed undo.', detail: '' }), ok({ verdict: 'clean', findings: [] })];
   let sessions = 0;
   const d = {
-    cfg: { ...config, ...scorePad, target: 'gin-rummy-score-pad', model: 'opus-test', gateModel: 'opus-test' }, root: '/f', log: () => {},
+    cfg: { ...config, ...scorePad, target: 'web-app', model: 'opus-test', gateModel: 'opus-test' }, root: '/f', log: () => {},
     runSetup: async () => ({ ok: true, failed: null, output: '' }),
     runAgent: async (a) => { if (!a.readOnly) sessions++; return queue.shift(); },
     runChecks: async () => ({ ok: true, failed: null, output: '' }),

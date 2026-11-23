@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { config as defaults } from '../config.mjs';
 
 // repo and baseBranch come from a target since multi-target; these tests use the score pad's.
-const config = { ...defaults, repo: 'dennis-brutski/gin-rummy-score-pad', baseBranch: 'master' };
+const config = { ...defaults, repo: 'example/web-app', baseBranch: 'master' };
 import { classify, promptInput } from '../lib/eligibility.mjs';
 
 const T0 = '2026-11-01T09:00:00Z', T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
@@ -17,7 +17,7 @@ const item = (o = {}) => ({
 });
 const pr = (o = {}) => item({
   kind: 'pr', labels: ['agent:review'], labelEvents: [ev2('agent:review')],
-  headRef: 'factory/issue-1', headRepo: 'dennis-brutski/gin-rummy-score-pad', ...o,
+  headRef: 'factory/issue-1', headRepo: 'example/web-app', ...o,
 });
 
 test('owner-labelled issue runs implement', () =>
@@ -51,7 +51,7 @@ test('review label on an issue is skipped', () =>
 test('implement label on a pull request is skipped', () =>
   assert.equal(classify(pr({ labels: ['agent:implement'], labelEvents: [ev2('agent:implement')] }), config).action, 'skip'));
 test('fork pull request is skipped', () =>
-  assert.equal(classify(pr({ headRepo: 'mallory/gin-rummy-score-pad' }), config).action, 'skip'));
+  assert.equal(classify(pr({ headRepo: 'mallory/web-app' }), config).action, 'skip'));
 test('pull request on a non-factory branch is skipped', () =>
   assert.equal(classify(pr({ headRef: 'feature/x' }), config).action, 'skip'));
 test('factory pull request with agent:review runs review', () =>
