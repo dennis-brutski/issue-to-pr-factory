@@ -52,13 +52,21 @@ for (const stage of ['implement', 'explore']) {
     assert.ok(merged < d.events.indexOf('agent'), d.events.join(', '));
   });
 
-  test(`${stage}: a conflict with the base aborts the merge and parks without a session`, async () => {
+  test(`${stage}: a conflict with the base runs a merge session after setup and does not park`, async () => {
     const d = fakes('conflict');
+    const queue = stage === 'explore'
+      ? [ok({ status: 'complete', summary: 'Merged.', detail: '' }), ok({ writeup: 'Fine.', easy_to_undo: true, small_reach: true })]
+      : [ok({ status: 'complete', summary: 'Merged.', detail: '' }), ok({ confidence: 90, questions: [] }),
+        ok({ status: 'complete', summary: 'Changed it.', detail: '' }), ok({ verdict: 'clean', findings: [] })];
+    const sessions = [];
+    d.deps.runAgent = async (a) => { sessions.push(a.prompt.split('\n')[0]); d.events.push('agent'); return queue.shift(); };
     const r = await runItem({ ...issue, labels: [`agent:${stage}`] }, stage, d.deps, 4201);
-    assert.equal(r.outcome, 'parked');
-    assert.ok(d.events.includes('abortMerge /f/worktrees/issue-1'));
-    assert.ok(!d.events.includes('agent'));
-    assert.match(d.comments[0], /The branch `factory\/issue-1` conflicts with the latest `master`\. Merge it by hand in `\/f\/worktrees\/issue-1`, then remove the label\./);
+    assert.notEqual(r.outcome, 'parked', r.detail);
+    assert.equal(sessions[0], '<!-- session: merge -->');
+    assert.equal(sessions.filter((s) => s === '<!-- session: merge -->').length, 1);
+    assert.ok(sessions.length > 1, sessions.join(', '));
+    assert.ok(d.events.indexOf('setup') < d.events.indexOf('agent'), d.events.join(', '));
+    assert.ok(!d.comments.some((c) => /Merge it by hand/.test(c)));
   });
 }
 
