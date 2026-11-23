@@ -1,5 +1,5 @@
-// The factory itself. Everything that confines or checks the agents is protected:
-// a change there is still built, but arrives as a draft for Dennis to read.
+// The factory as its own target, as the tests see it. Everything that confines or checks
+// the agents is protected: a change there is still built, but arrives as a draft.
 export default {
   repo: 'dennis-brutski/issue-to-pr-factory',
   baseBranch: 'main',

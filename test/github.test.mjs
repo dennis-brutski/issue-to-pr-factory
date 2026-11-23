@@ -18,7 +18,7 @@ test('toItems maps issues and pull requests to the Item shape', () => {
   const pr = items.find((i) => i.number === 4);
   assert.equal(pr.kind, 'pr');
   assert.equal(pr.headRef, 'factory/issue-1');
-  assert.equal(pr.headRepo, 'dennis-brutski/gin-rummy-score-pad');
+  assert.equal(pr.headRepo, 'example/web-app');
 });
 test('bodyEditedAt carries lastEditedAt', () =>
   assert.equal(toItems(fixture).find((i) => i.number === 2).bodyEditedAt, '2026-11-02T12:00:00Z'));

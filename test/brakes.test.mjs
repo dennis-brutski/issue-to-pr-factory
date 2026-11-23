@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { protectedPathViolations as check, attributionViolations, workflowChanges } from '../lib/brakes.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 
-// The score pad's own target: its protections must stay exactly what they were.
+// The web app target: its protections must stay exactly what they were.
 const protectedPathViolations = (changes) => check(changes, scorePad);
 
 test('adding a test file is clean', () =>

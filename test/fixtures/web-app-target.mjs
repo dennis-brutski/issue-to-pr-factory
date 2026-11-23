@@ -1,6 +1,6 @@
-// The Gin Rummy Score Pad PWA.
+// A made-up web app target the tests use: npm setup, unit and e2e checks, Playwright.
 export default {
-  repo: 'dennis-brutski/gin-rummy-score-pad',
+  repo: 'example/web-app',
   baseBranch: 'master',
   protectedFiles: ['playwright.config.js', 'package.json', 'package-lock.json'],
   testDirs: ['test/', 'e2e/'],

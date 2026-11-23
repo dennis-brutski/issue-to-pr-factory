@@ -65,15 +65,15 @@ test('cloneUrl defaults to GitHub and honours remoteUrl', () => {
 });
 test('the factory target protects its own confinement', async () => {
   const { protectedPathViolations } = await import('../lib/brakes.mjs');
-  const cfg = await loadSettings('issue-to-pr-factory', { factoryRoot: join(import.meta.dirname, '..') });
+  const cfg = await loadSettings('factory-target', { factoryRoot: join(import.meta.dirname, '..'), targetsDir: join(import.meta.dirname, 'fixtures') });
   assert.equal(cfg.baseBranch, 'main');
   const flagged = (path) => protectedPathViolations([{ status: 'M', path }], cfg).length === 1;
   for (const p of ['lib/agent.mjs', 'lib/brakes.mjs', 'lib/checks.mjs', 'lib/confine.mjs', 'lib/eligibility.mjs', 'prompts/_rules.md',
     'config.mjs', 'package.json', 'targets/x.mjs', 'smoke/containment.mjs', 'AGENTS.md', 'test/brakes.test.mjs']) assert.ok(flagged(p), p);
   assert.ok(!flagged('lib/loop.mjs'));
 });
-test("the score pad's setup caches live in its run folder, not in ~/.npm", async () => {
-  const cfg = await loadSettings('gin-rummy-score-pad', { factoryRoot: join(import.meta.dirname, '..') });
+test("the web app's setup caches live in its run folder, not in ~/.npm", async () => {
+  const cfg = await loadSettings('web-app-target', { factoryRoot: join(import.meta.dirname, '..'), targetsDir: join(import.meta.dirname, 'fixtures') });
   assert.deepEqual(cfg.setupWrite, ['{runDir}/npm-cache']);
   assert.equal(cfg.env.npm_config_cache, '{runDir}/npm-cache');
 });

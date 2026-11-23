@@ -1,7 +1,7 @@
 // Which model writes the first draft: a cheaper one only for simple issues away from protected files.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import factory from '../targets/issue-to-pr-factory.mjs';
+import factory from './fixtures/factory-target.mjs';
 import { implementModel } from '../lib/stages.mjs';
 
 const cfg = { ...factory, model: 'opus', simpleModel: 'sonnet' };

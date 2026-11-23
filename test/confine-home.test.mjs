@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { bwrapArgs } from '../lib/confine.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 
 const binds = (args) => args.flatMap((a, i) => (a === '--bind' || a === '--ro-bind' ? [[args[i + 1], args[i + 2]]] : []));
 const under = (p, dir) => p === dir || p.startsWith(dir + sep);

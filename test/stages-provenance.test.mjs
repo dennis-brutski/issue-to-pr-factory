@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../config.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 import { runItem } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 
@@ -17,7 +17,7 @@ function deps(extra = {}) {
   const queue = [ok({ confidence: 87, questions: [] }), ok({ status: 'complete', summary: 'Changed undo.', detail: '' }), ok({ verdict: 'clean', findings: [] })];
   let sessions = 0;
   const d = {
-    cfg: { ...config, ...scorePad, target: 'gin-rummy-score-pad', model: 'opus-test', gateModel: 'opus-test' }, root: '/f', log: () => {},
+    cfg: { ...config, ...scorePad, target: 'web-app', model: 'opus-test', gateModel: 'opus-test' }, root: '/f', log: () => {},
     runSetup: async () => ({ ok: true, failed: null, output: '' }),
     runAgent: async (a) => { if (!a.readOnly) sessions++; return queue.shift(); },
     runChecks: async () => ({ ok: true, failed: null, output: '' }),
@@ -47,7 +47,7 @@ test('the pull request body ends with how it was built', async () => {
   const body = opened[0].body;
   const checks = d.cfg.checks.map(([c, a]) => `\`${[c, ...a].join(' ')}\``).join(', ');
   const last = body.trimEnd().split('\n').at(-1);
-  assert.equal(last, `🏭 Built by issue-to-pr-factory f00ba12 · model opus-test · gate confidence 87 · checks: ${checks} · session logs: runs/gin-rummy-score-pad/logs/issue-7/`);
+  assert.equal(last, `🏭 Built by issue-to-pr-factory f00ba12 · model opus-test · gate confidence 87 · checks: ${checks} · session logs: runs/web-app/logs/issue-7/`);
   assert.match(body, /\n---\n🏭 Built by/);
   assert.match(body, /Closes #7/);
 });

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../config.mjs';
-import scorePad from '../targets/gin-rummy-score-pad.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
 import { runItem, testsThatChangeOf } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 
@@ -20,7 +20,7 @@ test('a test concern with line breaks stays inside the quoted warning', async ()
   const queue = [ok({ confidence: 87, questions: [] }), ok({ status: 'complete', summary: 'Changed undo.', detail: '' }),
     ok({ verdict: 'clean', findings: [], test_concerns: [concern] })];
   const d = {
-    cfg: { ...config, ...scorePad, target: 'gin-rummy-score-pad', model: 'opus-test', gateModel: 'opus-test' }, root: '/f', log: () => {},
+    cfg: { ...config, ...scorePad, target: 'web-app', model: 'opus-test', gateModel: 'opus-test' }, root: '/f', log: () => {},
     runSetup: async () => ({ ok: true, failed: null, output: '' }),
     runAgent: async () => queue.shift(),
     runChecks: async () => ({ ok: true, failed: null, output: '' }),
