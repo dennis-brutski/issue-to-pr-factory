@@ -8,3 +8,5 @@ local.mjs
 targets/*
 !targets/gin-rummy-score-pad.mjs
 !targets/issue-to-pr-factory.mjs
+# The inbox skill's own settings (owner, paths, notebook id)
+factory-inbox/config.json
