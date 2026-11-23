@@ -156,6 +156,15 @@ test('pathsOnBase lists files and their folders on the remote base branch', asyn
   assert.ok(paths.has('a.txt') && paths.has('test/') && paths.has('test/unit/') && paths.has('test/unit/stats.test.js'));
   assert.ok(!paths.has('missing/'));
 });
+test('ignoredOnBase names the paths the base branch .gitignore ignores, folders by their contents', async () => {
+  await commitFile(seed, '.gitignore', 'targets/*\n!targets/kept.mjs\nlocal.mjs\nlogs/\n'); await git(seed, 'push', '-q', 'origin', 'master');
+  await ws.ensureClone(root, origin);
+  const ignored = await ws.ignoredOnBase(join(root, 'repo'), 'master', ['targets/', 'local.mjs', 'logs/', 'targets/kept.mjs', 'spec/', 'a.txt']);
+  assert.deepEqual([...ignored].sort(), ['local.mjs', 'logs/', 'targets/']);
+});
+test('ignoredOnBase is empty without a .gitignore on the base branch', async () => {
+  assert.deepEqual([...await ws.ignoredOnBase(join(root, 'repo'), 'master', ['targets/'])], []);
+});
 test('hasRemoteBranch tells whether the base branch exists', async () => {
   assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'master'), true);
   assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'nope'), false);
