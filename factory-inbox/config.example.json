@@ -1,0 +1,5 @@
+{
+  "owner": "your-github-login",
+  "factoryDir": "/path/to/issue-to-pr-factory",
+  "notebookId": null
+}

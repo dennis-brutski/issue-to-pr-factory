@@ -6,3 +6,5 @@ runs/
 local.mjs
 # Targets are your own and stay local.
 targets/*
+# The inbox skill's own settings (owner, paths, notebook id)
+factory-inbox/config.json
