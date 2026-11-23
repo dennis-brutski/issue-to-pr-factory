@@ -1,12 +1,8 @@
 # issue-to-pr-factory
 
-A software factory for a single maintainer (for now). It turns labelled GitHub
-issues into checked pull requests, with Claude Code agents confined in a sandbox.
+A software factory for a single maintainer (for now). It turns labelled GitHub issues into checked pull requests, with Claude Code agents confined in a sandbox.
 
-It takes the operational work off you and leaves you time for the strategic
-work, with fewer context switches. You write issues, label them, start the
-factory and do something else. The factory runs the agents. You come back and
-review and merge pull requests and answer comments in one batch.
+It takes the operational work off you and leaves you time for the strategic work, with fewer context switches. You write issues, label them, start the factory and do something else. The factory runs the agents. You come back and review and merge pull requests and answer comments in one batch.
 
 Two hard guarantees:
 - **It runs only while you have started it.** No service, no schedule, no webhook.
@@ -250,6 +246,10 @@ What stays outside: see *⚠ Risks you accept* above.
 `npm run stats` prints, for every target in `targets/`, the factory's pull requests (opened, merged, closed unmerged, still open), how many were auto-merged and reverted, and its stops grouped by reason; a reason without a label shows as `other:`. It only reads from GitHub. `npm run stats -- <target> --since 2026-11-01` prints one target, counting only pull requests opened and comments made on or after that day. A target that cannot be read prints `<target>: could not read stats: <reason>` and the exit code is 1.
 
 ![The output of npm run stats for one target: pull requests opened and merged, and stops by reason](docs/img/stats.png)
+
+## Factory inbox
+
+The `factory-inbox` Claude Code skill walks you through the stops. It is not shipped in this repo: it lives at `~/.claude/skills/factory-inbox/SKILL.md`, with its settings in `~/.claude/skills/factory-inbox/config.json`: `owner` (your GitHub login), `factoryDir` (the path to this folder) and optionally `notebookId` (a NotebookLM notebook it asks for background; `null` skips it). It lists the stops itself with `gh search issues "label:agent:needs-human" --state open --owner <owner>`, across every repo of the owner, oldest first. For each stop it shows what the issue wants, why the factory stopped, and a proposed reply, hand fix or relabel. Nothing is posted, labelled or committed until you approve that one item (approve / edit / skip). Start it in any Claude Code session with `/factory-inbox`, or ask in words: "factory inbox", "answer the factory", "what is the factory waiting for".
 
 ## Files
 
