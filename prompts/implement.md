@@ -21,6 +21,7 @@ Where a skill lists exceptions that need your human partner's permission (config
 - `status`: `complete` only if the issue is fully implemented, committed, and both test commands pass. Otherwise `incomplete`.
 - `summary`: what you changed, for the pull request description. Markdown, under 200 words.
 - `detail`: when incomplete, exactly what is missing and why. Otherwise empty.
+- `test_changes`: one entry per existing test you changed or deleted: `file` (its path), `test` (the test's name) and `reason` (one line: why the change needed it). Empty when you changed none.
 
 ## Task description
 
