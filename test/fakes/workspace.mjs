@@ -15,6 +15,7 @@ export function fakeWorkspace(over = {}, root = '/f') {
     ensureClone: async () => {},
     hasRemoteBranch: async () => true,
     pathsOnBase: async () => new Set(),
+    ignoredOnBase: async () => new Set(),
     ensureWorktree: async (n) => ({ dir: paths(root, n).worktree, created: true }),
     removeWorktree: async () => {},
     listWorktrees: async () => [],

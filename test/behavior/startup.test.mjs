@@ -18,6 +18,17 @@ test('startup creates missing labels and warns about drift', async () => {
   } finally { w.close(); }
 });
 
+test('startup does not warn about a configured path the base branch ignores', async () => {
+  const w = await world({ settings: { protectedDirs: ['node_modules/', 'spec/'] } });
+  try {
+    const f = w.start();
+    await w.until(() => polls(f) >= 1, 10000, 'a poll');
+    assert.match(f.output(), /warning: `spec\/` is in targets\/demo\.mjs but not on master/);
+    assert.doesNotMatch(f.output(), /warning: `node_modules\/`/);
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});
+
 test('a missing base branch stops the factory', async () => {
   const w = await world({ settings: { baseBranch: 'nope' } });
   try {
