@@ -76,3 +76,10 @@ test('smoke runs say they use a real agent session', () => {
   assert.doesNotMatch(README, /uses? Claude usage/);
   assert.match(README, /runs one real agent session \(uses your Claude plan\)/);
 });
+
+test("the README's local row names a server known to work and what a local run shows", () => {
+  const row = README.split('\n').find((l) => l.startsWith('| `local` —'));
+  assert.match(row, /lemonade/);
+  assert.match(row, /Qwen3-Coder-30B-A3B-Instruct-GGUF/);
+  assert.match(row, /local, no token counts/);
+});
