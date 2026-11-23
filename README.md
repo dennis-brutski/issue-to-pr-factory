@@ -90,6 +90,7 @@ Then:
 ```sh
 npm start                          # the only target, when there is just one
 npm start -- gin-rummy-score-pad   # one factory per target; several can run side by side
+npm run start:local gin-rummy-score-pad   # agents on a local model instead of Claude (`local` in local.mjs, under Targets)
 ```
 
 - With several targets, name one (or it says `choose a target: <names>`); a second start of a target says `already running (pid <n>)` unless the process holding `runs/<target>/factory.lock` died.
@@ -172,7 +173,7 @@ flowchart TD
 | commits must not carry attribution lines | An agent added a co-author or similar trailer. Reword the commits in the worktree, remove the label. |
 | the worktree's .git link / the clone's git config was changed | A session tried to change where git looks or what it runs. The factory stops entirely. Read the session log, fix or delete `runs/<target>/repo`, then start again. |
 | **Factory did not start:** issue text was edited / issue title was changed after it was approved | An issue someone else opened was edited after you labelled it (by anyone, you included), or someone else renamed it, so the factory did not run it. Re-read it, remove the label to approve it again. |
-| timed out / max_turns / usage limit / spent its budget | Remove the label when you want it to continue. A budget stop comes from `maxBudgetUsd`. |
+| timed out / max_turns / usage limit / spent its budget | Remove the label when you want it to continue. A budget stop comes from `maxBudgetUsd`. After a usage limit, `npm run start:local <target>` goes on with a local model. |
 
 Nothing is ever retried on its own.
 
