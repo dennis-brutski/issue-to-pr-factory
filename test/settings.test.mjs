@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
-import { loadSettings, cloneUrl } from '../lib/settings.mjs';
+import { loadSettings, cloneUrl, parseFactoryArgs } from '../lib/settings.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'factory-settings-'));
 const target = (fields = {}) => `export default ${JSON.stringify({ repo: 'a/b', baseBranch: 'main', ...fields })};\n`;
@@ -93,4 +93,48 @@ test('skillsDir is set only when <factory>/skills exists', async () => {
   assert.equal((await loadSettings('one', { factoryRoot: r })).skillsDir, undefined);
   mkdirSync(join(r, 'skills'));
   assert.equal((await loadSettings('one', { factoryRoot: r })).skillsDir, join(r, 'skills'));
+});
+
+test('parseFactoryArgs: target and --local in either order', () => {
+  assert.deepEqual(parseFactoryArgs(['demo', '--local']), { target: 'demo', local: true });
+  assert.deepEqual(parseFactoryArgs(['--local', 'demo']), { target: 'demo', local: true });
+  assert.deepEqual(parseFactoryArgs(['--local']), { target: undefined, local: true });
+  assert.deepEqual(parseFactoryArgs([]), { target: undefined, local: false });
+});
+test('parseFactoryArgs refuses an unknown option', () => {
+  assert.throws(() => parseFactoryArgs(['demo', '--locl']), /locl/);
+});
+test('--local lays the local block over the target, with the server in env', async () => {
+  const r = root({ one: target({ model: 'opus', maxParallel: 3, env: { npm_config_cache: 'x' } }) });
+  writeFileSync(join(r, 'local.mjs'), "export default { maxBudgetUsd: 5, local: { baseUrl: 'http://localhost:11434', model: 'qwen', maxParallel: 1 } };\n");
+  const cfg = await loadSettings('one', { factoryRoot: r, local: true });
+  assert.deepEqual([cfg.model, cfg.gateModel, cfg.simpleModel, cfg.maxParallel, cfg.maxBudgetUsd], ['qwen', 'qwen', 'qwen', 1, null]);
+  assert.deepEqual(cfg.env, { npm_config_cache: 'x', ANTHROPIC_BASE_URL: 'http://localhost:11434', ANTHROPIC_AUTH_TOKEN: 'local',
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: 'qwen', CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1' });
+});
+test('--local keeps gateModel and simpleModel the block names', async () => {
+  const r = root({ one: target({ local: { baseUrl: 'http://h', model: 'big', gateModel: 'small', simpleModel: 'mid' } }) });
+  const cfg = await loadSettings('one', { factoryRoot: r, local: true });
+  assert.deepEqual([cfg.model, cfg.gateModel, cfg.simpleModel], ['big', 'small', 'mid']);
+});
+test('--local without a usable local block stops', async () => {
+  for (const local of [undefined, { model: 'qwen' }, { baseUrl: 'http://h' }]) {
+    const r = root({ one: target(local ? { local } : {}) });
+    await assert.rejects(loadSettings('one', { factoryRoot: r, local: true }), /--local needs a local block with baseUrl and model in local\.mjs/);
+  }
+});
+test('a local block without --local changes nothing', async () => {
+  const r = root({ one: target({ local: { baseUrl: 'http://h', model: 'qwen' } }) });
+  const cfg = await loadSettings('one', { factoryRoot: r });
+  assert.deepEqual([cfg.model, cfg.maxBudgetUsd, cfg.env], [config.model, config.maxBudgetUsd, config.env]);
+});
+test('npm run start:local passes --local itself: npm drops a bare --local from npm start', () => {
+  const pkg = JSON.parse(readFileSync(join(import.meta.dirname, '..', 'package.json'), 'utf8'));
+  assert.equal(pkg.scripts['start:local'], 'node factory.mjs --local');
+});
+test("--local: the block's own env wins, for a server that needs a real key", async () => {
+  const r = root({ one: target({ local: { baseUrl: 'http://h', model: 'qwen', env: { ANTHROPIC_AUTH_TOKEN: 'sk-proxy' } } }) });
+  const cfg = await loadSettings('one', { factoryRoot: r, local: true });
+  assert.equal(cfg.env.ANTHROPIC_AUTH_TOKEN, 'sk-proxy');
+  assert.equal(cfg.env.ANTHROPIC_BASE_URL, 'http://h');
 });

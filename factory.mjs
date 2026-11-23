@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Start: npm start [-- <target>]    Stop: Ctrl-C (finish running work), Ctrl-C again (kill now).
+// Start: npm start [-- <target>], or npm run start:local [<target>]    Stop: Ctrl-C (finish running work), Ctrl-C again (kill now).
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadSettings, cloneUrl } from './lib/settings.mjs';
+import { loadSettings, cloneUrl, parseFactoryArgs } from './lib/settings.mjs';
 import { run, children, killGroup } from './lib/exec.mjs';
 import * as gh from './lib/github.mjs';
 import { workspace } from './lib/workspace.mjs';
@@ -18,8 +18,8 @@ import { screen } from './lib/screen.mjs';
 const cannotRun = (why) => { const msg = `factory cannot run: ${why}`; const { icon, tone } = look(msg); console.error(paint(`${icon} ${msg}`, tone, process.stderr)); };
 
 const factoryRoot = dirname(fileURLToPath(import.meta.url));
-let cfg;
-try { cfg = await loadSettings(process.argv[2], { factoryRoot }); } catch (e) { cannotRun(e.message); process.exit(1); }
+let cfg, args;
+try { args = parseFactoryArgs(process.argv.slice(2)); cfg = await loadSettings(args.target, { factoryRoot, local: args.local }); } catch (e) { cannotRun(e.message); process.exit(1); }
 const root = cfg.runDir;
 const ws = workspace({ root, url: cloneUrl(cfg), base: cfg.baseBranch }); // checks the clone before each git command
 const show = screen({ repo: cfg.repo, columns: process.stdout.columns, stream: process.stdout, now: Date.now, pollSec: cfg.pollSec });
@@ -62,7 +62,7 @@ try {
   for (const l of [...Object.values(cfg.triggers), ...Object.values(cfg.states)])
     if (!labels.includes(l)) { await gh.createLabel(cfg, l); log(`created label ${l}`); }
   await recover(deps);
-  log(`factory started for ${cfg.repo} (${cfg.target}) — polling every ${pollText(cfg.pollSec)}, up to ${cfg.maxParallel} at a time`);
+  log(`factory started for ${cfg.repo} (${cfg.target}${args.local ? `, local: ${cfg.model}` : ''}) — polling every ${pollText(cfg.pollSec)}, up to ${cfg.maxParallel} at a time`);
   while (!stopping) {
     await ws.checkClone(); // a session may have planted config: stop the whole factory, not just one run
     await cleanup(deps, running);
