@@ -191,7 +191,7 @@ One file per repo in `targets/`, on top of the shared defaults in `config.mjs` a
 | `sandboxRead` — extra home folders agents, setup and checks may read | `['~/.cache/ms-playwright']` |
 | `setupWrite` — caches setup may write; keep them in `{runDir}`, never your own (`~/.npm`) | `['{runDir}/npm-cache']` |
 | `autoMerge` — hand small, simple, cleanly reviewed pull requests to GitHub's auto-merge (see *How a run works*). Off unless set; turn it on in `local.mjs` | `true` |
-| `local` — used only with `npm run start:local <target>` (a bare `npm start <target> --local` runs on Claude: npm drops the flag): `baseUrl` of an Anthropic-compatible server (Ollama, llama.cpp, LiteLLM) and `model`; anything else in it (`gateModel`, `maxParallel`, …) goes over the target. Set it in `local.mjs` | `{ baseUrl: 'http://localhost:11434', model: 'qwen3-coder' }` |
+| `local` — used only with `npm run start:local <target>` (a bare `npm start <target> --local` runs on Claude: npm drops the flag): `baseUrl` of an Anthropic-compatible server and `model`; anything else in it (`gateModel`, `maxParallel`, …) goes over the target. Set it in `local.mjs`. Known to work: lemonade with `Qwen3-Coder-30B-A3B-Instruct-GGUF`; it sends no token counts while streaming, so its sessions show `local, no token counts`. Ollama, llama.cpp or LiteLLM may count. A local run shows `local`, never a `≈ $` cost | `{ baseUrl: 'http://localhost:11434', model: 'qwen3-coder' }` |
 
 Placeholders, and where each one works:
 

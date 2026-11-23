@@ -86,3 +86,40 @@ test('a missing log file adds no line and does not park', async () => {
     assert.doesNotMatch(opened[0].body, /agent use so far/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+const zero = { input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 0 };
+
+test('a local run logs no cost, and says when the server gave no token counts', async () => {
+  const gate = { confidence: 87, questions: [] }, work = { status: 'complete', summary: 'Changed undo.', detail: '' }, review = { verdict: 'clean', findings: [] };
+  const { d, logs, opened, root } = setup([
+    { stdout: result(gate, 2, 0, { usage: zero }), r: ok(gate) },
+    { stdout: result(work, 20, 0, { usage: zero }), r: ok(work) },
+    { stdout: result(review, 3, 0, { usage: zero }), r: ok(review) },
+  ]);
+  d.cfg = { ...d.cfg, localRun: true };
+  try {
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.outcome, 'done', r.detail);
+    assert.ok(logs.includes('#7 gate session ended · 2 turns · 4m12s · local, no token counts'), logs.join('\n'));
+    assert.ok(!logs.some((m) => m.includes('≈ $')), logs.join('\n'));
+    const last = opened[0].body.trimEnd().split('\n').at(-1);
+    assert.match(last, / · agent use so far: 3 sessions · 25 turns · local, no token counts · session logs: /);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a local run whose server counts shows its tokens, not a cost', async () => {
+  const gate = { confidence: 87, questions: [] }, work = { status: 'complete', summary: 'Changed undo.', detail: '' }, review = { verdict: 'clean', findings: [] };
+  const { d, logs, opened, root } = setup([
+    { stdout: result(gate, 2, 0.1), r: ok(gate) },
+    { stdout: result(work, 20, 0.7), r: ok(work) },
+    { stdout: result(review, 3, 0.2), r: ok(review) },
+  ]);
+  d.cfg = { ...d.cfg, localRun: true };
+  try {
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.outcome, 'done', r.detail);
+    assert.ok(logs.includes('#7 gate session ended · 2 turns · 4m12s · 1k in (90% cached) · 18k out · local'), logs.join('\n'));
+    const last = opened[0].body.trimEnd().split('\n').at(-1);
+    assert.match(last, / · agent use so far: 3 sessions · 25 turns · 3k in · 54k out · local · session logs: /);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

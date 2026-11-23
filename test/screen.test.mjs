@@ -106,6 +106,15 @@ test('cost is left out when a session gave none', () => noColour(() => {
   assert.equal(show(T, '#39 implement done'), `${T}  #39 │ ✔ implement done in 6s · 1 session`);
 }));
 
+test('a run of local sessions shows no cost when done', () => noColour(() => {
+  const { show, clock } = setup();
+  show(T, '#39 implement started');
+  show(T, '#39 implement session ended · 7 turns · 1k in · 18k out · local');
+  show(T, '#39 review session ended · 5 turns · local, no token counts');
+  clock.set(6000);
+  assert.equal(show(T, '#39 implement done'), `${T}  #39 │ ✔ implement done in 6s · 2 sessions`);
+}));
+
 test('a long park reason is cut to 3 lines, with … and a link', () => noColour(() => {
   const { show } = setup();
   const reason = Array.from({ length: 10 }, (_, i) => `line ${i + 1}`).join(`\n${PAD}`);

@@ -81,3 +81,13 @@ test('usageLine formats numbers and durations', () => {
   assert.equal(d(60_000), '1m00s');
   assert.equal(d(3_780_000), '1h03m');
 });
+
+test('usageLine on a local run says local instead of a cost', () => {
+  const u = { turns: 3, durationMs: 45_000, costUsd: 0.42, tokensIn: 1000, cachedIn: 900, tokensOut: 18_000, models: [], denials: 0 };
+  assert.equal(usageLine(u, { local: true }), '3 turns · 45s · 1k in (90% cached) · 18k out · local');
+});
+
+test('usageLine on a local run says plainly when the server gave no token counts', () => {
+  const u = { turns: 3, durationMs: 45_000, costUsd: 0, tokensIn: 0, cachedIn: 0, tokensOut: 0, models: [], denials: 1 };
+  assert.equal(usageLine(u, { local: true }), '3 turns · 45s · local, no token counts · 1 denied');
+});

@@ -138,3 +138,8 @@ test("--local: the block's own env wins, for a server that needs a real key", as
   assert.equal(cfg.env.ANTHROPIC_AUTH_TOKEN, 'sk-proxy');
   assert.equal(cfg.env.ANTHROPIC_BASE_URL, 'http://h');
 });
+test('--local marks the settings as a local run; without it they are not', async () => {
+  const r = root({ one: target({ local: { baseUrl: 'http://h', model: 'qwen' } }) });
+  assert.equal((await loadSettings('one', { factoryRoot: r, local: true })).localRun, true);
+  assert.equal((await loadSettings('one', { factoryRoot: r })).localRun, undefined);
+});
