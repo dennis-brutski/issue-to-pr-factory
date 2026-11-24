@@ -1,6 +1,6 @@
 import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run } from '../lib/exec.mjs';
@@ -213,6 +213,26 @@ describe('worktrees and branches', () => {
   test('checkCloneConfig refuses a changed origin', async () => {
     await git(join(root, 'repo'), 'remote', 'set-url', 'origin', 'https://example.com/x.git');
     await assert.rejects(ws.checkCloneConfig(root, origin), /origin/);
+  });
+  test('checkCloneConfig refuses a branch whose remote is not origin, and names the key', async () => {
+    await git(join(root, 'repo'), 'config', 'branch.master.remote', 'elsewhere');
+    const file = join(root, 'repo', '.git', 'config');
+    await assert.rejects(ws.checkCloneConfig(root, origin), { message: `the clone's git config at ${file} was changed: branch.master.remote. The factory stops using it; remove those lines (or delete the clone) before starting again.` });
+  });
+  test('checkCloneConfig fails when the clone has no git config', async () => {
+    const file = join(root, 'repo', '.git', 'config');
+    rmSync(file);
+    await assert.rejects(ws.checkCloneConfig(root, origin), { message: `the clone's git config at ${file} cannot be read: fatal: unable to read config file '${file}': No such file or directory` });
+  });
+  test('ensureClone fails on a URL that does not exist', async () => {
+    const fresh = mkdtempSync(join(tmpdir(), 'factory-ws-'));
+    const missing = join(fresh, 'missing.git');
+    await assert.rejects(ws.ensureClone(join(fresh, 'factory'), missing), { message: `git clone failed: fatal: repository '${missing}' does not exist` });
+  });
+  test('mergeBase fails, not conflicts, when the base branch is not on origin', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await assert.rejects(ws.mergeBase(dir, 'nope'), { message: 'git merge failed: merge: origin/nope - not something we can merge' });
+    assert.equal(await ws.mergeResolved(dir), true);
   });
   test('a redirected commondir is refused', async () => {
     await ws.ensureWorktree(root, 7, 'master');
