@@ -8,9 +8,10 @@ import { loadSettings, cloneUrl, parseFactoryArgs } from '../lib/settings.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'factory-settings-'));
 const target = (fields = {}) => `export default ${JSON.stringify({ repo: 'a/b', baseBranch: 'main', ...fields })};\n`;
-function root(targets = {}) {
+function root(targets = {}, local = "export default { owner: 'alex' };\n") {
   const r = tmp();
   mkdirSync(join(r, 'targets'));
+  if (local) writeFileSync(join(r, 'local.mjs'), local);
   for (const [name, text] of Object.entries(targets)) writeFileSync(join(r, 'targets', `${name}.mjs`), text);
   return r;
 }
@@ -65,7 +66,7 @@ test('cloneUrl defaults to GitHub and honours remoteUrl', () => {
 });
 test('the factory target protects its own confinement', async () => {
   const { protectedPathViolations } = await import('../lib/brakes.mjs');
-  const cfg = await loadSettings('factory-target', { factoryRoot: join(import.meta.dirname, '..'), targetsDir: join(import.meta.dirname, 'fixtures') });
+  const cfg = await loadSettings('factory-target', { factoryRoot: root(), targetsDir: join(import.meta.dirname, 'fixtures') });
   assert.equal(cfg.baseBranch, 'main');
   const flagged = (path) => protectedPathViolations([{ status: 'M', path }], cfg).length === 1;
   for (const p of ['lib/agent.mjs', 'lib/brakes.mjs', 'lib/checks.mjs', 'lib/confine.mjs', 'lib/eligibility.mjs', 'prompts/_rules.md',
@@ -73,7 +74,7 @@ test('the factory target protects its own confinement', async () => {
   assert.ok(!flagged('lib/loop.mjs'));
 });
 test("the web app's setup caches live in its run folder, not in ~/.npm", async () => {
-  const cfg = await loadSettings('web-app-target', { factoryRoot: join(import.meta.dirname, '..'), targetsDir: join(import.meta.dirname, 'fixtures') });
+  const cfg = await loadSettings('web-app-target', { factoryRoot: root(), targetsDir: join(import.meta.dirname, 'fixtures') });
   assert.deepEqual(cfg.setupWrite, ['{runDir}/npm-cache']);
   assert.equal(cfg.env.npm_config_cache, '{runDir}/npm-cache');
 });
@@ -83,9 +84,10 @@ test('local.mjs holds your own settings: over the defaults, under the target', a
   const cfg = await loadSettings('one', { factoryRoot: r });
   assert.deepEqual([cfg.owner, cfg.ownerName, cfg.pollSec, cfg.maxParallel], ['alex', 'Alex', 60, 1]);
 });
-test('without local.mjs the defaults from config.mjs apply', async () => {
-  const cfg = await loadSettings('one', { factoryRoot: root({ one: target() }) });
-  assert.deepEqual([cfg.owner, cfg.ownerName], [config.owner, config.ownerName]);
+test('without an owner in local.mjs or the target the factory does not start', async () => {
+  await assert.rejects(loadSettings('one', { factoryRoot: root({ one: target() }, null) }), /owner is not set.*local\.mjs/);
+  const cfg = await loadSettings('one', { factoryRoot: root({ one: target({ owner: 'sam' }) }, null) });
+  assert.deepEqual([cfg.owner, cfg.ownerName], ['sam', config.ownerName]);
 });
 
 test('skillsDir is set only when <factory>/skills exists', async () => {
@@ -106,7 +108,7 @@ test('parseFactoryArgs refuses an unknown option', () => {
 });
 test('--local lays the local block over the target, with the server in env', async () => {
   const r = root({ one: target({ model: 'opus', maxParallel: 3, env: { npm_config_cache: 'x' } }) });
-  writeFileSync(join(r, 'local.mjs'), "export default { maxBudgetUsd: 5, local: { baseUrl: 'http://localhost:11434', model: 'qwen', maxParallel: 1 } };\n");
+  writeFileSync(join(r, 'local.mjs'), "export default { owner: 'alex', maxBudgetUsd: 5, local: { baseUrl: 'http://localhost:11434', model: 'qwen', maxParallel: 1 } };\n");
   const cfg = await loadSettings('one', { factoryRoot: r, local: true });
   assert.deepEqual([cfg.model, cfg.gateModel, cfg.simpleModel, cfg.maxParallel, cfg.maxBudgetUsd], ['qwen', 'qwen', 'qwen', 1, null]);
   assert.deepEqual(cfg.env, { npm_config_cache: 'x', ANTHROPIC_BASE_URL: 'http://localhost:11434', ANTHROPIC_AUTH_TOKEN: 'local',

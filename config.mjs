@@ -1,7 +1,7 @@
 // Shared defaults. Each target (targets/<name>.mjs) sets repo and baseBranch and overrides the rest.
 export const config = {
-  owner: 'dennis-brutski', // GitHub login whose labels and comments count; gh must be logged in as it. Set yours in local.mjs
-  ownerName: 'Dennis', // what the prompts call you
+  owner: null, // GitHub login whose labels and comments count; gh must be logged in as it. Required: set yours in local.mjs
+  ownerName: null, // what the prompts call you; null = your owner login
   remoteUrl: null, // null = https://github.com/<repo>.git
   runDir: null, // null = runs/<target>
   setup: [], // [cmd, [args]] run before the first agent session, confined, with network

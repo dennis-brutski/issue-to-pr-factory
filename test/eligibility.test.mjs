@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { config as defaults } from '../config.mjs';
+import { config as defaults } from './fixtures/config.mjs';
 
 // repo and baseBranch come from a target since multi-target; these tests use the score pad's.
 const config = { ...defaults, repo: 'example/web-app', baseBranch: 'master' };

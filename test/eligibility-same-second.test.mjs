@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { classify } from '../lib/eligibility.mjs';
-import { config } from '../config.mjs';
+import { config } from './fixtures/config.mjs';
 
 const T = '2026-11-01T10:00:00Z';
 const issue = (o) => ({ number: 1, kind: 'issue', title: 't', body: 'b', author: 'someone', bodyEditedAt: null, labels: ['agent:implement'],

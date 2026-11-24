@@ -1,7 +1,7 @@
 // A stop for a draft tells the owner to read the flagged changes, not to try again.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { config } from '../config.mjs';
+import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { runItem } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';

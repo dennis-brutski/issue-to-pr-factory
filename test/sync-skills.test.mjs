@@ -25,6 +25,7 @@ function cache() {
       writeFileSync(join(dir, v, 'skills', name, 'SKILL.md'), `${name} ${v}: see superpowers:test-driven-development\n`);
     }
     writeFileSync(join(dir, v, 'skills', 'systematic-debugging', 'root-cause-tracing.md'), 'trace\n');
+    writeFileSync(join(dir, v, 'LICENSE'), 'MIT License\nCopyright (c) 2025 Jesse Vincent\n');
   }
   return dir;
 }
@@ -55,4 +56,10 @@ test('sync removes a skill file that upstream dropped', () => {
 test('sync with no version in the cache says so', () => {
   const cacheDir = mkdtempSync(join(tmpdir(), 'factory-skills-empty-'));
   assert.throws(() => sync({ cacheDir, outDir: join(cacheDir, 'out') }), /no superpowers plugin in/);
+});
+
+test('sync copies upstream LICENSE, which the MIT licence asks to keep with the copies', () => {
+  const cacheDir = cache(), outDir = mkdtempSync(join(tmpdir(), 'factory-skills-out-'));
+  sync({ cacheDir, outDir });
+  assert.match(readFileSync(join(outDir, 'LICENSE'), 'utf8'), /Jesse Vincent/);
 });

@@ -38,3 +38,14 @@ test('a missing base branch stops the factory', async () => {
     assert.match(f.output(), /base branch "nope" not found on dennis-brutski\/demo/);
   } finally { w.close(); }
 });
+
+test('without an owner the factory does not start', async () => {
+  const w = await world({ settings: { owner: null } });
+  try {
+    const f = w.start();
+    await w.until(() => f.proc.exitCode !== null, 15000, 'the factory to exit');
+    assert.equal(await f.exited, 1);
+    assert.match(f.output(), /factory cannot run: owner is not set: put your GitHub login in local\.mjs/);
+    assert.deepEqual(w.state().calls, []); // stopped before any gh call
+  } finally { w.close(); }
+});

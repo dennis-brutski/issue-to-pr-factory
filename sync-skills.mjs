@@ -44,6 +44,7 @@ export function sync({ cacheDir, outDir }) {
     cpSync(join(cacheDir, version, 'skills', name), to, { recursive: true });
     rewriteMarkdown(to);
   }
+  cpSync(join(cacheDir, version, 'LICENSE'), join(outDir, 'LICENSE')); // MIT: the notice travels with the copies
   mkdirSync(join(outDir, '.claude-plugin'), { recursive: true });
   writeFileSync(join(outDir, '.claude-plugin', 'plugin.json'), `${JSON.stringify({
     name: 'factory', version,
