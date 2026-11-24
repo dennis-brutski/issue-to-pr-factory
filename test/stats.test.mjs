@@ -359,4 +359,42 @@ describe('session usage', () => {
     assert.equal(agentUseSection(join(root, 'missing')), 'agent use: no session logs yet');
     assert.equal(readSessions(join(root, 'missing')), null);
   });
+
+  test('a session log that cannot be read counts as an unreadable session, the others still count', () => {
+    const logs = join(mkdtempSync(join(tmpdir(), 'stats-unreadable-')), 'logs');
+    const at = Date.parse('2026-11-10T10:00:00Z');
+    mkdirSync(join(logs, 'issue-7'), { recursive: true });
+    writeFileSync(join(logs, 'issue-7', `${at}-1-gate.json`), result());
+    mkdirSync(join(logs, 'issue-7', `${at + 1}-2-implement.json`)); // a folder: reading it fails
+    assert.deepEqual(readSessions(logs).map((x) => [x.issue, x.stage, x.at, x.usage === null]).sort(), [
+      [7, 'gate', at, false], [7, 'implement', at + 1, true],
+    ].sort());
+    const out = agentUseSection(logs);
+    assert.match(out, /\n {2}total\s+2\s+3\s/);
+    assert.match(out, /\n {2}stopped early: 1 unreadable \(timed out or crashed\)\n/);
+  });
+
+  test('formatAgentUse has no most used line when no session has a cost', () => {
+    const g = groupAgentUse([s(1, 'gate', u(1, 10, 0, 5, { costUsd: undefined })), s(2, 'implement', null)]);
+    assert.deepEqual(g.top, []);
+    assert.equal(formatAgentUse(g), [
+      'agent use (from session logs; ≈ cost is an estimate at API list price, not your bill)',
+      '  stage       sessions   turns   tokens in (cached)      out   ≈ cost',
+      '  gate               1       1              10 (0%)        5        -',
+      '  implement          1       -                    -        -        -',
+      '  total              2       1              10 (0%)        5        -',
+      '  stopped early: 1 unreadable (timed out or crashed)',
+      '  tool calls refused: 0',
+    ].join('\n'));
+  });
+
+  test('formatAgentUse shows no cached percentage without cachedIn or with no tokens in', () => {
+    const g = groupAgentUse([s(1, 'gate', u(1, 0, 0, 5)), s(2, 'review', u(1, 2000, undefined, 5))]);
+    const rows = formatAgentUse(g).split('\n').slice(2, 5);
+    assert.deepEqual(rows, [
+      '  gate               1       1                    0        5    $1.00',
+      '  review             1       1                   2k        5    $1.00',
+      '  total              2       2              2k (0%)       10    $2.00', // the gate's cachedIn 0 counts in the total
+    ]);
+  });
 });
