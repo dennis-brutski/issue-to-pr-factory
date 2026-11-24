@@ -48,6 +48,21 @@ describe('gh commands', () => {
   test('removeLabel of a missing label is not an error', async () => {
     await gh.removeLabel(cfg, 1, 'agent:done');
   });
+  test('removeLabel that gh refuses throws with gh\'s message', async () => {
+    const s = state(); s.removeLabelError = 'gh: Resource not accessible by integration (HTTP 403)'; write(s);
+    await assert.rejects(gh.removeLabel(cfg, 1, 'agent:implement'),
+      { message: 'removing label agent:implement from #1 failed: gh: Resource not accessible by integration (HTTP 403)' });
+    assert.deepEqual(state().items[0].labels, ['agent:implement']);
+  });
+  test('isFinished is true for a closed issue, without looking for pull requests', async () => {
+    const s = state(); s.items[0].state = 'CLOSED'; write(s);
+    assert.equal(await gh.isFinished(cfg, 1), true);
+    assert.deepEqual(state().calls, [['api', 'repos/dennis-brutski/demo/issues/1', '--jq', '.state']]);
+  });
+  test('createLabel gives a label without a style of its own colour ededed and no description', async () => {
+    await gh.createLabel(cfg, 'wontfix');
+    assert.deepEqual(state().labelStyles, { wontfix: { color: 'ededed', description: '' } });
+  });
   test('openPullRequest, findPullRequest, setDraft and updatePullRequestBody round-trip', async () => {
     const pr = await gh.openPullRequest(cfg, { branch: 'factory/issue-1', title: 't', body: 'b', draft: true });
     assert.deepEqual(pr, { number: 2, url: 'https://github.com/dennis-brutski/demo/pull/2' });
