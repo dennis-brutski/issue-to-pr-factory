@@ -44,6 +44,8 @@ export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) 
   writeFileSync(script, '{}'); writeFileSync(log, '');
   const settingsFile = join(dir, `${name}.mjs`);
   const runDir = join(dir, 'run');
+  // The factory's Claude login folder: empty, so behaviour tests never use the real login or reach the network.
+  const claudeConfig = join(dir, 'claude-config'); mkdirSync(claudeConfig);
   writeFileSync(settingsFile, `export default ${JSON.stringify({ repo: `${OWNER}/${name}`, owner: OWNER, ownerName: 'Dennis', baseBranch: 'master', protectedFiles: ['package.json', 'package-lock.json'], testDirs: ['test/'], setup: [['npm', ['ci']]], checks: [['npm', ['test']]], setupWrite: ['{runDir}/npm-cache'], env: { npm_config_cache: '{runDir}/npm-cache', FAKE_CLAUDE_SCRIPT: script, FAKE_CLAUDE_LOG: log }, remoteUrl: origin, runDir, pollSec: 1, ...settings })};\n`);
 
   const readGh = () => JSON.parse(readFileSync(ghState, 'utf8'));
@@ -66,6 +68,7 @@ export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) 
 
   const w = {
     dir, origin, runDir, settingsFile,
+    claudeConfig,
     issue({ title = 'Change a', body = 'Do it.', labels = [], by = OWNER, author = OWNER } = {}) {
       let n;
       change((s) => {
@@ -103,6 +106,7 @@ export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) 
       const { NODE_TEST_CONTEXT, FORCE_COLOR, ...env } = process.env;
       const proc = spawn(process.execPath, [FACTORY, settingsFile, ...extraArgs], {
         env: { ...env, PATH: `${BINS}:${env.PATH}`, FAKE_GH_STATE: ghState, FAKE_CLAUDE_SCRIPT: script, FAKE_CLAUDE_LOG: log,
+          CLAUDE_CONFIG_DIR: claudeConfig,
           npm_config_offline: 'true', npm_config_audit: 'false', npm_config_fund: 'false', npm_config_update_notifier: 'false' },
         stdio: ['ignore', 'pipe', 'pipe'], detached: true,
       });
