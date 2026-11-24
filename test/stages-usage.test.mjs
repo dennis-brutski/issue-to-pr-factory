@@ -123,3 +123,59 @@ test('a local run whose server counts shows its tokens, not a cost', async () =>
     assert.match(last, / · agent use so far: 3 sessions · 25 turns · 3k in · 54k out · local · session logs: /);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+const threeSessions = () => {
+  const gate = { confidence: 87, questions: [] }, work = { status: 'complete', summary: 'Changed undo.', detail: '' }, review = { verdict: 'clean', findings: [] };
+  return [
+    { stdout: result(gate, 2, 0.1), r: ok(gate) },
+    { stdout: result(work, 20, 0.7), r: ok(work) },
+    { stdout: result(review, 3, 0.2), r: ok(review) },
+  ];
+};
+
+test('a session line ends with the plan usage', async () => {
+  const { d, logs, root } = setup(threeSessions());
+  d.planUsage = async () => ({ fiveHour: 42, week: 18 });
+  try {
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.outcome, 'done', r.detail);
+    assert.ok(logs.some((m) => /^#7 gate session ended · .*≈ \$0\.10 · plan 5h 42% · week 18%$/.test(m)), logs.join('\n'));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('no plan part when the lookup gives nothing', async () => {
+  for (const planUsage of [async () => null, undefined]) {
+    const { d, logs, root } = setup(threeSessions());
+    if (planUsage) d.planUsage = planUsage;
+    try {
+      const r = await runItem(issue, 'implement', d, 4201);
+      assert.equal(r.outcome, 'done', r.detail);
+      assert.ok(logs.includes('#7 gate session ended · 2 turns · 4m12s · 1k in (90% cached) · 18k out · ≈ $0.10'), logs.join('\n'));
+      assert.ok(!logs.some((m) => m.includes('session ended') && m.includes('plan')), logs.join('\n'));
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  }
+});
+
+test('no plan lookup on a local run', async () => {
+  const { d, logs, root } = setup(threeSessions());
+  let calls = 0;
+  d.planUsage = async () => { calls++; return { fiveHour: 42, week: 18 }; };
+  d.cfg = { ...d.cfg, localRun: true };
+  try {
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.outcome, 'done', r.detail);
+    assert.equal(calls, 0);
+    assert.ok(logs.some((m) => m.includes('session ended')), logs.join('\n'));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test('a failing lookup does not stop the run', async () => {
+  const { d, logs, opened, root } = setup(threeSessions());
+  d.planUsage = async () => { throw new Error('x'); };
+  try {
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.outcome, 'done', r.detail);
+    assert.equal(opened.length, 1);
+    assert.ok(logs.includes('#7 gate session ended · 2 turns · 4m12s · 1k in (90% cached) · 18k out · ≈ $0.10'), logs.join('\n'));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
