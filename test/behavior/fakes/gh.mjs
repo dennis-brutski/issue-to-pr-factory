@@ -81,6 +81,7 @@ try {
       for (const l of field('labels[]')) if (!i.labels.includes(l)) { i.labels.push(l); i.labelEvents.push({ label: l, actor: s.login, at: now() }); }
     } else if (opt.method === 'DELETE') {
       const l = decodeURIComponent(m[2]);
+      if (s.removeLabelError) die(s.removeLabelError); // GitHub refuses, not with a 404
       if (!i.labels.includes(l)) die('gh: Label does not exist (HTTP 404)');
       i.labels = i.labels.filter((x) => x !== l);
     } else unsupported();
