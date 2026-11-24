@@ -1,7 +1,7 @@
 // A cheaper model may write the first draft of a simple issue; review and fix stay on cfg.model.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { config } from '../config.mjs';
+import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { runItem, schemas } from '../lib/stages.mjs';
 import { stopped } from '../lib/comments.mjs';

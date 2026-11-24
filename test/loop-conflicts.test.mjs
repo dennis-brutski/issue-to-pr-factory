@@ -1,7 +1,7 @@
 // tick also merges the base branch into the factory's own pull requests that conflict, without a label.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { config as defaults } from '../config.mjs';
+import { config as defaults } from './fixtures/config.mjs';
 import { tick } from '../lib/loop.mjs';
 
 const config = { ...defaults, repo: 'example/web-app' };

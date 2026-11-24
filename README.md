@@ -65,7 +65,7 @@ Then:
    ```js
    export default { owner: 'your-github-login', ownerName: 'Alex' };
    ```
-   `owner` is your GitHub login: only labels and comments by that account count, and `gh` must be logged in as it. In the rest of this README, "you" means the owner. `ownerName` is what the agents call you.
+   `owner` is your GitHub login: only labels and comments by that account count, and `gh` must be logged in as it. The factory does not start without it. In the rest of this README, "you" means the owner. `ownerName` is what the agents call you.
 2. Write `targets/<name>.mjs` for your repository, a **target** (fields under *Targets*). Targets are git-ignored, like `local.mjs`. A minimal one:
    ```js
    export default {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { config } from '../config.mjs';
+import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { runItem, renderPrompt, schemas } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';

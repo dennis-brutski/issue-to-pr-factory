@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { config } from '../config.mjs';
+import { config } from './fixtures/config.mjs';
 import { tick, shortTitle } from '../lib/loop.mjs';
 
 test('shortTitle removes control characters and escape codes', () => {

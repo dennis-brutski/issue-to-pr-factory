@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { config } from '../config.mjs';
+import { config } from './fixtures/config.mjs';
 import { recover, tick, cleanup, acquireLock, preflight } from '../lib/loop.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 

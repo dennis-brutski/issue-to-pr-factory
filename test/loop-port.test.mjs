@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:net';
-import { config } from '../config.mjs';
+import { config } from './fixtures/config.mjs';
 import { tick, freePort } from '../lib/loop.mjs';
 
 const issue = (number) => ({
