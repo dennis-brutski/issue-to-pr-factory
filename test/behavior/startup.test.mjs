@@ -1,9 +1,26 @@
 // What the factory checks before its first poll.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { world } from './world.mjs';
 import { polls } from './steps.mjs';
 import { config } from '../../config.mjs';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const version = () => { try { return execFileSync('git', ['-C', ROOT, 'describe', '--tags', '--always', '--dirty'], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } };
+const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+test('the start line names the factory version', async () => {
+  const w = await world();
+  try {
+    const f = w.start();
+    await w.until(() => polls(f) >= 1, 10000, 'a poll');
+    assert.match(f.output(), new RegExp(`\\(demo\\) at ${escape(version())} — polling`));
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});
 
 test('startup creates missing labels and warns about drift', async () => {
   const w = await world({ settings: { testDirs: ['test/', 'spec/'] } });
