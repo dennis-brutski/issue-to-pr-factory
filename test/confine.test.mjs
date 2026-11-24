@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { run } from '../lib/exec.mjs';
 import { bwrapArgs, targetEnv, expandHome } from '../lib/confine.mjs';
 import { runChecks, runSetup } from '../lib/checks.mjs';
+import { runConfined } from '../lib/confine.mjs';
 import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 
@@ -169,4 +170,33 @@ test('no home path is bound at or under a worktree that lives in the home folder
   for (const [src, dest] of binds(a).filter(([, d]) => own.has(d))) assert.equal(src, dest);
   assert.ok(a.indexOf('--tmpfs') < a.indexOf(dir), 'home is hidden before the worktree is bound');
   assert.deepEqual(a.slice(-2), ['--chdir', dir]);
+});
+
+test('without ~/.gitconfig or identity variables the git identity is empty', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'home-'));
+  const code = "const { gitIdentityEnv } = await import(process.argv[1]); console.log(JSON.stringify(await gitIdentityEnv()));";
+  const r = await run(process.execPath, ['--input-type=module', '-e', code, new URL('../lib/confine.mjs', import.meta.url).href], {
+    env: { PATH: process.env.PATH, HOME: home, GIT_CONFIG_GLOBAL: join(home, 'missing'), GIT_CONFIG_NOSYSTEM: '1' }, inheritEnv: false,
+  });
+  assert.deepEqual(JSON.parse(r.stdout), { GIT_AUTHOR_NAME: '', GIT_AUTHOR_EMAIL: '', GIT_COMMITTER_NAME: '', GIT_COMMITTER_EMAIL: '' }, r.stderr);
+});
+test('targetEnv without env sets only CI', () => {
+  assert.deepEqual(targetEnv({}, 4201), { CI: '1' });
+});
+test('a target without env, runtimeRead or sandboxRead still runs confined', real, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const r = await runChecks(dir, { checkTimeoutMin: 1, checks: [['sh', ['-c', 'test "$CI" = 1 && test -n "$PATH" && echo ran']]] }, 4201);
+  assert.deepEqual(r, { ok: true, failed: null, output: '' });
+});
+test('a target without setup, checks or held-out checks runs no steps and succeeds', async () => {
+  // A missing folder: any step that ran would fail to start there.
+  const dir = join(tmpdir(), `confine-missing-${randomBytes(4).toString('hex')}`);
+  assert.deepEqual(await runSetup(dir, {}, 4201), { ok: true, failed: null, output: '' });
+  assert.deepEqual(await runChecks(dir, {}, 4201), { ok: true, failed: null, output: '' });
+});
+test('a target without runtimeRead or sandboxRead builds its read list without throwing', async () => {
+  // Spreading a missing list throws before bwrap starts; whether bwrap itself works here does not matter.
+  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const r = await runConfined('true', [], { dir, cfg: {}, port: 4201, network: false, timeoutMs: 10_000 });
+  assert.deepEqual(Object.keys(r).sort(), ['code', 'stderr', 'stdout', 'timedOut']);
 });

@@ -78,6 +78,12 @@ describe('protected files and tests', () => {
     assert.deepEqual(await verifyBranch(ws, cfg, dir), { park: null, flags: ['existing test changed (M): test/a.test.mjs'] });
   });
 
+  test('a test moved out of the test folder is flagged by its old path', async () => {
+    mkdirSync(join(dir, 'moved'));
+    await git(dir, 'mv', 'test/a.test.mjs', 'moved/a.test.mjs'); await git(dir, 'commit', '-q', '-m', 'move');
+    assert.deepEqual(await verifyBranch(ws, cfg, dir), { park: null, flags: ['existing test changed (R): test/a.test.mjs'] });
+  });
+
   test('an added skip is flagged', async () => {
     await commit(dir, { 'test/b.test.mjs': "test.skip('b', () => {})\n" });
     assert.deepEqual(await verifyBranch(ws, cfg, dir), { park: null, flags: ["test skipped or singled out: test.skip('b', () => {})"] });
