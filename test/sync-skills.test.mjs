@@ -63,3 +63,29 @@ test('sync copies upstream LICENSE, which the MIT licence asks to keep with the 
   sync({ cacheDir, outDir });
   assert.match(readFileSync(join(outDir, 'LICENSE'), 'utf8'), /Jesse Vincent/);
 });
+
+// Running the script from the command line, with HOME in a temp folder so it never reads the real ~/.claude.
+import { spawnSync } from 'node:child_process';
+import { copyFileSync, cpSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const script = fileURLToPath(new URL('../sync-skills.mjs', import.meta.url));
+const run = (path, home) => spawnSync(process.execPath, [path], { env: { ...process.env, HOME: home }, encoding: 'utf8' });
+
+test('sync-skills from the command line with no superpowers cache exits 1 and says why', () => {
+  const r = run(script, mkdtempSync(join(tmpdir(), 'factory-skills-home-')));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^sync-skills cannot run: /);
+});
+
+test('sync-skills from the command line copies the skills next to the script and says how many', () => {
+  const home = mkdtempSync(join(tmpdir(), 'factory-skills-home-'));
+  cpSync(cache(), join(home, '.claude/plugins/cache/claude-plugins-official/superpowers'), { recursive: true });
+  const dir = mkdtempSync(join(tmpdir(), 'factory-skills-script-')); // a copy, so the repo's skills/ stays as it is
+  copyFileSync(script, join(dir, 'sync-skills.mjs'));
+  const r = run(join(dir, 'sync-skills.mjs'), home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, `copied ${SKILLS.length} skills from superpowers 7.0.2; read git diff skills/ before committing\n`);
+  assert.ok(existsSync(join(dir, 'skills/skills/test-driven-development/SKILL.md')));
+  assert.ok(existsSync(join(dir, 'skills/.claude-plugin/plugin.json')));
+});
