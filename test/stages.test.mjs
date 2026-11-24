@@ -1964,6 +1964,15 @@ describe('held-out checks', () => {
     assert.equal(r.ok, false); assert.equal(r.heldOut, undefined); assert.match(r.output, /inside the run folder/);
   });
 
+  test('held-out checks without a held-out folder are refused', async () => {
+    const { dir, cfg } = setupDirs('exit 0\n');
+    const { heldOutDir, ...noDir } = cfg;
+    assert.deepEqual(await runChecks(dir, noDir, 4321), {
+      ok: false, failed: 'held-out checks',
+      output: 'heldOutDir must be set and lie outside the run folder, which agents can read (it is inside the run folder or missing).',
+    });
+  });
+
   test('agents cannot read the held-out folder', () => {
     const s = agentSettings('/r/worktrees/issue-1', { ...config, runDir: '/r', heldOutDir: '/h' });
     assert.ok(!JSON.stringify(s).includes('"/h'));
