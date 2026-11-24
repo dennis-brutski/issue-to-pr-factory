@@ -260,6 +260,49 @@ test('in-progress label is removed even when a step throws', async () => {
   assert.ok(d.comments[0].includes('push rejected'));
   assert.deepEqual(d.labelsRemoved, ['1:agent:in-progress']);
 });
+test('explore: a session that commits on a clean tree parks as read-only', async () => {
+  const d = fakes({ agent: [explore(true, true)] });
+  d.deps.ws.headInfo = async () => ({ sha: d.agentCalls.length ? 'def' : 'abc', committedAt: T });
+  const r = await runItem({ ...issue, labels: ['agent:explore'] }, 'explore', d.deps, 4201);
+  assert.deepEqual(r, { outcome: 'parked', detail: 'The explore step is read-only but changed files in the worktree.' });
+  assert.ok(!d.labelsAdded.includes('1:agent:implement'));
+});
+test('a failing park comment still ends parked and is logged', async () => {
+  const d = fakes({ agent: [gate(40)] }), logs = [];
+  d.deps.log = (m) => logs.push(m);
+  d.deps.gh.comment = async () => { throw new Error('HTTP 502'); };
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.deepEqual(logs.filter((m) => m.includes('could not')), ['#1 could not record the park on GitHub: HTTP 502']);
+});
+test('a failing needs-human label still ends parked and is logged', async () => {
+  const d = fakes({ agent: [gate(40)] }), logs = [];
+  d.deps.log = (m) => logs.push(m);
+  const addLabel = d.deps.gh.addLabel;
+  d.deps.gh.addLabel = async (c, n, l) => { if (l === 'agent:needs-human') throw new Error('HTTP 502'); return addLabel(c, n, l); };
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(r.outcome, 'parked');
+  assert.equal(d.comments.length, 1);
+  assert.deepEqual(logs.filter((m) => m.includes('could not')), ['#1 could not record the park on GitHub: HTTP 502']);
+});
+test('a failing in-progress removal keeps the outcome and is logged', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] }), logs = [];
+  d.deps.log = (m) => logs.push(m);
+  d.deps.gh.removeLabel = async () => { throw new Error('HTTP 502'); };
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.deepEqual(r, { outcome: 'done', detail: 'https://github.com/x/y/pull/50' });
+  assert.deepEqual(logs.filter((m) => m.includes('could not')), ['#1 could not remove in-progress: HTTP 502']);
+});
+test('files still uncommitted after the leftovers are removed park', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  let removed = false;
+  d.deps.ws.removeSandboxLeftovers = async () => { removed = true; };
+  d.deps.ws.isClean = async () => !removed;
+  const r = await runItem(issue, 'implement', d.deps, 4201);
+  assert.deepEqual(r, { outcome: 'parked', detail: 'The agent left uncommitted changes in the worktree.' });
+  assert.equal(d.checksRan, undefined);
+  assert.deepEqual(d.pushed, []);
+});
 test('renderPrompt throws on a missing variable', () =>
   assert.throws(() => renderPrompt('gate', { number: 1 }), /missing/i));
 test('renderPrompt fills variables and the shared rules', () => {
@@ -1373,6 +1416,11 @@ test('the first test changes get a section before the checks', () => {
   assert.equal(withTestChanges('Closes #7\n\n## Checks\n\nok', [one]), 'Closes #7\n\n## Tests changed\n\n- `test/a.test.js` · a — renamed\n\n## Checks\n\nok');
 });
 
+test('a body without a checks section gets the test changes at its end', () => {
+  assert.equal(withTestChanges('Closes #7\n\n## What changed\n\nDone.', [one]),
+    'Closes #7\n\n## What changed\n\nDone.\n\n## Tests changed\n\n- `test/a.test.js` · a — renamed');
+});
+
 test('no test changes leave the body as it is', () => {
   assert.equal(withTestChanges('Closes #7', []), 'Closes #7');
 });
@@ -1404,6 +1452,10 @@ describe('Tests that change section', () => {
   test('a pull request body without the factory layout gives an empty list', () => {
     assert.deepEqual(testsThatChangeOf(pr('## Tests that change\n\n- `test/a.test.js`\n')), []);
     assert.deepEqual(testsThatChangeOf(pr('')), []);
+  });
+
+  test('a pull request body with "Closes" but no "What changed" gives an empty list', () => {
+    assert.deepEqual(testsThatChangeOf(pr('Closes #7\n\n## Tests that change\n\n- `test/a.test.js`\n')), []);
   });
 });
 
@@ -1489,6 +1541,17 @@ describe('session usage', () => {
       assert.ok(logs.includes('#7 review session ended'), logs.join('\n'));
       const last = opened[0].body.trimEnd().split('\n').at(-1);
       assert.match(last, / · gate confidence 87 · checks: .+ · agent use so far: 5 sessions · 32 turns · ≈ \$1\.05 · session logs: runs\/web-app\/logs\/issue-7\/$/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('one session so far is named in the singular', async () => {
+    const gate = { confidence: 87, questions: [] }, work = { status: 'complete', summary: 'Changed undo.', detail: '' }, review = { verdict: 'clean', findings: [] };
+    const { d, opened, root } = setup([{ stdout: result(gate, 2, 0.1), r: ok(gate) }, { r: ok(work) }, { r: ok(review) }]);
+    try {
+      const r = await runItem(issue, 'implement', d, 4201);
+      assert.equal(r.outcome, 'done', r.detail);
+      const last = opened[0].body.trimEnd().split('\n').at(-1);
+      assert.match(last, / · agent use so far: 1 session · 2 turns · ≈ \$0\.10 · session logs: /);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
