@@ -25,7 +25,7 @@ const ws = workspace({ root, url: cloneUrl(cfg), base: cfg.baseBranch }); // che
 const show = screen({ repo: cfg.repo, columns: process.stdout.columns, stream: process.stdout, now: Date.now, pollSec: cfg.pollSec });
 const log = (msg) => { const line = show(new Date().toTimeString().slice(0, 8), msg); if (line !== null) console.log(line); };
 // Read once: which version of the factory built each pull request.
-const head = await run('git', ['-C', factoryRoot, 'rev-parse', '--short', 'HEAD']);
+const head = await run('git', ['-C', factoryRoot, 'describe', '--tags', '--always', '--dirty']);
 const factoryCommit = head.code === 0 && head.stdout.trim() ? head.stdout.trim() : 'unknown';
 const deps = { cfg, root, log, gh, ws, run, runAgent, runSetup, runChecks, runItem, factoryCommit };
 
@@ -64,7 +64,7 @@ try {
   for (const l of [...Object.values(cfg.triggers), ...Object.values(cfg.states)])
     if (!labels.includes(l)) { await gh.createLabel(cfg, l); log(`created label ${l}`); }
   await recover(deps);
-  log(`factory started for ${cfg.repo} (${cfg.target}${args.local ? `, local: ${cfg.model}` : ''}) — polling every ${pollText(cfg.pollSec)}, up to ${cfg.maxParallel} at a time`);
+  log(`factory started for ${cfg.repo} (${cfg.target}${args.local ? `, local: ${cfg.model}` : ''}) at ${factoryCommit} — polling every ${pollText(cfg.pollSec)}, up to ${cfg.maxParallel} at a time`);
   while (!stopping) {
     await ws.checkClone(); // a session may have planted config: stop the whole factory, not just one run
     await cleanup(deps, running);

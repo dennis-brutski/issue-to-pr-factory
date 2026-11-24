@@ -275,5 +275,5 @@ MIT, see `LICENSE`.
 
 ## History
 
-Design notes and plans are in `docs/superpowers/`.
+Design notes and plans are in `docs/superpowers/`; how releases work is in `docs/releasing.md`.
 

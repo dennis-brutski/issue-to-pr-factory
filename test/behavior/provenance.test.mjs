@@ -8,7 +8,7 @@ import { world } from './world.mjs';
 import { gate, clean, implement, settled } from './steps.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const commit = () => { try { return execFileSync('git', ['-C', ROOT, 'rev-parse', '--short', 'HEAD'], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } };
+const commit = () => { try { return execFileSync('git', ['-C', ROOT, 'describe', '--tags', '--always', '--dirty'], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } };
 
 test('the pull request ends with the factory commit, model, gate score and log folder', async () => {
   const w = await world();
