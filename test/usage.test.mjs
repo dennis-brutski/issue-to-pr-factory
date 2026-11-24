@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { usageOf, addUp, usageLine } from '../lib/usage.mjs';
+import { planLine } from '../lib/usage.mjs';
 
 const real = JSON.stringify({
   type: 'result', num_turns: 4, duration_ms: 26104, total_cost_usd: 0.1752,
@@ -90,4 +91,17 @@ test('usageLine on a local run says local instead of a cost', () => {
 test('usageLine on a local run says plainly when the server gave no token counts', () => {
   const u = { turns: 3, durationMs: 45_000, costUsd: 0, tokensIn: 0, cachedIn: 0, tokensOut: 0, models: [], denials: 1 };
   assert.equal(usageLine(u, { local: true }), '3 turns · 45s · local, no token counts · 1 denied');
+});
+
+test('planLine shows both windows and the 5-hour reset', () => {
+  const r = Date.parse('2026-11-24T14:30:00Z'), d = new Date(r), pad = (x) => String(x).padStart(2, '0');
+  const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  assert.equal(planLine({ fiveHour: 42, fiveHourResetsAt: r, week: 18 }), `plan 5h 42% (resets ${hhmm}) · week 18%`);
+});
+
+test('planLine leaves out what is missing', () => {
+  assert.equal(planLine({ fiveHour: 42 }), 'plan 5h 42%');
+  assert.equal(planLine({ week: 18 }), 'plan week 18%');
+  assert.equal(planLine(null), '');
+  assert.equal(planLine(undefined), '');
 });
