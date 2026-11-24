@@ -1,8 +1,10 @@
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildArgs, interpret, agentSettings } from '../lib/agent.mjs';
 import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
+import { stopLabel } from '../stats.mjs';
+import { stopped } from '../lib/comments.mjs';
 
 const base = { schema: { type: 'object' }, settings: { sandbox: { enabled: true } }, maxTurns: 150, model: null, readOnly: false };
 const result = (o = {}) => ({
@@ -138,4 +140,63 @@ test('agentSettings lets agents read the skills, never write them', () => {
   assert.ok(s.sandbox.filesystem.allowRead.includes('/f/skills'));
   const none = agentSettings('/r/worktrees/issue-1', { ...config, runDir: '/r' });
   assert.ok(!JSON.stringify(none).includes('skills'));
+});
+
+test('a budget adds --max-budget-usd and keeps --disallowedTools last', () => {
+  const a = buildArgs({ ...base, maxBudgetUsd: 2 });
+  assert.equal(a[a.indexOf('--max-budget-usd') + 1], '2');
+  assert.equal(a.at(-2), '--disallowedTools');
+});
+
+test('no budget, or zero, leaves the arguments as they were', () => {
+  for (const maxBudgetUsd of [null, undefined, 0]) assert.deepEqual(buildArgs({ ...base, maxBudgetUsd }), buildArgs(base));
+});
+
+// What claude -p --output-format json printed for a session stopped by --max-budget-usd 0.0001 (CLI, 2026-11-19).
+const spent = {
+  code: 0, timedOut: false, stderr: '',
+  stdout: JSON.stringify({ type: 'result', subtype: 'error_max_budget_usd', is_error: true, terminal_reason: 'budget_exhausted', result: null, total_cost_usd: 2.0134, session_id: 's1' }),
+};
+
+test('a session that spent its budget fails with a reason that says so', () => {
+  const r = interpret(spent, 45);
+  assert.equal(r.ok, false);
+  assert.match(r.reason, /spent its budget \(≈ \$2\.01\)/);
+});
+
+test('stats labels a budget stop as budget cap', () => {
+  const reason = `The implement step failed: ${interpret(spent, 45).reason}`;
+  assert.equal(stopLabel(stopped('implement', reason, 'agent:needs-human')), 'budget cap');
+});
+
+test('buildArgs keeps per-machine details out of the system prompt', () => {
+  const a = buildArgs(base);
+  assert.ok(a.includes('--exclude-dynamic-system-prompt-sections'));
+  assert.equal(a.at(-2), '--disallowedTools');
+});
+
+test('buildArgs disallows the tools no stage uses', () =>
+  assert.match(buildArgs(base).at(-1), /,ListAgents,ReportFindings$/));
+
+test('runAgent turns off Claude Code\'s memory', async () => {
+  const { mkdtempSync, writeFileSync, readFileSync, chmodSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { runAgent } = await import('../lib/agent.mjs');
+  const { config } = await import('../config.mjs');
+  const bin = mkdtempSync(join(tmpdir(), 'trim-claude-')), dump = join(bin, 'env.json');
+  writeFileSync(join(bin, 'claude'), `#!/usr/bin/env node
+require('fs').writeFileSync(${JSON.stringify(dump)}, JSON.stringify(process.env));
+process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify({ terminal_reason: 'completed', is_error: false, structured_output: {} })));
+`);
+  chmodSync(join(bin, 'claude'), 0o755);
+  const saved = process.env.PATH;
+  process.env.PATH = `${bin}:${saved}`;
+  try {
+    const r = await runAgent({ cwd: bin, prompt: 'p', schema: { type: 'object' }, cfg: config, port: 4201 });
+    assert.equal(r.ok, true, r.reason);
+    assert.equal(JSON.parse(readFileSync(dump, 'utf8')).CLAUDE_CODE_DISABLE_AUTO_MEMORY, '1');
+  } finally {
+    process.env.PATH = saved;
+  }
 });

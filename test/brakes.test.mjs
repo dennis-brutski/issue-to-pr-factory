@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { protectedPathViolations as check, attributionViolations, workflowChanges } from '../lib/brakes.mjs';
+import { protectedPathViolations as check, attributionViolations, workflowChanges, additionsOnly, skippedTests, strayDotfiles } from '../lib/brakes.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 
 // The web app target: its protections must stay exactly what they were.
@@ -57,4 +57,66 @@ test('workflowChanges finds added, changed, deleted and renamed workflows', () =
     { status: 'D', path: '.github/workflows/c.yml' }, { status: 'R', oldPath: '.github/x.yml', path: '.github/workflows/d.yml' },
     { status: 'R', oldPath: '.github/workflows/e.yml', path: 'old/e.yml' }, { status: 'M', path: '.github/CODEOWNERS' },
   ]), ['.github/workflows/a.yml', '.github/workflows/b.yml', '.github/workflows/c.yml', '.github/workflows/d.yml', '.github/workflows/e.yml']);
+});
+
+const head = 'diff --git a/f.mjs b/f.mjs\nindex 1..2 100644\n--- a/f.mjs\n+++ b/f.mjs\n';
+
+test('a diff that only adds lines is additions only', () => {
+  assert.equal(additionsOnly(`${head}@@ -1,2 +1,3 @@\n a\n+b\n c\n`), true);
+});
+test('a removed line is not additions only', () => {
+  assert.equal(additionsOnly(`${head}@@ -1,2 +1,2 @@\n a\n-b\n+c\n`), false);
+});
+test('a removed line that starts with "--" is still a removed line', () => {
+  assert.equal(additionsOnly(`${head}@@ -1,2 +1,1 @@\n a\n---i;\n`), false);
+});
+test('a change with no text hunk (binary, mode only, or empty) is not additions only', () => {
+  assert.equal(additionsOnly(`${head.replace(/--- .*\n\+\+\+ .*\n/, '')}Binary files a/f.mjs and b/f.mjs differ\n`), false);
+  assert.equal(additionsOnly(''), false);
+});
+
+const diff = (...added) => ['diff --git a/test/x.test.mjs b/test/x.test.mjs', '+++ b/test/x.test.mjs', ...added.map((l) => `+${l}`)].join('\n');
+
+test('added skip, only and todo calls are flagged', () => {
+  for (const line of ["test.skip('x', () => {})", "it.only('x', () => {})", "describe.todo('x')", "xit('x', () => {})", "test('x', { skip: true }, () => {})", '@pytest.mark.skip'])
+    assert.equal(skippedTests(diff(line)).length, 1, line);
+});
+
+test('removed or unchanged lines and plain tests are clean', () => {
+  assert.deepEqual(skippedTests("-test.skip('x', () => {})\n test.only('y')"), []);
+  assert.deepEqual(skippedTests(diff("test('skips nothing', () => {})", 'const only = 1;')), []);
+});
+
+test('each finding quotes the line', () =>
+  assert.match(skippedTests(diff("it.only('focus', () => {})"))[0], /test skipped or singled out: it\.only\('focus'/));
+
+test('skips inside string literals are test data, not skips', () => {
+  assert.deepEqual(skippedTests(diff(
+    `await commit(dir, { 'test/b.test.mjs': "test.skip('b', () => {})\\n" });`,
+    "const fixture = 'it.only(\"x\")';",
+    'const t = `describe.todo(\'y\')`;',
+  )), []);
+});
+
+test('a real skip next to a string is still flagged', () => {
+  assert.equal(skippedTests(diff("test.skip('has a \"quoted\" name', () => {})", "test('x', { skip: 'needs bwrap' }, () => {})")).length, 2);
+});
+
+test('a commit adding a home dotfile at the root is refused', () => {
+  assert.deepEqual(strayDotfiles([{ status: 'A', path: '.bashrc' }]), ['.bashrc']);
+  assert.deepEqual(strayDotfiles([{ status: 'A', path: '.profile' }]), ['.profile']);
+});
+test('a commit adding a file in an editor or agent folder at the root is refused', () => {
+  const changes = ['.claude/settings.json', '.idea/workspace.xml', '.vscode/settings.json', '.config/gh/hosts.yml'].map((path) => ({ status: 'A', path }));
+  assert.deepEqual(strayDotfiles(changes), ['.claude/settings.json', '.idea/workspace.xml', '.vscode/settings.json', '.config/gh/hosts.yml']);
+});
+test('a rename onto a dotfile counts as adding it', () => {
+  assert.deepEqual(strayDotfiles([{ status: 'R', oldPath: 'notes.txt', path: '.zshrc' }]), ['.zshrc']);
+});
+test('changing an already-tracked dotfile is allowed', () => {
+  assert.deepEqual(strayDotfiles([{ status: 'M', path: '.gitignore' }, { status: 'M', path: '.vscode/settings.json' }, { status: 'D', path: '.bashrc' }]), []);
+});
+test('dotfiles below the root and ordinary project dotfiles are allowed', () => {
+  const changes = ['src/.bashrc', 'docs/.idea/x', '.gitignore', '.editorconfig', '.nvmrc'].map((path) => ({ status: 'A', path }));
+  assert.deepEqual(strayDotfiles(changes), []);
 });
