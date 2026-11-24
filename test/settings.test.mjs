@@ -103,6 +103,9 @@ test('parseFactoryArgs: target and --local in either order', () => {
   assert.deepEqual(parseFactoryArgs(['--local']), { target: undefined, local: true });
   assert.deepEqual(parseFactoryArgs([]), { target: undefined, local: false });
 });
+test('parseFactoryArgs refuses two targets', () => {
+  assert.throws(() => parseFactoryArgs(['one', 'two']), { message: 'one target at a time' });
+});
 test('parseFactoryArgs refuses an unknown option', () => {
   assert.throws(() => parseFactoryArgs(['demo', '--locl']), /locl/);
 });
