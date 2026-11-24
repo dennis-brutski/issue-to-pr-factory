@@ -11,7 +11,7 @@ import { runAgent } from './lib/agent.mjs';
 import { planUsage } from './lib/plan.mjs';
 import { runChecks, runSetup } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
-import { recover, tick, cleanup, acquireLock, lockHolder, preflight } from './lib/loop.mjs';
+import { recover, tick, cleanup, acquireLock, lockHolder, preflight, pollLine } from './lib/loop.mjs';
 import { driftWarnings, configuredPaths, pollText } from './lib/startup.mjs';
 import { look, paint } from './lib/look.mjs';
 import { screen } from './lib/screen.mjs';
@@ -72,7 +72,8 @@ try {
     await cleanup(deps, running);
     const started = await tick(deps, running);
     // After every poll, so the screen always says when the next one comes.
-    if (running.size) log(`${running.size} running`); else if (!started.length) log('0 eligible');
+    const line = await pollLine(deps, running.size, started.length);
+    if (line) log(line);
     if (!stopping) await sleep(cfg.pollSec * 1000); // Ctrl-C during the poll: wake() had no sleep to end
   }
   await Promise.all(running.values());

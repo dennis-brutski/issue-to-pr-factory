@@ -344,6 +344,16 @@ describe('running polls', () => {
     assert.equal(show('02:38:13', '1 running'), '02:38:13  ◦ 1 running · next check at 02:43:13');
   }));
 
+  test('on a terminal, the plan usage comes after the next check', () => noColour(() => {
+    const show = setup(100);
+    assert.equal(show('02:33:13', '3 running · plan 5h 54% (resets 02:00) · week 92%'), '02:33:13  ◦ 3 running · next check at 02:38:13 · plan 5h 54% (resets 02:00) · week 92%');
+  }));
+
+  test('not on a terminal, a running line with plan usage stays as written', () => noColour(() => {
+    const show = setup(undefined);
+    assert.equal(show('02:33:13', '3 running · plan 5h 54% · week 92%'), '02:33:13  3 running · plan 5h 54% · week 92%');
+  }));
+
   test('on a terminal, without pollSec there is no next check part', () => noColour(() => {
     const show = setup(100, null);
     assert.equal(show('02:33:13', '2 running'), '02:33:13  ◦ 2 running');
@@ -454,6 +464,22 @@ describe('waiting line', () => {
     assert.equal(show('23:42:26', '0 eligible'), '23:42:26  ◦ waiting for labelled issues');
   }));
 
+  test('the waiting line shows the plan usage after the next check', () => noColour(() => {
+    const show = setup({ columns: 100 });
+    assert.equal(show('23:42:26', '0 eligible · plan 5h 54% · week 92%'), '23:42:26  ◦ waiting for labelled issues · next check at 23:47:26 · plan 5h 54% · week 92%');
+  }));
+
+  test('a waiting line too long for the terminal is cleared row by row when the next one replaces it', () => noColour(() => {
+    const show = setup();
+    show('23:42:26', '0 eligible · plan 5h 54% · week 92%'); // 89 characters: two rows at 80 columns
+    assert.equal(show('23:47:26', '0 eligible'), '\x1b[1A\x1b[2K\x1b[1A\x1b[2K23:47:26  ◦ waiting for labelled issues · next check at 23:52:26');
+  }));
+
+  test('not on a terminal, 0 eligible with plan usage stays as written', () => noColour(() => {
+    const show = setup({ columns: undefined });
+    assert.equal(show('23:42:26', '0 eligible · plan 5h 54% · week 92%'), '23:42:26  0 eligible · plan 5h 54% · week 92%');
+  }));
+
   test('next check wraps past midnight', () => noColour(() => {
     const show = setup();
     assert.equal(show('23:58:00', '0 eligible'), '23:58:00  ◦ waiting for labelled issues · next check at 00:03:00');
@@ -515,7 +541,8 @@ describe('waiting line updates', () => {
     const show = setup({ columns: 20 });
     show('03:12:29', '0 eligible');
     const line = show('03:17:29', '0 eligible');
-    assert.equal(line, `${UP}03:17:29  ◦ waiting for labelled issues · next check at 03:22:29`);
+    // The terminal wraps the 64-character line over 4 rows of 20; the next one clears all 4.
+    assert.equal(line, `${UP.repeat(4)}03:17:29  ◦ waiting for labelled issues · next check at 03:22:29`);
     assert.ok(!line.includes('\n'));
   }));
 

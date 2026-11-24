@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config, config as defaults } from './fixtures/config.mjs';
-import { recover, tick, cleanup, acquireLock, preflight, freePort, shortTitle } from '../lib/loop.mjs';
+import { recover, tick, cleanup, acquireLock, preflight, freePort, shortTitle, pollLine } from '../lib/loop.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 import { createServer } from 'node:net';
 import scorePad from './fixtures/web-app-target.mjs';
@@ -416,5 +416,36 @@ describe('issue titles', () => {
   test('shortTitle counts and cuts by code points, not UTF-16 units', () => {
     assert.equal(shortTitle(`${'a'.repeat(78)}😀😀😀`), `${'a'.repeat(78)}😀…`);
     assert.equal(shortTitle(`${'a'.repeat(78)}😀😀`), `${'a'.repeat(78)}😀😀`);
+  });
+});
+
+// After each poll the check line says how many run, or that the factory waits, with the account's plan usage.
+describe('check line', () => {
+  const plan = async () => ({ fiveHour: 54, week: 92 });
+
+  test('runs going on: how many, then the plan usage', async () => {
+    assert.equal(await pollLine({ cfg: config, planUsage: plan }, 2, 0), '2 running · plan 5h 54% · week 92%');
+  });
+
+  test('nothing running and nothing started: 0 eligible, then the plan usage', async () => {
+    assert.equal(await pollLine({ cfg: config, planUsage: plan }, 0, 0), '0 eligible · plan 5h 54% · week 92%');
+  });
+
+  test('a poll that only started runs that already finished logs nothing', async () => {
+    let calls = 0;
+    assert.equal(await pollLine({ cfg: config, planUsage: async () => { calls++; return null; } }, 0, 1), null);
+    assert.equal(calls, 0);
+  });
+
+  test('no plan part when the lookup gives nothing, fails, or is not there', async () => {
+    for (const planUsage of [async () => null, async () => { throw new Error('x'); }, () => { throw new Error('y'); }, undefined])
+      assert.equal(await pollLine({ cfg: config, planUsage }, 1, 0), '1 running');
+  });
+
+  test('no plan lookup on a local run', async () => {
+    let calls = 0;
+    const line = await pollLine({ cfg: { ...config, localRun: true }, planUsage: async () => { calls++; return { fiveHour: 1, week: 1 }; } }, 1, 0);
+    assert.equal(line, '1 running');
+    assert.equal(calls, 0);
   });
 });
