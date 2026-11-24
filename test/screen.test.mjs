@@ -71,6 +71,27 @@ test('lines not about an issue look as before', () => noColour(() => {
   assert.equal(show(T, 'warning: x is off'), `${T}  ⚠ warning: x is off`);
 }));
 
+test('columns: 100 shows a plain message as time, icon, message', () => noColour(() => {
+  const { show } = setup({ columns: 100 });
+  assert.equal(show(T, 'stopping'), `${T}  🏭 stopping`);
+}));
+
+test('columns: 100 wraps a long plain message, the rest under the text', () => noColour(() => {
+  const { show } = setup({ columns: 100 });
+  const words = (k) => Array(k).fill('abcdefghi').join(' ');
+  assert.equal(show(T, `factory cannot run: ${words(20)}`), [
+    `${T}  ✖ factory cannot run: ${words(6)}`,
+    `${PAD}  ${words(8)}`,
+    `${PAD}  ${words(6)}`,
+  ].join('\n'));
+}));
+
+test('columns: 100 shows both lines of a two-line plain message', () => noColour(() => {
+  const { show } = setup({ columns: 100 });
+  assert.equal(show(T, 'factory cannot run: config.mjs is missing\nrun the setup first'),
+    `${T}  ✖ factory cannot run: config.mjs is missing\n${PAD}  run the setup first`);
+}));
+
 test('done adds duration, sessions and summed cost', () => noColour(() => {
   const { show, clock } = setup();
   clock.set(1000);
