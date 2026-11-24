@@ -105,3 +105,8 @@ test('planLine leaves out what is missing', () => {
   assert.equal(planLine(null), '');
   assert.equal(planLine(undefined), '');
 });
+
+test('planLine gives nothing for plan usage with no known window', () => {
+  assert.equal(planLine({}), '');
+  assert.equal(planLine({ fiveHourResetsAt: Date.parse('2026-11-24T14:30:00Z') }), '');
+});
