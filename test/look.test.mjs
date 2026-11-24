@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import { look, paint, logLine } from '../lib/look.mjs';
@@ -88,4 +88,46 @@ test('logLine with colour: dim time, bold issue number, details in the first lin
     if (FORCE_COLOR === undefined) delete process.env.FORCE_COLOR; else process.env.FORCE_COLOR = FORCE_COLOR;
     if (NO_COLOR !== undefined) process.env.NO_COLOR = NO_COLOR;
   }
+});
+
+describe('free-text reasons', () => {
+  // Park reasons and done summaries are free text; words like "could not" in them must not turn the line red.
+  const cases = [
+    ['#12 implement parked: The agent could not finish:\n\nno tests', '⏸', 'yellow'],
+    ['#12 implement parked: The agent could not fix the review findings:\n\nx', '⏸', 'yellow'],
+    ['#12 rework parked: The agent could not finish the rework:\n\nx', '⏸', 'yellow'],
+    ['#12 implement parked: The implement step failed: the agent session failed: x', '⏸', 'yellow'],
+    ['#12 implement parked: A held-out check failed: `npm test`. Its output is in the factory\'s terminal', '⏸', 'yellow'],
+    ['#12 rework done: could not reproduce the crashed: case', '✔', 'green'],
+    ['#12 re-queued after the run failed: boom', '↻', 'yellow'],
+  ];
+
+  for (const [msg, icon, tone] of cases) {
+    test(`look keeps the tone of the status, not the reason: ${msg.split('\n')[0]}`, () => {
+      assert.deepEqual(look(msg), { icon, tone });
+    });
+  }
+
+  test('look keeps a park yellow when its reason says the session ended', () => {
+    const msg = '#12 implement parked: The implement step failed: the agent session ended without the required status report';
+    assert.deepEqual(look(msg), { icon: '⏸', tone: 'yellow' });
+  });
+});
+
+test('a start line with a title is ▶ cyan', () => {
+  assert.deepEqual(look('#12 implement started (Fix the bug)'), { icon: '▶', tone: 'cyan' });
+});
+
+test('a start line without a title still looks the same', () => {
+  assert.deepEqual(look('#12 implement started'), { icon: '▶', tone: 'cyan' });
+});
+
+test('a title cannot change the look', () => {
+  assert.deepEqual(look('#12 implement started (Make it started)'), { icon: '▶', tone: 'cyan' });
+  assert.deepEqual(look('#12 implement started (parked: oops)'), { icon: '▶', tone: 'cyan' });
+  assert.deepEqual(look('#12 implement started (done)'), { icon: '▶', tone: 'cyan' });
+});
+
+test('text after started that is not a title is not a start line', () => {
+  assert.deepEqual(look('#12 implement started later'), { icon: '', tone: 'plain' });
 });

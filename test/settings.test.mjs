@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
-import { loadSettings, cloneUrl, parseFactoryArgs } from '../lib/settings.mjs';
+import { loadSettings, cloneUrl, parseFactoryArgs, targetNames } from '../lib/settings.mjs';
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'factory-settings-'));
 const target = (fields = {}) => `export default ${JSON.stringify({ repo: 'a/b', baseBranch: 'main', ...fields })};\n`;
@@ -144,4 +144,14 @@ test('--local marks the settings as a local run; without it they are not', async
   const r = root({ one: target({ local: { baseUrl: 'http://h', model: 'qwen' } }) });
   assert.equal((await loadSettings('one', { factoryRoot: r, local: true })).localRun, true);
   assert.equal((await loadSettings('one', { factoryRoot: r })).localRun, undefined);
+});
+
+test('targetNames lists targets/*.mjs by name, in name order', () => {
+  const dir = join(mkdtempSync(join(tmpdir(), 'factory-names-')), 'targets');
+  mkdirSync(dir);
+  for (const f of ['two.mjs', 'one.mjs', 'notes.txt']) writeFileSync(join(dir, f), '');
+  assert.deepEqual(targetNames(dir), ['one', 'two']);
+});
+test('targetNames of a missing folder is empty', () => {
+  assert.deepEqual(targetNames(join(mkdtempSync(join(tmpdir(), 'factory-names-')), 'targets')), []);
 });

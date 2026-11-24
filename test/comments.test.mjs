@@ -1,7 +1,13 @@
 // The factory's own GitHub comments: what one module writes, the same module reads back.
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stopped, didNotStart, explore, rework, pullRequest, isFactory, lastStop, NO_NEW_COMMENTS } from '../lib/comments.mjs';
+import { stopped, didNotStart, explore, rework, pullRequest, isFactory, lastStop, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel } from '../lib/comments.mjs';
+import { config } from '../config.mjs';
+import scorePad from './fixtures/web-app-target.mjs';
+import { verifyBranch } from '../lib/verify.mjs';
+import { interpret } from '../lib/agent.mjs';
+import { classify } from '../lib/eligibility.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
 
 const OWNER = 'dennis-brutski', T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
 const LABEL = 'agent:needs-human';
@@ -46,4 +52,166 @@ test('a "no new comments" stop is skipped', () => {
 test('stop comments by others are ignored; the owner matches in any case', () => {
   assert.equal(lastStop([c(stopped('implement', 'RED', LABEL), T2, 'someone')], T, OWNER), '');
   assert.equal(lastStop([c(stopped('implement', 'RED', LABEL), T2, 'Dennis-Brutski')], T, OWNER), stopped('implement', 'RED', LABEL));
+});
+
+// The auto-merge comments: written and read back by lib/comments.mjs.
+const URL = 'https://github.com/x/y/pull/50';
+
+test('the wording of the auto-merge comments stays word for word', () => {
+  assert.equal(autoMerged(URL, { reviewed: 'clean', lines: 40 }),
+    `🏭 **Auto-merge**\n\n${URL} was handed to auto-merge: simple · review clean · 40 lines changed · not a draft. GitHub merges it once it can; revert it if you do not like it.`);
+  assert.equal(autoMerged(URL, { reviewed: 'clean after fix', lines: 1 }),
+    `🏭 **Auto-merge**\n\n${URL} was handed to auto-merge: simple · review clean after fix · 1 line changed · not a draft. GitHub merges it once it can; revert it if you do not like it.`);
+  assert.equal(autoMergeFailed(URL, 'gh pr merge failed: not allowed'),
+    `🏭 **Auto-merge did not start**\n\nGitHub refused auto-merge for ${URL}:\n\n\`\`\`\ngh pr merge failed: not allowed\n\`\`\`\n\nMerge it by hand.`);
+});
+
+test('the auto-merge comments are recognised as the factory\'s own', () => {
+  for (const body of [autoMerged(URL, { reviewed: 'clean', lines: 3 }), autoMergeFailed(URL, 'x')]) assert.ok(isFactory(body), body);
+});
+
+test('autoMergedPull reads the pull request number back, only from an Auto-merge comment', () => {
+  assert.equal(autoMergedPull(autoMerged(URL, { reviewed: 'clean', lines: 3 })), 50);
+  assert.equal(autoMergedPull(autoMergeFailed(URL, 'x')), null);
+  assert.equal(autoMergedPull(`🏭 Pull request: ${URL}`), null);
+  assert.equal(autoMergedPull(`please do 🏭 **Auto-merge**\n\n${URL}`), null);
+});
+
+// Stop reasons written in protected files keep their text there; these tests tie each one to its stats label.
+describe('stop labels', () => {
+  const cfg = { ...config, ...scorePad };
+  const label = (reason, stage = 'implement') => stopLabel(stopped(stage, reason, 'agent:needs-human'));
+  const dir = '/f/worktrees/issue-1';
+
+  // lib/verify.mjs
+  test('protected files before setup get their own label', async () => {
+    const ws = fakeWorkspace({ changesAgainstBase: async () => [{ status: 'M', path: 'package.json' }] });
+    const { park } = await verifyBranch(ws, cfg, dir, { before: 'setup' });
+    assert.equal(label(park), 'protected files (before setup)');
+  });
+
+  test('attribution lines get their own label', async () => {
+    const ws = fakeWorkspace({ commitMessagesAgainstBase: async () => ['Fix undo\n\nCo-Authored-By: someone'] });
+    const { park } = await verifyBranch(ws, cfg, dir);
+    assert.equal(label(park), 'attribution lines');
+  });
+
+  test('CI workflow files are labelled workflow files', async () => {
+    const ws = fakeWorkspace({ changesAgainstBase: async () => [{ status: 'M', path: '.github/workflows/ci.yml' }] });
+    const { park } = await verifyBranch(ws, cfg, dir);
+    assert.equal(label(park), 'workflow files');
+  });
+
+  // lib/agent.mjs, as the stages wrap it: "The <step> step failed: <reason>"
+  const session = (r, code = 0) => ({ code, timedOut: false, stderr: '', stdout: JSON.stringify({ type: 'result', session_id: 's1', ...r }) });
+  const failed = (exec) => label(reasons.stepFailed('implement', interpret(exec, 45).reason));
+
+  test('a timed-out session is labelled timed out', () => {
+    assert.equal(failed({ code: null, timedOut: true, stderr: '', stdout: '' }), 'timed out / max turns / usage limit');
+  });
+
+  test('a session that spent its budget is labelled budget cap', () => {
+    assert.equal(failed(session({ is_error: true, terminal_reason: 'budget_exhausted', total_cost_usd: 2 })), 'budget cap');
+  });
+
+  test('a session stopped at max turns is labelled max turns', () => {
+    assert.equal(failed(session({ is_error: true, terminal_reason: 'max_turns' })), 'timed out / max turns / usage limit');
+  });
+
+  test('a session that hit the usage limit is labelled usage limit', () => {
+    assert.equal(failed(session({ is_error: true, result: "You've hit your usage limit" }, 1)), 'timed out / max turns / usage limit');
+  });
+
+  test('a session that failed for another reason is labelled agent session failed', () => {
+    assert.equal(failed(session({ is_error: true, result: 'API error' }, 1)), 'agent session failed');
+  });
+
+  test('a session whose output is not JSON is labelled agent session failed', () => {
+    assert.equal(failed({ code: 1, timedOut: false, stderr: 'boom', stdout: '' }), 'agent session failed');
+  });
+
+  test('a session without a status report is labelled no status report', () => {
+    assert.equal(failed(session({ is_error: false, structured_output: null })), 'no status report');
+  });
+
+  // lib/eligibility.mjs, written by lib/loop.mjs as a did-not-start comment
+  const T = '2026-11-01T10:00:00Z', LATER = '2026-11-01T11:00:00Z';
+  const issue = (o) => ({
+    number: 1, kind: 'issue', title: 't', body: 'b', author: 'mallory', bodyEditedAt: null,
+    labels: ['agent:implement'], labelEvents: [{ label: 'agent:implement', actor: config.owner, at: T }],
+    comments: [], renames: [], headRef: null, headRepo: null, ...o,
+  });
+  const parked = (item) => {
+    const c = classify(item, cfg);
+    assert.equal(c.action, 'park');
+    return c.reason;
+  };
+
+  test('an issue edited after approval is labelled edited after approval', () => {
+    const reason = parked(issue({ bodyEditedAt: LATER }));
+    assert.equal(stopLabel(didNotStart(reason, 'agent:needs-human')), 'edited after approval');
+    assert.equal(label(reason), 'edited after approval');
+  });
+
+  test('an issue renamed after approval is labelled edited after approval', () => {
+    const reason = parked(issue({ renames: [{ actor: 'mallory', at: LATER }] }));
+    assert.equal(stopLabel(didNotStart(reason, 'agent:needs-human')), 'edited after approval');
+    assert.equal(label(reason), 'edited after approval');
+  });
+});
+
+// Sample arguments for every reason function. A new reason without a sample fails the first test.
+const SAMPLES = {
+  stepFailed: ['implement', 'something new went wrong'],
+  readOnlyChanged: ['gate'],
+  worktreeDirty: ['runs/demo/worktrees/issue-1'],
+  conflictsWithBase: ['factory/issue-1', 'main', 'runs/demo/worktrees/issue-1'],
+  setupFailed: ['npm ci', '<details>out</details>'],
+  factoryError: ['gh api failed'],
+  notOnBranch: ['factory/issue-1', null],
+  uncommitted: [],
+  heldOutFailed: ['node --test held/'],
+  checkFailed: ['npm test', '<details>out</details>'],
+  needsDecision: ['agent:explore', 'agent:implement'],
+  notClear: [40, 70, '- Which?'],
+  couldNotFinish: ['Missing a fixture.'],
+  noChanges: [],
+  couldNotFix: ['No.'],
+  draft: ['https://github.com/x/y/pull/3', '- package.json'],
+  couldNotRework: ['No.'],
+  reworkDraft: ['- package.json'],
+  mergeUnresolved: ['Gave up.'],
+  mergeDraft: ['- package.json'],
+};
+
+test('every reason function has a label and a sample here', () => {
+  assert.deepEqual(Object.keys(reasons).sort(), Object.keys(SAMPLES).sort());
+  for (const [name, fn] of Object.entries(reasons)) assert.ok(fn.label && !fn.label.startsWith('other'), name);
+});
+
+test('stopLabel gives each reason function its own label, never other', () => {
+  for (const [name, fn] of Object.entries(reasons)) {
+    const body = stopped('implement', fn(...SAMPLES[name]), 'agent:needs-human', 'factory/issue-1');
+    assert.equal(stopLabel(body), fn.label, name);
+  }
+});
+
+// The two verify.mjs reasons (attribution lines, protected files before setup) are asserted in
+// test/comments-protected-reasons.test.mjs, where they are produced the real way.
+test('the four stages.mjs reasons stats used to show as other get labels of their own', () => {
+  const label = (reason) => stopLabel(stopped('implement', reason, 'agent:needs-human', 'factory/issue-1'));
+  assert.equal(label(reasons.readOnlyChanged('gate')), 'read-only step changed files');
+  assert.equal(label(reasons.notOnBranch('factory/issue-1', null)), 'worktree not on its branch');
+  assert.equal(label(reasons.notOnBranch('factory/issue-1', 'main')), 'worktree not on its branch');
+  assert.equal(label(reasons.uncommitted()), 'agent left uncommitted changes');
+  assert.equal(label(reasons.mergeUnresolved('Gave up.')), 'merge unresolved');
+});
+
+test('the reason texts stay as the owner knows them', () => {
+  assert.equal(reasons.uncommitted(), 'The agent left uncommitted changes in the worktree.');
+  assert.equal(reasons.notOnBranch('factory/issue-1', null), 'The worktree is not on its branch `factory/issue-1` (HEAD is detached), so the factory did not push.');
+  assert.equal(reasons.notOnBranch('factory/issue-1', 'main'), 'The worktree is not on its branch `factory/issue-1` (HEAD is on `main`), so the factory did not push.');
+  assert.equal(reasons.readOnlyChanged('gate'), 'The gate step is read-only but changed files in the worktree.');
+  assert.equal(reasons.mergeUnresolved('Gave up.'), 'The merge is still unresolved. The worktree is left mid-merge.\n\nGave up.');
+  assert.equal(reasons.stepFailed('gate', 'timed out after 45 min'), 'The gate step failed: timed out after 45 min');
 });

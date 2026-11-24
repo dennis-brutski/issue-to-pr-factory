@@ -1,227 +1,600 @@
-import { test, beforeEach } from 'node:test';
+import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run } from '../lib/exec.mjs';
+import { workspace } from '../lib/workspace.mjs';
 import * as ws from '../lib/workspace.mjs';
+import { fakeWorkspace } from './fakes/workspace.mjs';
 
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid'];
-const git = async (dir, ...args) => {
-  const r = await run('git', ['-C', dir, ...ID, ...args]);
-  assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
-  return r.stdout.trim();
-};
-const commitFile = async (dir, name, content = 'x') => {
-  writeFileSync(join(dir, name), content);
-  await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', `add ${name}`);
-};
 
-let root, origin, seed;
-beforeEach(async () => {
-  const base = mkdtempSync(join(tmpdir(), 'factory-ws-'));
-  origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
-  await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
-  await run('git', ['init', '-q', '-b', 'master', seed]);
-  writeFileSync(join(seed, 'a.txt'), 'one\n');
-  await run('mkdir', ['-p', join(seed, 'test/unit')]);
-  writeFileSync(join(seed, 'test/unit/stats.test.js'), 'a long enough test file body to be detected as a rename\n'.repeat(5));
-  await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
-  await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
-  await run('mkdir', ['-p', root]);
-  await ws.ensureClone(root, origin);
-});
+describe('worktrees and branches', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const commitFile = async (dir, name, content = 'x') => {
+    writeFileSync(join(dir, name), content);
+    await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', `add ${name}`);
+  };
 
-test('paths are derived from the issue number', () => {
-  const p = ws.paths('/f', 7);
-  assert.deepEqual(p, { clone: '/f/repo', worktree: '/f/worktrees/issue-7', logs: '/f/logs/issue-7', branch: 'factory/issue-7' });
-});
-test('ensureClone is idempotent and fetches', async () => {
-  await commitFile(seed, 'later.txt'); await git(seed, 'push', '-q', 'origin', 'master');
-  await ws.ensureClone(root, origin);
-  const { dir } = await ws.ensureWorktree(root, 1, 'master');
-  assert.ok(existsSync(join(dir, 'later.txt')));
-});
-test('ensureWorktree creates the branch from origin/master', async () => {
-  const { dir, created } = await ws.ensureWorktree(root, 7, 'master');
-  assert.equal(created, true);
-  assert.equal(await git(dir, 'branch', '--show-current'), 'factory/issue-7');
-  assert.deepEqual(await ws.changesAgainstBase(dir, 'master'), []);
-});
-test('ensureWorktree reuses an existing worktree and its commits', async () => {
-  const a = await ws.ensureWorktree(root, 7, 'master'); await commitFile(a.dir, 'x.txt');
-  const b = await ws.ensureWorktree(root, 7, 'master');
-  assert.equal(b.created, false);
-  assert.deepEqual(await ws.changesAgainstBase(b.dir, 'master'), [{ status: 'A', path: 'x.txt' }]);
-});
-test('ensureWorktree starts from the remote branch when one exists', async () => {
-  await git(seed, 'checkout', '-q', '-b', 'factory/issue-8'); await commitFile(seed, 'earlier.txt');
-  await git(seed, 'push', '-q', 'origin', 'factory/issue-8');
-  const { dir } = await ws.ensureWorktree(root, 8, 'master');
-  assert.ok(existsSync(join(dir, 'earlier.txt')));
-});
-test('changesAgainstBase reports renames with oldPath', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master');
-  await git(dir, 'mv', 'test/unit/stats.test.js', 'moved.js'); await git(dir, 'commit', '-q', '-m', 'mv');
-  assert.deepEqual(await ws.changesAgainstBase(dir, 'master'), [{ status: 'R', oldPath: 'test/unit/stats.test.js', path: 'moved.js' }]);
-});
-test('commitMessagesAgainstBase returns full messages of new commits only', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master');
-  writeFileSync(join(dir, 'y.txt'), 'y'); await git(dir, 'add', '-A');
-  await git(dir, 'commit', '-q', '-m', 'Subject line', '-m', 'Co-Authored-By: X <x@example.invalid>');
-  const msgs = await ws.commitMessagesAgainstBase(dir, 'master');
-  assert.equal(msgs.length, 1);
-  assert.match(msgs[0], /Subject line[\s\S]*Co-Authored-By/);
-});
-test('isClean notices untracked and modified files', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master');
-  assert.equal(await ws.isClean(dir), true);
-  writeFileSync(join(dir, 'stray.txt'), 's');
-  assert.equal(await ws.isClean(dir), false);
-});
-test('headInfo returns sha and commit time', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master');
-  const h = await ws.headInfo(dir);
-  assert.match(h.sha, /^[0-9a-f]{40}$/);
-  assert.ok(!Number.isNaN(Date.parse(h.committedAt)));
-});
-test('mergeBase is clean when master moved without conflict', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'x.txt');
-  await commitFile(seed, 'other.txt'); await git(seed, 'push', '-q', 'origin', 'master');
-  assert.equal(await ws.mergeBase(dir, 'master'), 'clean');
-  assert.ok(existsSync(join(dir, 'other.txt')));
-  assert.equal(await ws.mergeResolved(dir), true);
-});
-test('mergeBase reports conflict and mergeResolved is false until resolved', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'a.txt', 'mine\n');
-  await commitFile(seed, 'a.txt', 'theirs\n'); await git(seed, 'push', '-q', 'origin', 'master');
-  assert.equal(await ws.mergeBase(dir, 'master'), 'conflict');
-  assert.equal(await ws.mergeResolved(dir), false);
-  writeFileSync(join(dir, 'a.txt'), 'both\n'); await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', 'merge');
-  assert.equal(await ws.mergeResolved(dir), true);
-});
-test('mergeBase continues a merge that is already in progress', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'a.txt', 'mine\n');
-  await commitFile(seed, 'a.txt', 'theirs\n'); await git(seed, 'push', '-q', 'origin', 'master');
-  await ws.mergeBase(dir, 'master');
-  assert.equal(await ws.mergeBase(dir, 'master'), 'conflict');
-});
-test('push publishes the branch and never forces', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'x.txt');
-  await ws.push(dir, 'factory/issue-7', (await ws.headInfo(dir)).sha);
-  assert.match(await git(seed, 'ls-remote', origin, 'factory/issue-7'), /factory\/issue-7/);
-  await git(dir, 'commit', '-q', '--amend', '-m', 'rewritten');
-  await assert.rejects(ws.push(dir, 'factory/issue-7', (await ws.headInfo(dir)).sha));
-});
-test('removeWorktree leaves no directory and no local branch', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master');
-  writeFileSync(join(dir, 'stray.txt'), 's');
-  await ws.removeWorktree(root, 7);
-  assert.equal(existsSync(dir), false);
-  assert.equal(await git(join(root, 'repo'), 'branch', '--list', 'factory/issue-7'), '');
-  assert.deepEqual(await ws.listWorktrees(root), []);
-});
-test('listWorktrees returns issue numbers on disk', async () => {
-  await ws.ensureWorktree(root, 7, 'master'); await ws.ensureWorktree(root, 12, 'master');
-  assert.deepEqual((await ws.listWorktrees(root)).sort((a, b) => a - b), [7, 12]);
-});
-test('ensureWorktree removes sandbox placeholders a killed session left, and nothing else', async () => {
-  const { dir } = await ws.ensureWorktree(root, 3, 'master');
-  const { mkdirSync, chmodSync } = await import('node:fs');
-  mkdirSync(join(dir, '.claude/.cc-writes'), { recursive: true });
-  for (const f of ['.bashrc', '.gitconfig', '.claude/settings.json']) { writeFileSync(join(dir, f), ''); chmodSync(join(dir, f), 0o444); }
-  writeFileSync(join(dir, 'wip.js'), 'unfinished work');   // the agent's own work
-  writeFileSync(join(dir, 'empty.txt'), '');               // empty but writable: not a placeholder
-  await ws.ensureWorktree(root, 3, 'master');
-  for (const f of ['.bashrc', '.gitconfig', '.claude']) assert.ok(!existsSync(join(dir, f)), f);
-  assert.ok(existsSync(join(dir, 'wip.js')) && existsSync(join(dir, 'empty.txt')));
-});
-test('ensureWorktree removes a sandbox placeholder config.lock from the clone', async () => {
-  const { chmodSync } = await import('node:fs');
-  const lock = join(root, 'repo', '.git', 'config.lock');
-  writeFileSync(lock, ''); chmodSync(lock, 0o444);
-  const { created } = await ws.ensureWorktree(root, 4, 'master');
-  assert.ok(created && !existsSync(lock));
-});
-test('changesAgainstBase with a commit lists only what changed after it', async () => {
-  const { dir } = await ws.ensureWorktree(root, 5, 'master');
-  await commitFile(dir, 'first.txt');
-  const { sha } = await ws.headInfo(dir);
-  await commitFile(dir, 'second.txt');
-  assert.deepEqual((await ws.changesAgainstBase(dir, 'master', sha)).map((c) => c.path), ['second.txt']);
-  assert.deepEqual((await ws.changesAgainstBase(dir, 'master')).map((c) => c.path), ['first.txt', 'second.txt']);
-});
-test('pathsOnBase lists files and their folders on the remote base branch', async () => {
-  const paths = await ws.pathsOnBase(join(root, 'repo'), 'master');
-  assert.ok(paths.has('a.txt') && paths.has('test/') && paths.has('test/unit/') && paths.has('test/unit/stats.test.js'));
-  assert.ok(!paths.has('missing/'));
-});
-test('ignoredOnBase names the paths the base branch .gitignore ignores, folders by their contents', async () => {
-  await commitFile(seed, '.gitignore', 'targets/*\n!targets/kept.mjs\nlocal.mjs\nlogs/\n'); await git(seed, 'push', '-q', 'origin', 'master');
-  await ws.ensureClone(root, origin);
-  const ignored = await ws.ignoredOnBase(join(root, 'repo'), 'master', ['targets/', 'local.mjs', 'logs/', 'targets/kept.mjs', 'spec/', 'a.txt']);
-  assert.deepEqual([...ignored].sort(), ['local.mjs', 'logs/', 'targets/']);
-});
-test('ignoredOnBase is empty without a .gitignore on the base branch', async () => {
-  assert.deepEqual([...await ws.ignoredOnBase(join(root, 'repo'), 'master', ['targets/'])], []);
-});
-test('hasRemoteBranch tells whether the base branch exists', async () => {
-  assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'master'), true);
-  assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'nope'), false);
-});
-test('push sends the given commit, not whatever the branch ref points at', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master');
-  await commitFile(dir, 'checked.txt');
-  const checked = (await ws.headInfo(dir)).sha;
-  await commitFile(dir, 'sneaked.txt'); // moves the branch ref past what was checked
-  await ws.push(dir, 'factory/issue-7', checked);
-  assert.equal((await git(seed, 'ls-remote', origin, 'refs/heads/factory/issue-7')).split('\t')[0], checked);
-});
-test('currentBranch names the checked-out branch, null when HEAD is detached', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master');
-  assert.equal(await ws.currentBranch(dir), 'factory/issue-7');
-  await git(dir, 'checkout', '-q', '--detach');
-  assert.equal(await ws.currentBranch(dir), null);
-});
-test('a tampered .git link is refused', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master');
-  await ws.checkGitLink(root, 7);
-  writeFileSync(join(dir, '.git'), 'gitdir: ./.x\n');
-  await assert.rejects(ws.checkGitLink(root, 7), /\.git link .* was changed/);
-  await assert.rejects(ws.ensureWorktree(root, 7, 'master'), /\.git link .* was changed/);
-});
-test('checkCloneConfig accepts a plain clone with worktrees', async () => {
-  await ws.ensureWorktree(root, 7, 'master');
-  await ws.checkCloneConfig(root, origin);
-});
-for (const [what, args] of [
-  ['a credential helper', ['credential.helper', '!touch /tmp/pwned']],
-  ['an external diff', ['diff.external', 'sh -c x']],
-  ['a merge driver', ['merge.x.driver', 'sh -c x']],
-  ['an include', ['include.path', '/tmp/x']],
-  ['a push URL', ['remote.origin.pushurl', 'https://example.com/x.git']],
-]) {
-  test(`checkCloneConfig refuses ${what}`, async () => {
-    await git(join(root, 'repo'), 'config', ...args);
-    await assert.rejects(ws.checkCloneConfig(root, origin), /clone's git config .* was changed/);
+  let root, origin, seed;
+  beforeEach(async () => {
+    const base = mkdtempSync(join(tmpdir(), 'factory-ws-'));
+    origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    writeFileSync(join(seed, 'a.txt'), 'one\n');
+    await run('mkdir', ['-p', join(seed, 'test/unit')]);
+    writeFileSync(join(seed, 'test/unit/stats.test.js'), 'a long enough test file body to be detected as a rename\n'.repeat(5));
+    await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    await run('mkdir', ['-p', root]);
+    await ws.ensureClone(root, origin);
   });
-}
-test('checkCloneConfig refuses a changed origin', async () => {
-  await git(join(root, 'repo'), 'remote', 'set-url', 'origin', 'https://example.com/x.git');
-  await assert.rejects(ws.checkCloneConfig(root, origin), /origin/);
+
+  test('paths are derived from the issue number', () => {
+    const p = ws.paths('/f', 7);
+    assert.deepEqual(p, { clone: '/f/repo', worktree: '/f/worktrees/issue-7', logs: '/f/logs/issue-7', branch: 'factory/issue-7' });
+  });
+  test('ensureClone is idempotent and fetches', async () => {
+    await commitFile(seed, 'later.txt'); await git(seed, 'push', '-q', 'origin', 'master');
+    await ws.ensureClone(root, origin);
+    const { dir } = await ws.ensureWorktree(root, 1, 'master');
+    assert.ok(existsSync(join(dir, 'later.txt')));
+  });
+  test('ensureWorktree creates the branch from origin/master', async () => {
+    const { dir, created } = await ws.ensureWorktree(root, 7, 'master');
+    assert.equal(created, true);
+    assert.equal(await git(dir, 'branch', '--show-current'), 'factory/issue-7');
+    assert.deepEqual(await ws.changesAgainstBase(dir, 'master'), []);
+  });
+  test('ensureWorktree reuses an existing worktree and its commits', async () => {
+    const a = await ws.ensureWorktree(root, 7, 'master'); await commitFile(a.dir, 'x.txt');
+    const b = await ws.ensureWorktree(root, 7, 'master');
+    assert.equal(b.created, false);
+    assert.deepEqual(await ws.changesAgainstBase(b.dir, 'master'), [{ status: 'A', path: 'x.txt' }]);
+  });
+  test('ensureWorktree starts from the remote branch when one exists', async () => {
+    await git(seed, 'checkout', '-q', '-b', 'factory/issue-8'); await commitFile(seed, 'earlier.txt');
+    await git(seed, 'push', '-q', 'origin', 'factory/issue-8');
+    const { dir } = await ws.ensureWorktree(root, 8, 'master');
+    assert.ok(existsSync(join(dir, 'earlier.txt')));
+  });
+  test('changesAgainstBase reports renames with oldPath', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await git(dir, 'mv', 'test/unit/stats.test.js', 'moved.js'); await git(dir, 'commit', '-q', '-m', 'mv');
+    assert.deepEqual(await ws.changesAgainstBase(dir, 'master'), [{ status: 'R', oldPath: 'test/unit/stats.test.js', path: 'moved.js' }]);
+  });
+  test('commitMessagesAgainstBase returns full messages of new commits only', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    writeFileSync(join(dir, 'y.txt'), 'y'); await git(dir, 'add', '-A');
+    await git(dir, 'commit', '-q', '-m', 'Subject line', '-m', 'Co-Authored-By: X <x@example.invalid>');
+    const msgs = await ws.commitMessagesAgainstBase(dir, 'master');
+    assert.equal(msgs.length, 1);
+    assert.match(msgs[0], /Subject line[\s\S]*Co-Authored-By/);
+  });
+  test('isClean notices untracked and modified files', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    assert.equal(await ws.isClean(dir), true);
+    writeFileSync(join(dir, 'stray.txt'), 's');
+    assert.equal(await ws.isClean(dir), false);
+  });
+  test('headInfo returns sha and commit time', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    const h = await ws.headInfo(dir);
+    assert.match(h.sha, /^[0-9a-f]{40}$/);
+    assert.ok(!Number.isNaN(Date.parse(h.committedAt)));
+  });
+  test('mergeBase is clean when master moved without conflict', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'x.txt');
+    await commitFile(seed, 'other.txt'); await git(seed, 'push', '-q', 'origin', 'master');
+    assert.equal(await ws.mergeBase(dir, 'master'), 'clean');
+    assert.ok(existsSync(join(dir, 'other.txt')));
+    assert.equal(await ws.mergeResolved(dir), true);
+  });
+  test('mergeBase reports conflict and mergeResolved is false until resolved', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'a.txt', 'mine\n');
+    await commitFile(seed, 'a.txt', 'theirs\n'); await git(seed, 'push', '-q', 'origin', 'master');
+    assert.equal(await ws.mergeBase(dir, 'master'), 'conflict');
+    assert.equal(await ws.mergeResolved(dir), false);
+    writeFileSync(join(dir, 'a.txt'), 'both\n'); await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', 'merge');
+    assert.equal(await ws.mergeResolved(dir), true);
+  });
+  test('mergeBase continues a merge that is already in progress', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'a.txt', 'mine\n');
+    await commitFile(seed, 'a.txt', 'theirs\n'); await git(seed, 'push', '-q', 'origin', 'master');
+    await ws.mergeBase(dir, 'master');
+    assert.equal(await ws.mergeBase(dir, 'master'), 'conflict');
+  });
+  test('push publishes the branch and never forces', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'x.txt');
+    await ws.push(dir, 'factory/issue-7', (await ws.headInfo(dir)).sha);
+    assert.match(await git(seed, 'ls-remote', origin, 'factory/issue-7'), /factory\/issue-7/);
+    await git(dir, 'commit', '-q', '--amend', '-m', 'rewritten');
+    await assert.rejects(ws.push(dir, 'factory/issue-7', (await ws.headInfo(dir)).sha));
+  });
+  test('removeWorktree leaves no directory and no local branch', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    writeFileSync(join(dir, 'stray.txt'), 's');
+    await ws.removeWorktree(root, 7);
+    assert.equal(existsSync(dir), false);
+    assert.equal(await git(join(root, 'repo'), 'branch', '--list', 'factory/issue-7'), '');
+    assert.deepEqual(await ws.listWorktrees(root), []);
+  });
+  test('listWorktrees returns issue numbers on disk', async () => {
+    await ws.ensureWorktree(root, 7, 'master'); await ws.ensureWorktree(root, 12, 'master');
+    assert.deepEqual((await ws.listWorktrees(root)).sort((a, b) => a - b), [7, 12]);
+  });
+  test('ensureWorktree removes sandbox placeholders a killed session left, and nothing else', async () => {
+    const { dir } = await ws.ensureWorktree(root, 3, 'master');
+    const { mkdirSync, chmodSync } = await import('node:fs');
+    mkdirSync(join(dir, '.claude/.cc-writes'), { recursive: true });
+    for (const f of ['.bashrc', '.gitconfig', '.claude/settings.json']) { writeFileSync(join(dir, f), ''); chmodSync(join(dir, f), 0o444); }
+    writeFileSync(join(dir, 'wip.js'), 'unfinished work');   // the agent's own work
+    writeFileSync(join(dir, 'empty.txt'), '');               // empty but writable: not a placeholder
+    await ws.ensureWorktree(root, 3, 'master');
+    for (const f of ['.bashrc', '.gitconfig', '.claude']) assert.ok(!existsSync(join(dir, f)), f);
+    assert.ok(existsSync(join(dir, 'wip.js')) && existsSync(join(dir, 'empty.txt')));
+  });
+  test('ensureWorktree removes a sandbox placeholder config.lock from the clone', async () => {
+    const { chmodSync } = await import('node:fs');
+    const lock = join(root, 'repo', '.git', 'config.lock');
+    writeFileSync(lock, ''); chmodSync(lock, 0o444);
+    const { created } = await ws.ensureWorktree(root, 4, 'master');
+    assert.ok(created && !existsSync(lock));
+  });
+  test('changesAgainstBase with a commit lists only what changed after it', async () => {
+    const { dir } = await ws.ensureWorktree(root, 5, 'master');
+    await commitFile(dir, 'first.txt');
+    const { sha } = await ws.headInfo(dir);
+    await commitFile(dir, 'second.txt');
+    assert.deepEqual((await ws.changesAgainstBase(dir, 'master', sha)).map((c) => c.path), ['second.txt']);
+    assert.deepEqual((await ws.changesAgainstBase(dir, 'master')).map((c) => c.path), ['first.txt', 'second.txt']);
+  });
+  test('pathsOnBase lists files and their folders on the remote base branch', async () => {
+    const paths = await ws.pathsOnBase(join(root, 'repo'), 'master');
+    assert.ok(paths.has('a.txt') && paths.has('test/') && paths.has('test/unit/') && paths.has('test/unit/stats.test.js'));
+    assert.ok(!paths.has('missing/'));
+  });
+  test('ignoredOnBase names the paths the base branch .gitignore ignores, folders by their contents', async () => {
+    await commitFile(seed, '.gitignore', 'targets/*\n!targets/kept.mjs\nlocal.mjs\nlogs/\n'); await git(seed, 'push', '-q', 'origin', 'master');
+    await ws.ensureClone(root, origin);
+    const ignored = await ws.ignoredOnBase(join(root, 'repo'), 'master', ['targets/', 'local.mjs', 'logs/', 'targets/kept.mjs', 'spec/', 'a.txt']);
+    assert.deepEqual([...ignored].sort(), ['local.mjs', 'logs/', 'targets/']);
+  });
+  test('ignoredOnBase is empty without a .gitignore on the base branch', async () => {
+    assert.deepEqual([...await ws.ignoredOnBase(join(root, 'repo'), 'master', ['targets/'])], []);
+  });
+  test('hasRemoteBranch tells whether the base branch exists', async () => {
+    assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'master'), true);
+    assert.equal(await ws.hasRemoteBranch(join(root, 'repo'), 'nope'), false);
+  });
+  test('push sends the given commit, not whatever the branch ref points at', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await commitFile(dir, 'checked.txt');
+    const checked = (await ws.headInfo(dir)).sha;
+    await commitFile(dir, 'sneaked.txt'); // moves the branch ref past what was checked
+    await ws.push(dir, 'factory/issue-7', checked);
+    assert.equal((await git(seed, 'ls-remote', origin, 'refs/heads/factory/issue-7')).split('\t')[0], checked);
+  });
+  test('currentBranch names the checked-out branch, null when HEAD is detached', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    assert.equal(await ws.currentBranch(dir), 'factory/issue-7');
+    await git(dir, 'checkout', '-q', '--detach');
+    assert.equal(await ws.currentBranch(dir), null);
+  });
+  test('a tampered .git link is refused', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await ws.checkGitLink(root, 7);
+    writeFileSync(join(dir, '.git'), 'gitdir: ./.x\n');
+    await assert.rejects(ws.checkGitLink(root, 7), /\.git link .* was changed/);
+    await assert.rejects(ws.ensureWorktree(root, 7, 'master'), /\.git link .* was changed/);
+  });
+  test('checkCloneConfig accepts a plain clone with worktrees', async () => {
+    await ws.ensureWorktree(root, 7, 'master');
+    await ws.checkCloneConfig(root, origin);
+  });
+  for (const [what, args] of [
+    ['a credential helper', ['credential.helper', '!touch /tmp/pwned']],
+    ['an external diff', ['diff.external', 'sh -c x']],
+    ['a merge driver', ['merge.x.driver', 'sh -c x']],
+    ['an include', ['include.path', '/tmp/x']],
+    ['a push URL', ['remote.origin.pushurl', 'https://example.com/x.git']],
+  ]) {
+    test(`checkCloneConfig refuses ${what}`, async () => {
+      await git(join(root, 'repo'), 'config', ...args);
+      await assert.rejects(ws.checkCloneConfig(root, origin), /clone's git config .* was changed/);
+    });
+  }
+  test('checkCloneConfig refuses a changed origin', async () => {
+    await git(join(root, 'repo'), 'remote', 'set-url', 'origin', 'https://example.com/x.git');
+    await assert.rejects(ws.checkCloneConfig(root, origin), /origin/);
+  });
+  test('a redirected commondir is refused', async () => {
+    await ws.ensureWorktree(root, 7, 'master');
+    writeFileSync(join(root, 'repo', '.git', 'worktrees', 'issue-7', 'commondir'), '/tmp/elsewhere\n');
+    await assert.rejects(ws.checkGitLink(root, 7), /commondir/);
+  });
+  test('abortMerge leaves a worktree that was mid-merge clean, at its old commit', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'a.txt', 'mine\n');
+    const before = (await ws.headInfo(dir)).sha;
+    await commitFile(seed, 'a.txt', 'theirs\n'); await git(seed, 'push', '-q', 'origin', 'master');
+    assert.equal(await ws.mergeBase(dir, 'master'), 'conflict');
+    await ws.abortMerge(dir);
+    assert.equal(await ws.isClean(dir), true);
+    assert.equal(await ws.mergeResolved(dir), true);
+    assert.equal((await ws.headInfo(dir)).sha, before);
+  });
 });
-test('a redirected commondir is refused', async () => {
-  await ws.ensureWorktree(root, 7, 'master');
-  writeFileSync(join(root, 'repo', '.git', 'worktrees', 'issue-7', 'commondir'), '/tmp/elsewhere\n');
-  await assert.rejects(ws.checkGitLink(root, 7), /commondir/);
+
+// attachBranch puts a worktree whose HEAD an agent detached back on its branch, but only when HEAD builds on it.
+describe('detached HEAD', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const commitFile = async (dir, name) => { writeFileSync(join(dir, name), name); await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', `add ${name}`); };
+
+  let root;
+  beforeEach(async () => {
+    const base = mkdtempSync(join(tmpdir(), 'factory-attach-'));
+    const origin = join(base, 'origin.git'), seed = join(base, 'seed');
+    root = join(base, 'factory');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    await commitFile(seed, 'a.txt');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    await ws.ensureClone(root, origin);
+  });
+
+  test('a detached HEAD on top of the branch is put back on the branch', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await git(dir, 'checkout', '-q', '--detach');
+    await commitFile(dir, 'work.txt');
+    const head = (await ws.headInfo(dir)).sha;
+    assert.equal(await ws.attachBranch(dir, 'factory/issue-7'), true);
+    assert.equal(await ws.currentBranch(dir), 'factory/issue-7');
+    assert.equal((await ws.headInfo(dir)).sha, head);
+  });
+
+  test('a detached HEAD that does not contain the branch tip stays as it is', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await commitFile(dir, 'on-branch.txt');
+    await git(dir, 'checkout', '-q', '--detach', 'HEAD~1');
+    await commitFile(dir, 'elsewhere.txt');
+    assert.equal(await ws.attachBranch(dir, 'factory/issue-7'), false);
+    assert.equal(await ws.currentBranch(dir), null);
+  });
+
+  test('a worktree already on a branch is left alone', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await git(dir, 'checkout', '-q', '-b', 'other');
+    assert.equal(await ws.attachBranch(dir, 'factory/issue-7'), false);
+    assert.equal(await ws.currentBranch(dir), 'other');
+  });
 });
-test('abortMerge leaves a worktree that was mid-merge clean, at its old commit', async () => {
-  const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'a.txt', 'mine\n');
-  const before = (await ws.headInfo(dir)).sha;
-  await commitFile(seed, 'a.txt', 'theirs\n'); await git(seed, 'push', '-q', 'origin', 'master');
-  assert.equal(await ws.mergeBase(dir, 'master'), 'conflict');
-  await ws.abortMerge(dir);
-  assert.equal(await ws.isClean(dir), true);
-  assert.equal(await ws.mergeResolved(dir), true);
-  assert.equal((await ws.headInfo(dir)).sha, before);
+
+// What the branch changes is measured against the base commit on the remote,
+// never against the clone's origin ref, which agents can move.
+describe('moved base ref', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const commitFile = async (dir, name, content = 'x', message = `add ${name}`) => {
+    writeFileSync(join(dir, name), content);
+    await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', message);
+  };
+
+  let root, origin, seed;
+  beforeEach(async () => {
+    const base = mkdtempSync(join(tmpdir(), 'factory-wsb-'));
+    origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    writeFileSync(join(seed, 'a.txt'), 'one\n');
+    await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    await run('mkdir', ['-p', root]);
+    await ws.ensureClone(root, origin);
+  });
+
+  test('a moved origin ref does not hide what the branch changes', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await commitFile(dir, 'b.txt', 'x', 'Add b\n\nCo-Authored-By: x <x@example.invalid>');
+    await git(dir, 'update-ref', 'refs/remotes/origin/master', 'HEAD');
+    assert.deepEqual(await ws.changesAgainstBase(dir, 'master'), [{ status: 'A', path: 'b.txt' }]);
+    assert.match(await ws.diffAgainstBase(dir, 'master', 'b.txt'), /\+x/);
+    assert.equal((await ws.commitMessagesAgainstBase(dir, 'master')).length, 1);
+  });
+
+  test('the base is the remote commit, even one the clone has not fetched', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await commitFile(seed, 'later.txt'); await git(seed, 'push', '-q', 'origin', 'master');
+    const sha = await git(seed, 'rev-parse', 'HEAD');
+    assert.equal(await ws.remoteBase(dir, 'master'), sha);
+    // The branch does not have later.txt, so against the new base nothing is added.
+    assert.deepEqual(await ws.changesAgainstBase(dir, 'master'), []);
+  });
+
+  test('remoteBase fails when the remote has no such branch', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await assert.rejects(ws.remoteBase(dir, 'nope'), /nope/);
+  });
+
+  test('a local read uses the clone\'s ref and never asks the remote', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await commitFile(dir, 'b.txt');
+    await git(join(root, 'repo'), 'remote', 'set-url', 'origin', join(root, 'missing.git'));
+    assert.equal((await ws.commitMessagesAgainstBase(dir, 'master', { local: true })).length, 1);
+  });
+
+  test('checkCloneConfig refuses a changed fetch refspec', async () => {
+    await git(join(root, 'repo'), 'config', 'remote.origin.fetch', '+refs/heads/x:refs/remotes/origin/x');
+    await assert.rejects(ws.checkCloneConfig(root, origin), /remote\.origin\.fetch/);
+  });
+
+  test('checkCloneConfig refuses an extra fetch refspec', async () => {
+    await git(join(root, 'repo'), 'config', '--add', 'remote.origin.fetch', '+refs/heads/master:refs/heads/elsewhere');
+    await assert.rejects(ws.checkCloneConfig(root, origin), /remote\.origin\.fetch/);
+  });
+
+  test('checkCloneConfig accepts a plain clone\'s fetch refspec', async () => {
+    assert.equal(await git(join(root, 'repo'), 'config', 'remote.origin.fetch'), '+refs/heads/*:refs/remotes/origin/*');
+    await ws.checkCloneConfig(root, origin);
+  });
+});
+
+// diffAgainstBase takes several paths, and a commit to diff from.
+describe('diff', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const commitFile = async (dir, name, content = 'x', message = `add ${name}`) => {
+    writeFileSync(join(dir, name), content);
+    await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', message);
+  };
+
+  let root, origin, seed;
+  beforeEach(async () => {
+    const base = mkdtempSync(join(tmpdir(), 'factory-wsd-'));
+    origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    writeFileSync(join(seed, 'a.txt'), 'one\n');
+    await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    await run('mkdir', ['-p', root]);
+    await ws.ensureClone(root, origin);
+  });
+
+  test('diffAgainstBase covers a list of paths, and only what changed since a commit', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await commitFile(dir, 'b.txt', 'bee');
+    const since = await git(dir, 'rev-parse', 'HEAD');
+    await commitFile(dir, 'c.txt', 'sea');
+    const both = await ws.diffAgainstBase(dir, 'master', ['b.txt', 'c.txt']);
+    assert.match(both, /\+bee/); assert.match(both, /\+sea/);
+    const later = await ws.diffAgainstBase(dir, 'master', ['b.txt', 'c.txt'], since);
+    assert.doesNotMatch(later, /\+bee/); assert.match(later, /\+sea/);
+  });
+});
+
+// The workspace handle checks the clone before every git command it runs:
+// agents can write the clone's config and a worktree's .git link.
+describe('handle guard', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const commitFile = async (dir, name, content = 'x', message = `add ${name}`) => {
+    writeFileSync(join(dir, name), content);
+    await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', message);
+  };
+
+  let root, origin, seed;
+  beforeEach(async () => {
+    const base = mkdtempSync(join(tmpdir(), 'factory-wsg-'));
+    origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    writeFileSync(join(seed, 'a.txt'), 'one\n');
+    await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    await run('mkdir', ['-p', root]);
+    await ws.ensureClone(root, origin);
+  });
+
+  const handle = () => workspace({ root, url: origin, base: 'master' });
+  const plant = () => git(join(root, 'repo'), 'config', 'credential.helper', '!touch /tmp/pwned');
+
+  test('the handle binds root, url and base: callers pass only the issue or worktree', async () => {
+    const h = handle();
+    const { dir } = await h.ensureWorktree(7);
+    assert.equal(dir, h.paths(7).worktree);
+    await commitFile(dir, 'b.txt');
+    assert.deepEqual(await h.changesAgainstBase(dir), [{ status: 'A', path: 'b.txt' }]);
+    assert.match(await h.diffAgainstBase(dir, ['b.txt']), /\+x/);
+    assert.equal((await h.commitMessagesAgainstBase(dir)).length, 1);
+    assert.equal(await h.currentBranch(dir), 'factory/issue-7');
+    assert.deepEqual(await h.listWorktrees(), [7]);
+  });
+
+  test('planted clone config stops every git command, worktree removal included', async () => {
+    const h = handle();
+    const { dir } = await h.ensureWorktree(7);
+    await plant();
+    for (const [name, call] of [['ensureWorktree', () => h.ensureWorktree(8)], ['headInfo', () => h.headInfo(dir)], ['isClean', () => h.isClean(dir)],
+      ['changesAgainstBase', () => h.changesAgainstBase(dir)], ['mergeBase', () => h.mergeBase(dir)], ['push', () => h.push(dir, 'factory/issue-7', 'abc')],
+      ['removeWorktree', () => h.removeWorktree(7)], ['ensureClone', () => h.ensureClone()], ['checkClone', () => h.checkClone()]])
+      await assert.rejects(call, /credential\.helper/, name);
+  });
+
+  test('a changed .git link stops git in that worktree', async () => {
+    const h = handle();
+    const { dir } = await h.ensureWorktree(7);
+    writeFileSync(join(dir, '.git'), 'gitdir: /tmp/elsewhere\n');
+    await assert.rejects(() => h.headInfo(dir), /\.git link/);
+    await assert.rejects(() => h.removeWorktree(7), /\.git link/);
+  });
+
+  test('a folder that is not one of the factory\'s worktrees is refused', async () => {
+    const h = handle();
+    await h.ensureWorktree(7);
+    await assert.rejects(() => h.headInfo(join(root, 'repo')), /not one of the factory's worktrees/);
+  });
+
+  test('the in-memory fake has exactly the methods of the real handle', () => {
+    assert.deepEqual(Object.keys(fakeWorkspace()).sort(), Object.keys(handle()).sort());
+  });
+});
+
+// The Claude sandbox leaves empty .claude/.cc-writes folders behind, also in subfolders where a session ran commands.
+describe('sandbox leftovers', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+  };
+
+  let root;
+  beforeEach(async () => {
+    const base = mkdtempSync(join(tmpdir(), 'factory-leftovers-'));
+    const origin = join(base, 'origin.git'), seed = join(base, 'seed');
+    root = join(base, 'factory');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    mkdirSync(join(seed, 'prompts'));
+    writeFileSync(join(seed, 'prompts', 'a.md'), 'a');
+    await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    await ws.ensureClone(root, origin);
+  });
+
+  test('empty .cc-writes folders in subfolders go, with their .claude folder when it is then empty', async () => {
+    const { dir } = await ws.ensureWorktree(root, 3, 'master');
+    mkdirSync(join(dir, 'prompts/.claude/.cc-writes'), { recursive: true });
+    mkdirSync(join(dir, 'a/b/.claude/.cc-writes'), { recursive: true });
+    await ws.removeSandboxLeftovers(dir);
+    assert.ok(!existsSync(join(dir, 'prompts/.claude')));
+    assert.ok(!existsSync(join(dir, 'a/b/.claude')));
+    assert.ok(existsSync(join(dir, 'prompts/a.md')));
+  });
+
+  test('a .claude folder with other content stays, and a .cc-writes folder that is not empty stays', async () => {
+    const { dir } = await ws.ensureWorktree(root, 3, 'master');
+    mkdirSync(join(dir, 'x/.claude/.cc-writes'), { recursive: true });
+    writeFileSync(join(dir, 'x/.claude/notes.md'), 'kept');
+    mkdirSync(join(dir, 'y/.claude/.cc-writes'), { recursive: true });
+    writeFileSync(join(dir, 'y/.claude/.cc-writes/f'), 'kept');
+    await ws.removeSandboxLeftovers(dir);
+    assert.ok(!existsSync(join(dir, 'x/.claude/.cc-writes')));
+    assert.ok(existsSync(join(dir, 'x/.claude/notes.md')));
+    assert.ok(existsSync(join(dir, 'y/.claude/.cc-writes/f')));
+  });
+
+  test('node_modules is not searched', async () => {
+    const { dir } = await ws.ensureWorktree(root, 3, 'master');
+    mkdirSync(join(dir, 'node_modules/p/.claude/.cc-writes'), { recursive: true });
+    await ws.removeSandboxLeftovers(dir);
+    assert.ok(existsSync(join(dir, 'node_modules/p/.claude/.cc-writes')));
+  });
+
+  test('a run start removes nested leftovers too', async () => {
+    const { dir } = await ws.ensureWorktree(root, 3, 'master');
+    mkdirSync(join(dir, 'prompts/.claude/.cc-writes'), { recursive: true });
+    await ws.ensureWorktree(root, 3, 'master');
+    assert.ok(!existsSync(join(dir, 'prompts/.claude')));
+  });
+});
+
+// Runs in one factory share the clone: their fetches must not trip over each other.
+describe('parallel runs', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const commitFile = async (dir, name, content = 'x', message = `add ${name}`) => {
+    writeFileSync(join(dir, name), content);
+    await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', message);
+  };
+
+  let root, origin, seed;
+  beforeEach(async () => {
+    const base = mkdtempSync(join(tmpdir(), 'factory-wsp-'));
+    origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    writeFileSync(join(seed, 'a.txt'), 'one\n');
+    await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    await run('mkdir', ['-p', root]);
+    await ws.ensureClone(root, origin);
+  });
+
+  test('parallel runs fetching the moved base all succeed', async () => {
+    for (let i = 0; i < 3; i++) {
+      await commitFile(seed, `m${i}.txt`); await git(seed, 'push', '-q', 'origin', 'master');
+      await Promise.all([1, 2, 3, 4, 5, 6].map((n) => ws.ensureWorktree(root, n, 'master')));
+    }
+  });
+
+  test('git errors carry no grafts deprecation hint', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await assert.rejects(() => ws.push(dir, 'factory/issue-7', 'dead'.repeat(10)), (e) => !/grafts is deprecated/.test(e.message));
+  });
+});
+
+// Replace refs and grafts in the clone must not change what the factory's git sees.
+describe('replace refs and grafts', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+
+  let root, dir;
+  beforeEach(async () => {
+    const base = mkdtempSync(join(tmpdir(), 'factory-replace-'));
+    const origin = join(base, 'origin.git'), seed = join(base, 'seed');
+    root = join(base, 'factory');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    writeFileSync(join(seed, 'a.txt'), 'one\n');
+    await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    mkdirSync(root, { recursive: true });
+    await ws.ensureClone(root, origin);
+    ({ dir } = await ws.ensureWorktree(root, 1, 'master'));
+    mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
+    writeFileSync(join(dir, '.github', 'workflows', 'ci.yml'), 'on: push\n');
+    await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', 'Add CI');
+  });
+
+  test('a replace ref does not hide what the branch changes', async () => {
+    // A commit like the head, but without the workflow change.
+    const fake = await git(dir, 'commit-tree', 'origin/master^{tree}', '-p', 'origin/master', '-m', 'Add CI');
+    await git(dir, 'replace', 'HEAD', fake);
+    assert.deepEqual((await run('git', ['-C', dir, 'diff', '--name-only', 'origin/master...HEAD'])).stdout, '');
+    assert.deepEqual((await ws.changesAgainstBase(dir, 'master')).map((c) => c.path), ['.github/workflows/ci.yml']);
+    assert.match(await ws.diffAgainstBase(dir, 'master', '.github'), /on: push/);
+    assert.deepEqual(await ws.commitMessagesAgainstBase(dir, 'master'), ['Add CI']);
+  });
+
+  test('a grafts file does not hide what the branch changes', async () => {
+    const baseSha = await git(dir, 'rev-parse', 'origin/master'), head = await git(dir, 'rev-parse', 'HEAD');
+    mkdirSync(join(root, 'repo', '.git', 'info'), { recursive: true });
+    writeFileSync(join(root, 'repo', '.git', 'info', 'grafts'), `${baseSha} ${head}\n`);
+    assert.deepEqual((await ws.changesAgainstBase(dir, 'master')).map((c) => c.path), ['.github/workflows/ci.yml']);
+    assert.deepEqual(await ws.commitMessagesAgainstBase(dir, 'master'), ['Add CI']);
+  });
 });

@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
 import { screen } from '../lib/screen.mjs';
@@ -204,3 +204,324 @@ test('session ended keeps its padding when columns is known', () => noColour(() 
   const { show } = setup({ columns: 100 });
   assert.equal(show(T, '#39 gate session ended · 4 turns · 6s · ≈ $0.13'), `${T}  #39 │   gate       ·   4 turns ·      6s ·  ≈ $0.13`);
 }));
+
+describe('colours', () => {
+  const T = '12:00:00';
+
+  // A stream that answers hasColors(depth) like a terminal with `depth` colours (0: no colour).
+  function fakeStream(depth) {
+    const stream = new PassThrough();
+    stream.hasColors = (count = 16) => depth >= count;
+    return stream;
+  }
+
+  // styleText also colours the time; keep the environment from forcing it, so only the stream decides.
+  function plainEnv(fn) {
+    const { FORCE_COLOR, NO_COLOR } = process.env;
+    delete process.env.FORCE_COLOR;
+    delete process.env.NO_COLOR;
+    try { fn(); } finally {
+      if (FORCE_COLOR !== undefined) process.env.FORCE_COLOR = FORCE_COLOR;
+      if (NO_COLOR !== undefined) process.env.NO_COLOR = NO_COLOR;
+    }
+  }
+
+  const tagOf = (depth, n, stream = fakeStream(depth)) =>
+    screen({ repo: 'o/r', columns: 100, stream })(T, `#${n} implement started`);
+  const code256 = (s) => s.match(/\u001b\[38;5;(\d+)m#\d+/)?.[1];
+
+  // Hard to read on a dark background, or the same as a line tone (cyan, green, yellow, red).
+  const DENY = ['4', '6', '12', '14', '18', '19', '20', '21', '2', '3', '1'];
+
+  test('with 256 colours, the issue tag carries a 256-colour code', () => plainEnv(() => {
+    const out = tagOf(256, 56);
+    assert.ok(code256(out), JSON.stringify(out));
+    assert.match(out, /#56\s*\u001b\[39m │/);
+  }));
+
+  test('with 256 colours, six issues in a row get six different readable codes', () => plainEnv(() => {
+    for (const start of [54, 55, 60]) {
+      const codes = Array.from({ length: 6 }, (_, i) => code256(tagOf(256, start + i)));
+      assert.equal(new Set(codes).size, 6, JSON.stringify(codes));
+      for (const c of codes) assert.ok(c && !DENY.includes(c), `code ${c} is hard to read or clashes with a tone`);
+    }
+  }));
+
+  test('with 16 colours, the issue tag is bold without a colour code', () => plainEnv(() => {
+    const out = tagOf(16, 56);
+    assert.match(out, /\u001b\[1m#56\s*\u001b\[22m │/);
+    assert.doesNotMatch(out, /\u001b\[(3\d|9\d|38;5;\d+)m#56/);
+  }));
+
+  test('without colour, no escape codes at all', () => plainEnv(() => {
+    const out = tagOf(0, 56);
+    assert.ok(!out.includes('\u001b'), JSON.stringify(out));
+    assert.equal(out, `${T}  #56 │ ▶ implement started`);
+  }));
+
+  test('the same issue gets the same code on two screens', () => plainEnv(() => {
+    assert.equal(code256(tagOf(256, 57)), code256(tagOf(256, 57)));
+    assert.equal(code256(tagOf(256, 57)), code256(tagOf(256, 63)), 'picked by n % 6');
+  }));
+});
+
+describe('aligned columns', () => {
+  const T = '23:45:47';
+
+  const setup = (columns) => screen({ repo: 'o/r', columns, stream: new PassThrough(), now: () => 0 }).bind(null, T);
+
+  // Where each " · " starts in a line.
+  const dots = (line) => [...line.matchAll(/ · /g)].map((m) => m.index);
+
+  const GATE = '#47 gate session ended · 3 turns · 3s · 37k in (63% cached) · 260 out · ≈ $0.06';
+  const IMPL = '#47 implement session ended · 13 turns · 51s · 280k in (90% cached) · 3.9k out · ≈ $0.35';
+
+  test('on a terminal, the parts of session lines line up', () => noColour(() => {
+    const show = setup(100);
+    const a = show(GATE), b = show(IMPL);
+    assert.equal(dots(a).length, 5);
+    assert.deepEqual(dots(a), dots(b), `\n${a}\n${b}`);
+  }));
+
+  test('on a terminal, the session name lines up with the text after the run icon', () => noColour(() => {
+    const show = setup(100);
+    const run = show('#47 implement started');
+    const s = show(GATE);
+    assert.equal(s.indexOf('gate'), run.indexOf('implement'), `\n${run}\n${s}`);
+  }));
+
+  test('on a terminal, 1 turn lines up with 13 turns', () => noColour(() => {
+    const show = setup(100);
+    const a = show('#47 gate session ended · 1 turn · 3s · ≈ $0.01');
+    const b = show('#47 gate session ended · 13 turns · 3s · ≈ $0.01');
+    assert.deepEqual(dots(a), dots(b), `\n${a}\n${b}`);
+    assert.match(a, / {2}1 turn  · /);
+  }));
+
+  test('on a terminal, started sits in the turns column', () => noColour(() => {
+    const show = setup(100);
+    const s = show('#47 gate session started');
+    const e = show(GATE);
+    assert.equal(s.indexOf('started') + 'started'.length, e.indexOf('turns') + 'turns'.length, `\n${s}\n${e}`);
+    assert.equal(dots(s)[0], dots(e)[0]);
+  }));
+
+  test('on a terminal, a session line without usage still shows the padded name', () => noColour(() => {
+    const show = setup(100);
+    assert.equal(show('#47 gate session ended'), `${T}  #47 │   gate      `);
+  }));
+
+  test('on a terminal, a long duration fits the time column', () => noColour(() => {
+    const show = setup(100);
+    const a = show('#47 implement session ended · 13 turns · 1m55s · ≈ $0.35');
+    const b = show('#47 gate session ended · 3 turns · 3s · ≈ $0.06');
+    assert.deepEqual(dots(a), dots(b), `\n${a}\n${b}`);
+    assert.match(a, /1m 55s/);
+  }));
+
+  test('on a terminal, an unknown part stays as it is', () => noColour(() => {
+    const show = setup(100);
+    assert.match(show('#47 gate session ended · 3 turns · something new'), / · something new$/);
+  }));
+
+  test('not on a terminal, session lines stay as written', () => noColour(() => {
+    const show = setup(undefined);
+    assert.equal(show(GATE), `${T}  #47 │ gate       · 3 turns · 3s · 37k in (63% cached) · 260 out · ≈ $0.06`);
+  }));
+});
+
+describe('running polls', () => {
+  const setup = (columns, pollSec = 300) => screen({ repo: 'o/r', columns, stream: new PassThrough(), now: () => 0, pollSec });
+
+  test('on a terminal, a poll while runs go on says how many and when it looks again', () => noColour(() => {
+    const show = setup(100);
+    assert.equal(show('02:33:13', '3 running'), '02:33:13  ◦ 3 running · next check at 02:38:13');
+  }));
+
+  test('on a terminal, every such poll is shown, since the next check moves on', () => noColour(() => {
+    const show = setup(100);
+    show('02:33:13', '1 running');
+    assert.equal(show('02:38:13', '1 running'), '02:38:13  ◦ 1 running · next check at 02:43:13');
+  }));
+
+  test('on a terminal, without pollSec there is no next check part', () => noColour(() => {
+    const show = setup(100, null);
+    assert.equal(show('02:33:13', '2 running'), '02:33:13  ◦ 2 running');
+  }));
+
+  test('the waiting line still shows after a running line', () => noColour(() => {
+    const show = setup(100);
+    show('02:33:13', '1 running');
+    assert.match(show('02:38:13', '0 eligible'), /waiting for labelled issues/);
+  }));
+
+  test('not on a terminal, the running line stays as written', () => noColour(() => {
+    const show = setup(undefined);
+    assert.equal(show('02:33:13', '3 running'), '02:33:13  3 running');
+  }));
+});
+
+describe('durations', () => {
+  const T = '12:00:00';
+
+  function setup(columns) {
+    let t = 0;
+    const clock = { now: () => t, set: (ms) => { t = ms; } };
+    const show = screen({ repo: 'o/r', columns, stream: new PassThrough(), now: clock.now });
+    return { show, clock };
+  }
+
+  test('on a terminal, a session duration gets a space', () => noColour(() => {
+    const { show } = setup(80);
+    const out = show(T, '#39 implement session ended · 7 turns · 1m55s · ≈ $0.20');
+    assert.match(out, /1m 55s/);
+    assert.doesNotMatch(out, /1m55s/);
+  }));
+
+  test('on a terminal, the run summary duration gets a space', () => noColour(() => {
+    const { show, clock } = setup(80);
+    show(T, '#39 implement started');
+    clock.set((60 + 3) * 60 * 1000);
+    const out = show(T, '#39 implement done');
+    assert.match(out, /done in 1h 03m/);
+  }));
+
+  test('on a terminal, a duration in a park reason gets a space', () => noColour(() => {
+    const { show } = setup(80);
+    const out = show(T, '#39 parked: the session ran for 5m30s and stopped');
+    assert.match(out, /5m 30s/);
+    assert.doesNotMatch(out, /5m30s/);
+  }));
+
+  test('not on a terminal, durations stay as written', () => noColour(() => {
+    const { show, clock } = setup(undefined);
+    assert.match(show(T, '#39 implement session ended · 7 turns · 1m55s · ≈ $0.20'), /1m55s/);
+    assert.match(show(T, '#39 parked: the session ran for 5m30s and stopped'), /5m30s/);
+    show(T, '#40 implement started');
+    clock.set((60 + 3) * 60 * 1000);
+    assert.match(show(T, '#40 implement done'), /done in 1h03m/);
+  }));
+});
+
+describe('start line title', () => {
+  const T = '12:00:00';
+
+  function setup() {
+    let t = 0;
+    const show = screen({ repo: 'o/r', columns: undefined, stream: new PassThrough(), now: () => t });
+    return { show, set: (ms) => { t = ms; } };
+  }
+
+  test('a start line with a title is shown with ▶', () => noColour(() => {
+    const { show } = setup();
+    assert.equal(show(T, '#39 implement started (Fix the bug)'), `${T}  #39 │ ▶ implement started (Fix the bug)`);
+  }));
+
+  test('a start line with a title still starts the run timer', () => noColour(() => {
+    const { show, set } = setup();
+    set(1000);
+    show(T, '#39 implement started (Fix the bug)');
+    show(T, '#39 implement session ended · ≈ $0.20');
+    set(46_000);
+    assert.equal(show(T, '#39 implement done'), `${T}  #39 │ ✔ implement done in 45s · 1 session · ≈ $0.20`);
+  }));
+});
+
+describe('waiting line', () => {
+  // A non-terminal stream, so no colour codes; columns tells screen it is drawing for a terminal.
+  const setup = (opts = {}) => screen({ repo: 'o/r', columns: 80, pollSec: 300, stream: new PassThrough(), now: () => 0, ...opts });
+
+  test('0 eligible shows what the factory waits for and when it looks again', () => noColour(() => {
+    const show = setup();
+    assert.equal(show('23:42:26', '0 eligible'), '23:42:26  ◦ waiting for labelled issues · next check at 23:47:26');
+  }));
+
+  test('a second 0 eligible right after replaces the waiting line', () => noColour(() => {
+    const show = setup();
+    show('23:42:26', '0 eligible');
+    assert.equal(show('23:47:26', '0 eligible'), '\x1b[1A\x1b[2K23:47:26  ◦ waiting for labelled issues · next check at 23:52:26');
+  }));
+
+  test('the waiting line comes back after any other line', () => noColour(() => {
+    const show = setup();
+    assert.equal(show('23:42:26', '0 eligible'), '23:42:26  ◦ waiting for labelled issues · next check at 23:47:26');
+    show('23:43:00', '#44 implement started');
+    assert.equal(show('23:50:00', '0 eligible'), '23:50:00  ◦ waiting for labelled issues · next check at 23:55:00');
+  }));
+
+  test('without pollSec there is no next check part', () => noColour(() => {
+    const show = setup({ pollSec: undefined });
+    assert.equal(show('23:42:26', '0 eligible'), '23:42:26  ◦ waiting for labelled issues');
+  }));
+
+  test('next check wraps past midnight', () => noColour(() => {
+    const show = setup();
+    assert.equal(show('23:58:00', '0 eligible'), '23:58:00  ◦ waiting for labelled issues · next check at 00:03:00');
+  }));
+
+  test('not a terminal: 0 eligible stays as it is, every time', () => noColour(() => {
+    const show = setup({ columns: undefined });
+    assert.equal(show('23:42:26', '0 eligible'), '23:42:26  0 eligible');
+    assert.equal(show('23:47:26', '0 eligible'), '23:42:26  0 eligible'.replace('23:42:26', '23:47:26'));
+  }));
+
+  test('the waiting line is dim when colour is on', () => {
+    const { FORCE_COLOR, NO_COLOR } = process.env;
+    process.env.FORCE_COLOR = '1';
+    delete process.env.NO_COLOR;
+    try {
+      const line = setup()('23:42:26', '0 eligible');
+      assert.ok(line.includes('\u001b[2m◦ waiting for labelled issues'), JSON.stringify(line));
+    } finally {
+      if (FORCE_COLOR === undefined) delete process.env.FORCE_COLOR; else process.env.FORCE_COLOR = FORCE_COLOR;
+      if (NO_COLOR !== undefined) process.env.NO_COLOR = NO_COLOR;
+    }
+  });
+});
+
+describe('waiting line updates', () => {
+  // A non-terminal stream, so no colour codes; columns tells screen it is drawing for a terminal.
+  const setup = (opts = {}) => screen({ repo: 'o/r', columns: 80, pollSec: 300, stream: new PassThrough(), now: () => 0, ...opts });
+  const UP = '\x1b[1A\x1b[2K'; // cursor up one line, clear it
+
+  function noColour(fn) {
+    const { FORCE_COLOR } = process.env;
+    delete process.env.FORCE_COLOR;
+    try { fn(); } finally { if (FORCE_COLOR !== undefined) process.env.FORCE_COLOR = FORCE_COLOR; }
+  }
+
+  test('a second 0 eligible right after replaces the waiting line with the new times', () => noColour(() => {
+    const show = setup();
+    show('03:12:29', '0 eligible');
+    assert.equal(show('03:17:29', '0 eligible'), `${UP}03:17:29  ◦ waiting for labelled issues · next check at 03:22:29`);
+    assert.equal(show('03:22:29', '0 eligible'), `${UP}03:22:29  ◦ waiting for labelled issues · next check at 03:27:29`);
+  }));
+
+  test('after another line the waiting line is a new line again', () => noColour(() => {
+    const show = setup();
+    show('03:12:29', '0 eligible');
+    show('03:13:00', '#44 implement started');
+    assert.equal(show('03:17:29', '0 eligible'), '03:17:29  ◦ waiting for labelled issues · next check at 03:22:29');
+  }));
+
+  test('after a running line the waiting line is a new line again', () => noColour(() => {
+    const show = setup();
+    show('03:12:29', '0 eligible');
+    show('03:17:29', '1 running');
+    assert.equal(show('03:22:29', '0 eligible'), '03:22:29  ◦ waiting for labelled issues · next check at 03:27:29');
+  }));
+
+  test('the waiting line stays one line even on a narrow terminal', () => noColour(() => {
+    const show = setup({ columns: 20 });
+    show('03:12:29', '0 eligible');
+    const line = show('03:17:29', '0 eligible');
+    assert.equal(line, `${UP}03:17:29  ◦ waiting for labelled issues · next check at 03:22:29`);
+    assert.ok(!line.includes('\n'));
+  }));
+
+  test('not a terminal: 0 eligible every poll, no escape codes', () => noColour(() => {
+    const show = setup({ columns: undefined });
+    assert.equal(show('03:12:29', '0 eligible'), '03:12:29  0 eligible');
+    assert.equal(show('03:17:29', '0 eligible'), '03:17:29  0 eligible');
+  }));
+});

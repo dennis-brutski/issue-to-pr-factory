@@ -1,11 +1,12 @@
 // node stats.mjs <target> against the fake gh: the printed numbers are right, and nothing changes.
-import { test } from 'node:test';
+import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from '../../lib/exec.mjs';
 import { world, FAKES_BIN } from './world.mjs';
+import { autoMerged } from '../../lib/comments.mjs';
 
 const STATS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'stats.mjs');
 const OWNER = 'dennis-brutski', REPO = `${OWNER}/demo`;
@@ -76,4 +77,74 @@ test('stats refuses a --since that is not a date', async () => {
     assert.equal(r.code, 1);
     assert.match(r.stderr, /--since needs a date/);
   } finally { w.close(); }
+});
+
+// node stats.mjs <target> against the fake gh: an auto-merged pull request undone by a merged
+// pull request titled Revert "<its title>" counts as reverted.
+describe('automerge', () => {
+  const STATS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'stats.mjs');
+  const OWNER = 'dennis-brutski', REPO = `${OWNER}/demo`;
+
+  test('stats counts auto-merged pull requests and the ones a merged Revert "<title>" undid', async () => {
+    const w = await world();
+    try {
+      const file = join(w.dir, 'gh.json');
+      const s = JSON.parse(readFileSync(file, 'utf8'));
+      const pr = (number, title, state, headRefName) => ({ number, kind: 'pr', title, body: '', author: OWNER, state, labels: [], labelEvents: [],
+        comments: [], headRefName, headRepo: REPO, createdAt: '2026-11-10T10:00:00Z' });
+      const handed = (n) => ({ author: OWNER, body: autoMerged(`https://github.com/${REPO}/pull/${n}`, { reviewed: 'clean', lines: 12 }), at: '2026-11-10T10:00:00Z' });
+      s.items.push(
+        { number: 1, kind: 'issue', title: 'Fix undo', body: '', author: OWNER, state: 'CLOSED', labels: [], labelEvents: [], comments: [handed(10)] },
+        { number: 2, kind: 'issue', title: 'Add redo', body: '', author: OWNER, state: 'CLOSED', labels: [], labelEvents: [], comments: [handed(11)] },
+        pr(10, 'Fix undo', 'MERGED', 'factory/issue-1'),
+        pr(11, 'Add redo', 'MERGED', 'factory/issue-2'),
+        pr(12, 'Revert "Fix undo"', 'MERGED', 'undo-the-undo-fix'), // any branch: the title is what counts
+      );
+      writeFileSync(file, JSON.stringify(s));
+      const { NODE_TEST_CONTEXT, ...env } = process.env;
+      const r = await run(process.execPath, [STATS, w.settingsFile], { env: { ...env, PATH: `${FAKES_BIN}:${env.PATH}`, FAKE_GH_STATE: file }, timeoutMs: 20000 });
+      assert.equal(r.code, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /^auto-merged: 2 · reverted: 1$/m);
+    } finally { w.close(); }
+  });
+});
+
+// node stats.mjs <target> reads the session logs in the target's run folder.
+describe('session usage', () => {
+  const STATS = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'stats.mjs');
+
+  const stats = (w, args = []) => {
+    const { NODE_TEST_CONTEXT, ...env } = process.env;
+    return run(process.execPath, [STATS, w.settingsFile, ...args], { env: { ...env, PATH: `${FAKES_BIN}:${env.PATH}`, FAKE_GH_STATE: join(w.dir, 'gh.json') }, timeoutMs: 20000 });
+  };
+
+  test('stats says when there are no session logs yet', async () => {
+    const w = await world();
+    try {
+      const r = await stats(w);
+      assert.equal(r.code, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /\nagent use: no session logs yet\n/);
+    } finally { w.close(); }
+  });
+
+  test('stats prints agent use from the session logs, and --since applies to them', async () => {
+    const w = await world();
+    try {
+      const dir = join(w.runDir, 'logs', 'issue-4');
+      mkdirSync(dir, { recursive: true });
+      const at = Date.parse('2026-11-10T10:00:00Z');
+      const json = JSON.stringify({ num_turns: 12, usage: { input_tokens: 1000, cache_read_input_tokens: 3000, output_tokens: 2500 }, total_cost_usd: 1.5, permission_denials: [{}], terminal_reason: 'max_turns' });
+      writeFileSync(join(dir, `${at}-1-implement.json`), `${json}\n--- stderr ---\n`);
+      writeFileSync(join(dir, `${at + 1}-2-review.json`), 'Killed\n--- stderr ---\n');
+      const r = await stats(w);
+      assert.equal(r.code, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /\nagent use \(from session logs; ≈ cost is an estimate at API list price, not your bill\)\n/);
+      assert.match(r.stdout, /\n {2}implement +1 +12 +4k \(75%\) +2\.5k +\$1\.50\n/);
+      assert.match(r.stdout, /\n {2}most used: #4 ≈ \$1\.50\n/);
+      assert.match(r.stdout, /\n {2}stopped early: 1 max_turns · 1 unreadable \(timed out or crashed\)\n/);
+      assert.match(r.stdout, /\n {2}tool calls refused: 1\n/);
+      const later = await stats(w, ['--since', '2026-11-11']);
+      assert.match(later.stdout, /\nagent use: no sessions since 2026-11-11\n/);
+    } finally { w.close(); }
+  });
 });
