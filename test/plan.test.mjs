@@ -73,3 +73,17 @@ test('planUsage gives null when the server is slow', async () => {
     assert.ok(Date.now() - t < 1000, `took ${Date.now() - t} ms`);
   } finally { await s.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('planUsage gives null when the access token is not a non-empty string', async () => {
+  const s = await server(json(200, body));
+  try {
+    for (const accessToken of ['', 42, null]) {
+      const dir = mkdtempSync(join(tmpdir(), 'plan-'));
+      try {
+        writeFileSync(join(dir, '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken } }));
+        assert.equal(await planUsage({ configDir: dir, url: s.url }), null);
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    }
+    assert.equal(s.seen.length, 0);
+  } finally { await s.close(); }
+});
