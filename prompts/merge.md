@@ -1,7 +1,7 @@
 <!-- session: merge -->
 # Resolve the merge for issue #{{number}}
 
-`origin/{{base}}` is being merged into this branch and there are conflicts. Run `git status` to see them. Resolve each conflict so that both the branch's change and the incoming changes keep working, then complete the merge with `git commit --no-edit`.
+The latest `{{base}}` is being merged into this branch and there are conflicts. The commit being merged is `MERGE_HEAD`; `git rev-parse MERGE_HEAD` shows its sha. Run `git status` to see them. Resolve each conflict so that both the branch's change and the incoming changes keep working, then complete the merge with `git commit --no-edit`.
 
 {{rules}}
 {{commit}}

@@ -1,7 +1,7 @@
 <!-- session: review -->
 # Review the change for issue #{{number}}
 
-Review the diff of this branch against `origin/{{base}}`: run `git diff origin/{{base}}...HEAD`. Do not change any file.
+Review the diff of this branch against the base commit `{{baseSha}}`: run `git diff {{baseSha}}...HEAD`. Use that commit, not a remote-tracking ref such as the one for `{{base}}`, which may have moved. Do not change any file.
 
 {{rules}}
 

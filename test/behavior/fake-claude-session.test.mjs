@@ -13,7 +13,7 @@ import { FAKES_BIN } from './world.mjs';
 import { sessionOf } from './fakes/session.mjs';
 
 const SESSIONS = ['gate', 'implement', 'review', 'fix', 'rework', 'merge', 'explore'];
-const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F' };
+const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', baseSha: 'b'.repeat(40) };
 const reword = (prompt) => prompt.replace(/^# .*$/m, '# Something else entirely');
 
 test('every session prompt starts with its marker', () => {
