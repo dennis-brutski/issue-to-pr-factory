@@ -122,6 +122,8 @@ try {
   } else if (pos[0] === 'pr' && pos[1] === 'view' && opt.json === 'additions,deletions') {
     const i = item(pos[2]);
     out = JSON.stringify({ additions: i.additions ?? 0, deletions: i.deletions ?? 0 });
+  } else if (pos[0] === 'pr' && pos[1] === 'view' && opt.json === 'body') {
+    out = JSON.stringify({ body: item(pos[2]).body });
   } else if (pos[0] === 'pr' && pos[1] === 'merge' && opt.squash && opt.auto) {
     const i = item(pos[2]);
     if (s.autoMergeAllowed === false) die('GraphQL: Auto merge is not allowed for this repository (enablePullRequestAutoMerge)');

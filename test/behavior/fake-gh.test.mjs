@@ -114,6 +114,12 @@ describe('gh commands', () => {
     assert.deepEqual(await gh.pullRequestSize(cfg, 2), { additions: 12, deletions: 3 });
     assert.deepEqual(state().calls.at(-1), ['pr', 'view', '2', '--repo', 'dennis-brutski/demo', '--json', 'additions,deletions']);
   });
+  test('pullRequestBody reads the current body of a pull request', async () => {
+    await gh.openPullRequest(cfg, { branch: 'factory/issue-1', title: 't', body: 'b', draft: false });
+    await gh.updatePullRequestBody(cfg, 2, 'edited\nbody');
+    assert.equal(await gh.pullRequestBody(cfg, 2), 'edited\nbody');
+    assert.deepEqual(state().calls.at(-1), ['pr', 'view', '2', '--repo', 'dennis-brutski/demo', '--json', 'body']);
+  });
   test('autoMerge asks for a squash merge once GitHub allows it', async () => {
     await gh.openPullRequest(cfg, { branch: 'factory/issue-1', title: 't', body: 'b', draft: false });
     await gh.autoMerge(cfg, 2);
