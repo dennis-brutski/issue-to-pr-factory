@@ -43,8 +43,9 @@ export const formatAutoMerges = (a) => `auto-merged: ${a.autoMerged} · reverted
 // or its issue, whenever they were made, and the median wait from opened to merged. Pure.
 export function countReviewLoad(merged, comments, cfg, since = null) {
   const ours = merged.filter((p) => issueOfBranch(p.ref) !== null && same(p.repo, cfg.repo) && after(p.at, since));
-  const steps = ours.reduce((n, p) => n + comments.filter((c) => same(c.author, cfg.owner)
-    && (c.on === p.number || c.on === issueOfBranch(p.ref)) && (isRework(c.body) || isCountedStop(c.body))).length, 0);
+  // Each comment counts once, even when two merged pull requests come from the same issue.
+  const steps = comments.filter((c) => same(c.author, cfg.owner) && (isRework(c.body) || isCountedStop(c.body))
+    && ours.some((p) => c.on === p.number || c.on === issueOfBranch(p.ref))).length;
   const waits = ours.map((p) => Date.parse(p.mergedAt) - Date.parse(p.at)).sort((a, b) => a - b);
   const mid = Math.floor(waits.length / 2);
   const medianMs = !waits.length ? null : waits.length % 2 ? waits[mid] : (waits[mid - 1] + waits[mid]) / 2;

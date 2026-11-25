@@ -439,6 +439,14 @@ describe('review load', () => {
     assert.deepEqual(countReviewLoad(prs, comments, cfg, '2026-11-02'), { merged: 2, steps: 2, medianMs: H });
   });
 
+  test('countReviewLoad counts a stop once when two merged pull requests come from the same issue', () => {
+    const prs = [
+      merged(10, 1, '2026-11-10T10:00:00Z', '2026-11-10T12:00:00Z'),
+      merged(11, 1, '2026-11-11T10:00:00Z', '2026-11-11T12:00:00Z'), // a second run after a revert
+    ];
+    assert.deepEqual(countReviewLoad(prs, [on(1, STOP)], cfg), { merged: 2, steps: 1, medianMs: 2 * H });
+  });
+
   test('countReviewLoad with no merged pull requests counts nothing', () => {
     assert.deepEqual(countReviewLoad([], [on(1, STOP)], cfg), { merged: 0, steps: 0, medianMs: null });
   });
