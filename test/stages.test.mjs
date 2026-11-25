@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
-import { runItem, renderPrompt, schemas, lastStopReason, withTestChanges, testsThatChangeOf, testsThatChange, protectedThatChangeOf, implementModel } from '../lib/stages.mjs';
+import { runItem, renderPrompt, schemas, lastStopReason, testsThatChange, protectedThatChangeOf, implementModel } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 import { runChecks } from '../lib/checks.mjs';
 import { execFileSync } from 'node:child_process';
@@ -14,6 +14,7 @@ import { stopped } from '../lib/comments.mjs';
 import { stopLabel } from '../stats.mjs';
 import factory from './fixtures/factory-target.mjs';
 import { agentSettings } from '../lib/agent.mjs';
+import { parse } from '../lib/pr-body.mjs';
 
 // Wraps the fake's worktree commands: when broken() is true they throw message(), as the real checks do.
 const guarded = (broken, methods, message) => Object.fromEntries(Object.entries(methods).map(([k, fn]) =>
@@ -1429,57 +1430,10 @@ for (const name of ['implement', 'fix', 'rework']) {
   });
 }
 
-test('more test changes join the section already in the body', () => {
-  const body = 'Closes #7\n\n## Tests changed\n\n- `test/a.test.js` · a — renamed\n\n## Checks\n\nok';
-  assert.equal(withTestChanges(body, [two]),
-    'Closes #7\n\n## Tests changed\n\n- `test/a.test.js` · a — renamed\n- `test/b.test.js` · b — removed with the old flag\n\n## Checks\n\nok');
-});
-
-test('the first test changes get a section before the checks', () => {
-  assert.equal(withTestChanges('Closes #7\n\n## Checks\n\nok', [one]), 'Closes #7\n\n## Tests changed\n\n- `test/a.test.js` · a — renamed\n\n## Checks\n\nok');
-});
-
-test('a body without a checks section gets the test changes at its end', () => {
-  assert.equal(withTestChanges('Closes #7\n\n## What changed\n\nDone.', [one]),
-    'Closes #7\n\n## What changed\n\nDone.\n\n## Tests changed\n\n- `test/a.test.js` · a — renamed');
-});
-
-test('no test changes leave the body as it is', () => {
-  assert.equal(withTestChanges('Closes #7', []), 'Closes #7');
-});
-
-// Later stages read the issue's "## Tests that change" from the pull request body, but only from the
-// factory's own part: between "Closes #n" and "## What changed". The summary after it is the agent's text.
-describe('Tests that change section', () => {
-  const pr = (body) => ({ kind: 'pr', number: 12, headRef: 'factory/issue-7', body });
-
-  test('an issue is read in full', () => {
-    assert.deepEqual(testsThatChangeOf({ kind: 'issue', number: 7, body: 'x\n\n## Tests that change\n\n- `test/a.test.js`\n' }), ['test/a.test.js']);
-  });
-
-  test('a pull request gives the factory section before the summary', () => {
-    const body = 'Closes #7\n\n## Tests that change\n\n- `test/a.test.js`\n\n## What changed\n\nMade a 2.\n\n## Checks\n\nok';
-    assert.deepEqual(testsThatChangeOf(pr(body)), ['test/a.test.js']);
-  });
-
-  test('a section in the summary of a pull request is ignored', () => {
-    const body = 'Closes #7\n\n## What changed\n\nMade a 2.\n\n## Tests that change\n\n- `test/b.test.js`\n\n## Checks\n\nok';
-    assert.deepEqual(testsThatChangeOf(pr(body)), []);
-  });
-
-  test('a section in the warning above "Closes" is ignored', () => {
-    const body = '> ⚠ This pull request changes files you should check:\n> - x\n\n## Tests that change\n\n- `test/b.test.js`\n\nCloses #7\n\n## What changed\n\nMade a 2.';
-    assert.deepEqual(testsThatChangeOf(pr(body)), []);
-  });
-
-  test('a pull request body without the factory layout gives an empty list', () => {
-    assert.deepEqual(testsThatChangeOf(pr('## Tests that change\n\n- `test/a.test.js`\n')), []);
-    assert.deepEqual(testsThatChangeOf(pr('')), []);
-  });
-
-  test('a pull request body with "Closes" but no "What changed" gives an empty list', () => {
-    assert.deepEqual(testsThatChangeOf(pr('Closes #7\n\n## Tests that change\n\n- `test/a.test.js`\n')), []);
-  });
+// How test changes are added to the pull request body, and how its "## Tests that change" list is read
+// back from the factory's own part only: test/pr-body.test.mjs.
+test('an issue is read in full', () => {
+  assert.deepEqual(testsThatChange('x\n\n## Tests that change\n\n- `test/a.test.js`\n'), ['test/a.test.js']);
 });
 
 // The factory reads which test files an issue says will change, from its "## Tests that change" section.
@@ -1708,7 +1662,7 @@ describe('warning lines', () => {
     const body = opened[0].body;
     const warning = body.slice(0, body.indexOf('\n\nCloses #7\n'));
     for (const line of warning.split('\n')) assert.match(line, /^>/);
-    assert.deepEqual(testsThatChangeOf({ kind: 'pr', number: 50, headRef: 'factory/issue-7', body }), []);
+    assert.deepEqual(parse(body).testsThatChange, []);
   });
 });
 
