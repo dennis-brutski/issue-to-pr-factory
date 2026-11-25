@@ -148,3 +148,51 @@ describe('session usage', () => {
     } finally { w.close(); }
   });
 });
+
+// node stats.mjs <target> against the fake gh: reworks and stops per merged pull request, and the median wait to merge.
+describe('review load', () => {
+  const pr = (number, issueNo, createdAt, mergedAt, comments = []) => ({ number, kind: 'pr', title: `#${number}`, body: '', author: OWNER, state: 'MERGED',
+    labels: [], labelEvents: [], comments, headRefName: `factory/issue-${issueNo}`, headRepo: REPO, createdAt, mergedAt });
+  const c = (body, at = '2026-11-10T10:00:00Z') => ({ author: OWNER, body, at });
+  const REWORK = '🏭 **Rework**\n\nRenamed a';
+
+  function seedLoad(w) {
+    const file = join(w.dir, 'gh.json');
+    const s = JSON.parse(readFileSync(file, 'utf8'));
+    s.items.push(
+      { number: 1, kind: 'issue', title: '#1', body: '', author: OWNER, state: 'CLOSED', labels: [], labelEvents: [], comments: [c(NOT_CLEAR, '2026-10-01T10:00:00Z')] },
+      pr(10, 1, '2026-10-20T10:00:00Z', '2026-10-21T12:00:00Z', [c(REWORK), c(CHECK)]), // 26h, 3 steps
+      pr(11, 2, '2026-11-10T10:00:00Z', '2026-11-10T10:30:00Z'), // 30m, none
+      pr(12, 3, '2026-11-10T10:00:00Z', '2026-11-10T14:00:00Z', [c(REWORK)]), // 4h, 1 step
+    );
+    writeFileSync(file, JSON.stringify(s));
+    return file;
+  }
+
+  test('stats prints the review load line', async () => {
+    const w = await world();
+    try {
+      const r = await stats(w, seedLoad(w));
+      assert.equal(r.code, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /^review load: 1\.3 reworks or stops per merged PR · median 4h to merge$/m);
+    } finally { w.close(); }
+  });
+
+  test('stats --since counts merged pull requests opened from that day on', async () => {
+    const w = await world();
+    try {
+      const r = await stats(w, seedLoad(w), ['--since', '2026-11-01']);
+      assert.equal(r.code, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /^review load: 0\.5 reworks or stops per merged PR · median 2h to merge$/m);
+    } finally { w.close(); }
+  });
+
+  test('stats with no merged pull requests shows - in the review load line', async () => {
+    const w = await world();
+    try {
+      const r = await stats(w, join(w.dir, 'gh.json'));
+      assert.equal(r.code, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, /^review load: - reworks or stops per merged PR · median - to merge$/m);
+    } finally { w.close(); }
+  });
+});

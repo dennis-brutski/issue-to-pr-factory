@@ -1,7 +1,7 @@
 // The factory's own GitHub comments: what one module writes, the same module reads back.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stopped, didNotStart, explore, rework, pullRequest, isFactory, lastStop, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel } from '../lib/comments.mjs';
+import { stopped, didNotStart, explore, rework, pullRequest, isFactory, lastStop, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel, isRework } from '../lib/comments.mjs';
 import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { verifyBranch } from '../lib/verify.mjs';
@@ -214,4 +214,9 @@ test('the reason texts stay as the owner knows them', () => {
   assert.equal(reasons.readOnlyChanged('gate'), 'The gate step is read-only but changed files in the worktree.');
   assert.equal(reasons.mergeUnresolved('Gave up.'), 'The merge is still unresolved. The worktree is left mid-merge.\n\nGave up.');
   assert.equal(reasons.stepFailed('gate', 'timed out after 45 min'), 'The gate step failed: timed out after 45 min');
+});
+
+test('what rework() writes, isRework() recognises; other comments are not reworks', () => {
+  assert.equal(isRework(rework('Renamed a')), true);
+  for (const body of [stopped('review', 'x', LABEL), pullRequest('u'), 'Rework: please rename it', `say 🏭 **Rework**`]) assert.equal(isRework(body), false, body);
 });
