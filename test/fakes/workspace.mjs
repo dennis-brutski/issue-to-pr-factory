@@ -20,6 +20,7 @@ export function fakeWorkspace(over = {}, root = '/f') {
     removeWorktree: async () => {},
     listWorktrees: async () => [],
     headInfo: async () => ({ sha: 'abc', committedAt: T }),
+    remoteBase: async () => 'b'.repeat(40),
     changesAgainstBase: async () => [{ status: 'M', path: 'src/state.js' }],
     diffAgainstBase: async () => '',
     commitMessagesAgainstBase: async () => ['Fix undo'],
