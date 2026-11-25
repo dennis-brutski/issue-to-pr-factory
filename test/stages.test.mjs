@@ -448,7 +448,7 @@ test('agent sessions get the target environment with their port', async () => {
   await runItem(issue, 'implement', d.deps, 4207);
   assert.equal(d.agentCalls[0].port, 4207);
 });
-const allVars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F' };
+const allVars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', baseSha: 'b'.repeat(40) };
 const gradle = { checks: [['gradle', ['test']], ['gradle', ['lint']]], protectedFiles: ['build.gradle'], testDirs: ['src/test/'] };
 test("prompts name the target's checks and protected files, nothing npm-specific", () => {
   for (const name of ['gate', 'implement', 'review', 'fix', 'rework', 'merge', 'explore']) {
@@ -1879,7 +1879,7 @@ describe('last stop reason', () => {
   });
 
   test('the stop reason is fenced and the section shows only in code-changing prompts', () => {
-    const vars = { number: 7, branch: 'b', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', lastStop: 'x ```y``` z' };
+    const vars = { number: 7, branch: 'b', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', lastStop: 'x ```y``` z', baseSha: 'b'.repeat(40) };
     for (const name of ['implement', 'fix', 'rework', 'merge']) {
       const p = renderPrompt(name, vars);
       assert.ok(p.includes(`${HEADING}\n\n`), name);
