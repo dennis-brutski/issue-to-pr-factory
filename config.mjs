@@ -18,6 +18,7 @@ export const config = {
   maxParallel: 2,
   confidenceThreshold: 70,
   maxTurns: 150,
+  turns: { gate: 30, review: 60, explore: 80, implement: 80 }, // turns per session type; a type not listed gets maxTurns
   sessionTimeoutMin: 45,
   maxBudgetUsd: null, // per agent session, Claude Code's estimate; null = no cap. Set yours in local.mjs
   checkTimeoutMin: 15,
