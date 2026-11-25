@@ -1,14 +1,21 @@
 import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run } from '../lib/exec.mjs';
 import { workspace } from '../lib/workspace.mjs';
 import * as ws from '../lib/workspace.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
+import { FAKE_BWRAP_BIN } from './behavior/world.mjs';
 
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid'];
+
+// The factory's git runs under bwrap. Inside an agent's own sandbox bwrap cannot start: the fake runs git unconfined there,
+// and the tests that prove the confinement skip.
+const bwrapWorks = (await run('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true'])).code === 0;
+if (!bwrapWorks) process.env.PATH = `${FAKE_BWRAP_BIN}:${process.env.PATH}`;
+const real = { skip: bwrapWorks ? false : 'bwrap probe failed on this machine' };
 
 describe('worktrees and branches', () => {
   const git = async (dir, ...args) => {
@@ -616,5 +623,68 @@ describe('replace refs and grafts', () => {
     writeFileSync(join(root, 'repo', '.git', 'info', 'grafts'), `${baseSha} ${head}\n`);
     assert.deepEqual((await ws.changesAgainstBase(dir, 'master')).map((c) => c.path), ['.github/workflows/ci.yml']);
     assert.deepEqual(await ws.commitMessagesAgainstBase(dir, 'master'), ['Add CI']);
+  });
+});
+
+// A run's agent can change the clone's .git/config just after the factory checked it. Whatever that config makes the
+// factory's git run stays confined, and the push goes out from a clone no agent can write.
+describe('git config changed during a run', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+
+  let base, root, origin, dir;
+  beforeEach(async () => {
+    base = mkdtempSync(join(tmpdir(), 'factory-race-'));
+    origin = join(base, 'origin.git'); root = join(base, 'factory');
+    const seed = join(base, 'seed');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    writeFileSync(join(seed, 'a.txt'), 'one\n');
+    await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    mkdirSync(root, { recursive: true });
+    await ws.ensureClone(root, origin);
+    ({ dir } = await ws.ensureWorktree(root, 7, 'master'));
+    writeFileSync(join(dir, 'a.txt'), 'two\n');
+    await git(dir, 'commit', '-q', '-am', 'Change a');
+  });
+
+  test('a command the config plants runs confined: it writes the worktree, nothing outside', real, async () => {
+    // Called without the workspace's config check: the check already passed, then the agent changed the config.
+    await git(join(root, 'repo'), 'config', 'diff.external', `touch ${join(dir, 'inside')} ${join(base, 'outside')}; true #`);
+    await ws.diffAgainstBase(dir, 'master', 'a.txt');
+    assert.ok(existsSync(join(dir, 'inside')), 'the planted command did not run at all');
+    assert.ok(!existsSync(join(base, 'outside')), 'the planted command wrote outside the confinement');
+  });
+
+  test('a command the config plants for the push does not run', async () => {
+    // git runs remote.<name>.receivepack to push to a path, as it runs core.sshCommand for an ssh remote.
+    await git(join(root, 'repo'), 'config', 'remote.origin.receivepack', `touch ${join(base, 'outside')}; git-receive-pack`);
+    await ws.push(dir, 'factory/issue-7', await git(dir, 'rev-parse', 'HEAD'));
+    assert.ok(!existsSync(join(base, 'outside')));
+  });
+
+  test('the push goes out from the factory\'s own clone, not the one agents write', async () => {
+    const elsewhere = join(base, 'elsewhere.git');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', elsewhere]);
+    await git(join(root, 'repo'), 'remote', 'set-url', 'origin', elsewhere);
+    await git(join(root, 'repo'), 'config', 'remote.origin.pushurl', elsewhere);
+    const sha = await git(dir, 'rev-parse', 'HEAD');
+    await ws.push(dir, 'factory/issue-7', sha);
+    assert.equal(await git(origin, 'rev-parse', 'refs/heads/factory/issue-7'), sha);
+    assert.equal((await run('git', ['-C', elsewhere, 'rev-parse', '-q', '--verify', 'refs/heads/factory/issue-7'])).code, 1);
+  });
+
+  test('that clone sits next to the agents\' clone, outside it and outside the worktrees', () => {
+    assert.ok(existsSync(join(root, 'upstream.git', 'HEAD')));
+    assert.equal((readFileSync(join(root, 'upstream.git', 'config'), 'utf8').match(/url = (.*)/) ?? [])[1], origin);
+  });
+
+  test('a base the agents\' clone never fetched is read from the factory\'s clone', async () => {
+    await git(join(root, 'repo'), 'remote', 'set-url', 'origin', join(base, 'missing.git'));
+    assert.deepEqual(await ws.changesAgainstBase(dir, 'master'), [{ status: 'M', path: 'a.txt' }]);
   });
 });
