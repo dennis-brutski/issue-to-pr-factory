@@ -261,3 +261,48 @@ describe('pull request titles', () => {
     assert.ok(s.calls.every((c) => c[0] === 'api' && !c.includes('-X') && c.includes('--paginate')));
   });
 });
+
+// The fake gh lists merged pull requests with their merge times, and comments with the issue or pull request they are on,
+// as the review-load stats need; checked against the real adapter.
+describe('review load', () => {
+  let stateFile;
+  const pr = (number, state, extra = {}) => ({ number, kind: 'pr', title: `#${number}`, body: '', author: 'dennis-brutski', state,
+    labels: [], labelEvents: [], comments: [], headRefName: `factory/issue-${number}`, headRepo: 'dennis-brutski/demo', createdAt: T, ...extra });
+
+  beforeEach(() => {
+    if (!existsSync(join(BIN, 'gh'))) throw new Error(`fake gh missing at ${BIN}/gh`);
+    stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
+    writeFileSync(stateFile, JSON.stringify({ login: 'dennis-brutski', nextNumber: 5, calls: [], items: [
+      { number: 1, kind: 'issue', title: 'a', body: '', author: 'dennis-brutski', state: 'CLOSED', labels: [], labelEvents: [],
+        comments: [{ author: 'dennis-brutski', body: 'on the issue', at: T }] },
+      pr(2, 'MERGED', { mergedAt: '2026-11-02T10:00:00Z', comments: [{ author: 'mallory', body: 'on the pr', at: T }, { author: 'dennis-brutski', body: 'review note', at: T, path: 'a.js' }] }),
+      pr(3, 'CLOSED'),
+      pr(4, 'MERGED', { headRepo: 'mallory/demo', mergedAt: '2026-11-03T10:00:00Z' }),
+    ] }));
+    process.env.FAKE_GH_STATE = stateFile;
+    if (!process.env.PATH.startsWith(BIN)) process.env.PATH = `${BIN}:${process.env.PATH}`;
+  });
+
+  test('listAllMergedPullRequests returns only merged pull requests, with when they were opened and merged', async () => {
+    assert.deepEqual(await gh.listAllMergedPullRequests(cfg), [
+      { number: 2, ref: 'factory/issue-2', repo: 'dennis-brutski/demo', at: T, mergedAt: '2026-11-02T10:00:00Z' },
+      { number: 4, ref: 'factory/issue-4', repo: 'mallory/demo', at: T, mergedAt: '2026-11-03T10:00:00Z' },
+    ]);
+  });
+
+  test('listAllIssueCommentsOn returns every comment with the number it is on, not review comments', async () => {
+    assert.deepEqual(await gh.listAllIssueCommentsOn(cfg), [
+      { author: 'dennis-brutski', body: 'on the issue', at: T, on: 1 },
+      { author: 'mallory', body: 'on the pr', at: T, on: 2 },
+    ]);
+  });
+
+  test('the review-load calls only read, all pages', async () => {
+    const before = JSON.parse(readFileSync(stateFile, 'utf8')).items;
+    await gh.listAllMergedPullRequests(cfg);
+    await gh.listAllIssueCommentsOn(cfg);
+    const s = JSON.parse(readFileSync(stateFile, 'utf8'));
+    assert.deepEqual(s.items, before);
+    assert.ok(s.calls.every((c) => c[0] === 'api' && !c.includes('-X') && c.includes('--paginate')));
+  });
+});
