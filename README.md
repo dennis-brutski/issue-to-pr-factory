@@ -244,7 +244,7 @@ What stays outside: see *⚠ Risks you accept* above.
 
 ## Statistics
 
-`npm run stats` prints, for every target in `targets/`, the factory's pull requests (opened, merged, closed unmerged, still open), how many were auto-merged and reverted, and its stops grouped by reason; a reason without a label shows as `other:`. It only reads from GitHub. `npm run stats -- <target> --since 2026-11-01` prints one target, counting only pull requests opened and comments made on or after that day. A target that cannot be read prints `<target>: could not read stats: <reason>` and the exit code is 1.
+`npm run stats` prints, for every target in `targets/`, the factory's pull requests (opened, merged, closed unmerged, still open), how many were auto-merged and reverted, its review load, and its stops grouped by reason; a reason without a label shows as `other:`. It only reads from GitHub. `npm run stats -- <target> --since 2026-11-01` prints one target, counting only pull requests opened and comments made on or after that day. The review load is how often you stepped in per merged pull request (each `🏭 **Rework**` comment and each stop on the pull request or its issue, whenever made) and the median time from opened to merged, for example `review load: 0.8 reworks or stops per merged PR · median 14h to merge`; with `--since` it covers merged pull requests opened on or after that day, and it shows `-` when none were merged. A target that cannot be read prints `<target>: could not read stats: <reason>` and the exit code is 1.
 
 ![The output of npm run stats for one target: pull requests opened and merged, and stops by reason](docs/img/stats.png)
 
