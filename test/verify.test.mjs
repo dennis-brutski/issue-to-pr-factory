@@ -160,10 +160,16 @@ describe('protected files and tests', () => {
     const asked = [], reads = [];
     const spy = {
       ...ws,
-      remoteBase: async (d) => { const sha = await ws.remoteBase(d); asked.push(sha); return sha; },
-      changesAgainstBase: (d, since, opts) => { reads.push(['changes', since, opts?.at]); return ws.changesAgainstBase(d, since, opts); },
-      diffAgainstBase: (d, p, since, opts) => { reads.push(['diff', since, opts?.at]); return ws.diffAgainstBase(d, p, since, opts); },
-      commitMessagesAgainstBase: (d, opts) => { reads.push(['log', null, opts?.at]); return ws.commitMessagesAgainstBase(d, opts); },
+      againstBase: async (d, opts) => {
+        const view = await ws.againstBase(d, opts);
+        asked.push(view.sha);
+        return {
+          sha: view.sha,
+          changes: (since) => { reads.push(['changes', since ?? null, view.sha]); return view.changes(since); },
+          diff: (p, since) => { reads.push(['diff', since ?? null, view.sha]); return view.diff(p, since); },
+          messages: () => { reads.push(['log', null, view.sha]); return view.messages(); },
+        };
+      },
     };
     assert.deepEqual(await verifyBranch(spy, cfg, dir), { park: null, flags: [], notes: ['test cases added: test/a.test.mjs'] });
     assert.equal(asked.length, 1);

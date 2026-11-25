@@ -8,6 +8,20 @@ import { paths } from '../../lib/workspace.mjs';
 
 export const T = '2026-11-01T10:00:00Z';
 
+export const BASE = 'b'.repeat(40);
+
+// What againstBase gives: the branch judged against one base commit. `over` replaces
+// changes(since), diff(paths, since) or messages(); `sha` is the base it was made with.
+export function fakeView(over = {}, sha = BASE) {
+  return {
+    sha,
+    changes: async () => [{ status: 'M', path: 'src/state.js' }],
+    diff: async () => '',
+    messages: async () => ['Fix undo'],
+    ...over,
+  };
+}
+
 export function fakeWorkspace(over = {}, root = '/f') {
   return {
     paths: (n) => paths(root, n),
@@ -20,10 +34,7 @@ export function fakeWorkspace(over = {}, root = '/f') {
     removeWorktree: async () => {},
     listWorktrees: async () => [],
     headInfo: async () => ({ sha: 'abc', committedAt: T }),
-    remoteBase: async () => 'b'.repeat(40),
-    changesAgainstBase: async () => [{ status: 'M', path: 'src/state.js' }],
-    diffAgainstBase: async () => '',
-    commitMessagesAgainstBase: async () => ['Fix undo'],
+    againstBase: async () => fakeView(),
     isClean: async () => true,
     mergeBase: async () => 'clean',
     abortMerge: async () => {},

@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { runItem, renderPrompt, schemas, lastStopReason, testsThatChange, protectedThatChangeOf, implementModel } from '../lib/stages.mjs';
-import { fakeWorkspace } from './fakes/workspace.mjs';
+import { fakeWorkspace, fakeView } from './fakes/workspace.mjs';
 import { runChecks } from '../lib/checks.mjs';
 import { execFileSync } from 'node:child_process';
 import { config as factoryConfig } from '../config.mjs';
@@ -65,11 +65,13 @@ function fakes(o = {}) {
       ensureWorktree: async (n) => { d.worktrees.push(n); return { dir: `/f/worktrees/issue-${n}`, created: true }; },
       headInfo: async () => ({ sha: o.noNewCommits ? 'abc' : `abc${d.agentCalls.filter((a) => !a.readOnly).length}`, committedAt: T }),
       // Before setup: what the branch held when the run began (o.setupChanges); after it, what the sessions left.
-      changesAgainstBase: async (dir, since) => (!d.installs.length ? o.setupChanges ?? []
-        : (since && o.reworkChanges) || o.changes || [{ status: 'M', path: 'src/state.js' }]),
-      commitMessagesAgainstBase: async () => o.messages ?? ['Fix undo on empty ledger'],
+      againstBase: async () => fakeView({
+        changes: async (since) => (!d.installs.length ? o.setupChanges ?? []
+          : (since && o.reworkChanges) || o.changes || [{ status: 'M', path: 'src/state.js' }]),
+        messages: async () => o.messages ?? ['Fix undo on empty ledger'],
+        diff: async () => o.diff ?? '',
+      }),
       isClean: async () => o.clean ?? true,
-      diffAgainstBase: async () => o.diff ?? '',
       mergeBase: async () => o.merge ?? 'clean',
       mergeResolved: async () => o.resolved ?? true,
       push: async (dir, b, sha) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); d.pushedSha = sha; },
@@ -348,6 +350,30 @@ test('a park with commits names the local branch', async () => {
   await runItem(issue, 'implement', d.deps, 4201);
   assert.ok(d.comments[0].includes("factory's local branch `factory/issue-1`"));
 });
+test('a park with commits reads the clone\'s base, without network', async () => {
+  const d = fakes({ agent: [gate(90), work()], checks: { ok: false, failed: 'npm test', output: 'x' } });
+  const view = d.deps.ws.againstBase, asked = [];
+  d.deps.ws.againstBase = async (dir, opts) => { asked.push(opts?.local ?? false); return view(dir, opts); };
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(asked.at(-1), true);
+  assert.ok(d.comments[0].includes("factory's local branch `factory/issue-1`"));
+});
+test('each check asks for the base once and reads only against that base', async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  const view = d.deps.ws.againstBase, events = [];
+  let n = 0;
+  d.deps.ws.againstBase = async (dir, opts) => {
+    const sha = String(++n).repeat(40), v = await view(dir, opts);
+    events.push(['ask', sha, opts?.local ?? false]);
+    const read = (k) => async (...a) => { events.push(['read', sha]); return v[k](...a); };
+    return { sha, changes: read('changes'), diff: read('diff'), messages: read('messages') };
+  };
+  assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
+  // Before setup, the "no changes" check after implement, before the push: never the clone's ref.
+  assert.deepEqual(events.filter(([e]) => e === 'ask').map(([, , local]) => local), [false, false, false]);
+  let current = null;
+  for (const [e, sha] of events) if (e === 'ask') current = sha; else assert.equal(sha, current, 'a read used an earlier base');
+});
 test('dependencies are installed in the worktree before the first agent session', async () => {
   const d = fakes({ agent: [gate(5, ['What?'])] });
   await runItem(issue, 'implement', d.deps, 4201);
@@ -536,7 +562,7 @@ describe('automerge', () => {
       },
       ws: fakeWorkspace({
         headInfo: async () => ({ sha: `abc${commits}`, committedAt: T }),
-        changesAgainstBase: async () => [{ status: 'M', path: protectedChange ? 'package.json' : 'src/state.js' }],
+        againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: protectedChange ? 'package.json' : 'src/state.js' }] }),
       }),
     };
     return { d, calls, comments, labels, seen };
@@ -873,7 +899,7 @@ describe('owner comments in prompts', () => {
       },
       ws: fakeWorkspace({
         headInfo: async () => ({ sha: `abc${calls.filter((a) => !a.readOnly).length}`, committedAt: T }),
-        commitMessagesAgainstBase: async () => ['Fix undo on empty ledger'],
+        againstBase: async () => fakeView({ messages: async () => ['Fix undo on empty ledger'] }),
       }),
     };
     return { d, calls };
@@ -978,9 +1004,8 @@ describe('draft stops', () => {
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
         headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
-        changesAgainstBase: async () => [{ status: 'M', path: 'test/unit/scoring.test.js' }],
-        commitMessagesAgainstBase: async () => ['Fix undo'],
-        isClean: async () => true, diffAgainstBase: async () => '', mergeBase: async () => 'clean',
+        againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'test/unit/scoring.test.js' }], messages: async () => ['Fix undo'] }),
+        isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {}, currentBranch: async () => 'factory/issue-7',
       }),
     };
@@ -1053,9 +1078,8 @@ describe('gate model', () => {
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
         headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
-        changesAgainstBase: async () => [{ status: 'M', path: 'src/state.js' }],
-        commitMessagesAgainstBase: async () => ['Fix undo'],
-        isClean: async () => true, diffAgainstBase: async () => '', mergeBase: async () => 'clean',
+        againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/state.js' }], messages: async () => ['Fix undo'] }),
+        isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {}, currentBranch: async () => 'factory/issue-7',
       }),
     };
@@ -1121,9 +1145,8 @@ describe('implement model', () => {
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
         headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
-        changesAgainstBase: async () => [{ status: 'M', path: 'src/state.js' }],
-        commitMessagesAgainstBase: async () => ['Fix undo'],
-        isClean: async () => true, diffAgainstBase: async () => '', mergeBase: async () => 'clean',
+        againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/state.js' }], messages: async () => ['Fix undo'] }),
+        isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {}, currentBranch: async () => 'factory/issue-7',
       }),
     };
@@ -1241,9 +1264,8 @@ describe('provenance', () => {
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
         headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
-        changesAgainstBase: async () => [{ status: 'M', path: 'src/state.js' }],
-        commitMessagesAgainstBase: async () => ['Fix undo'],
-        isClean: async () => true, diffAgainstBase: async () => '', mergeBase: async () => 'clean',
+        againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/state.js' }], messages: async () => ['Fix undo'] }),
+        isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {}, currentBranch: async () => 'factory/issue-7',
       }),
       ...extra,
@@ -1296,9 +1318,8 @@ describe('park and pull request text', () => {
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
         headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
-        changesAgainstBase: async () => changes,
-        commitMessagesAgainstBase: async () => ['Fix undo'],
-        isClean: async () => true, diffAgainstBase: async () => '', mergeBase: async () => 'clean',
+        againstBase: async () => fakeView({ changes: async () => changes, messages: async () => ['Fix undo'] }),
+        isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {}, currentBranch: async () => 'factory/issue-7',
       }),
       ...extra,
@@ -1390,8 +1411,10 @@ describe('skipped tests', () => {
         setDraft: async () => {}, updatePullRequestBody: async () => {},
       },
       ws: fakeWorkspace({
-        changesAgainstBase: async () => [{ status: 'A', path: 'test/undo.test.js' }],
-        diffAgainstBase: async (dir, pathspec) => { diffs.push(pathspec); return testDiff; },
+        againstBase: async () => fakeView({
+          changes: async () => [{ status: 'A', path: 'test/undo.test.js' }],
+          diff: async (pathspec) => { diffs.push(pathspec); return testDiff; },
+        }),
       }),
     };
     return { d, opened, diffs };
@@ -1652,9 +1675,8 @@ describe('warning lines', () => {
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
         headInfo: async () => ({ sha: 'abc', committedAt: '2026-11-01T10:00:00Z' }),
-        changesAgainstBase: async () => [{ status: 'M', path: 'src/undo.js' }],
-        commitMessagesAgainstBase: async () => ['Fix undo'],
-        isClean: async () => true, diffAgainstBase: async () => '', mergeBase: async () => 'clean',
+        againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/undo.js' }], messages: async () => ['Fix undo'] }),
+        isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {}, currentBranch: async () => 'factory/issue-7',
       }),
     };
@@ -1710,7 +1732,7 @@ describe('last stop reason', () => {
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: join(root, 'worktrees', `issue-${n}`), created: true }),
         headInfo: async () => { if (d.o.crash) { d.o.crash = false; throw new Error('disk on fire'); } return { sha: `abc${commits}`, committedAt: d.o.pushedAt ?? T }; },
-        commitMessagesAgainstBase: async () => ['Fix undo on empty ledger'],
+        againstBase: async () => fakeView({ messages: async () => ['Fix undo on empty ledger'] }),
         mergeBase: async () => d.o.merge ?? 'clean',
       }, root),
     };
@@ -1872,7 +1894,7 @@ describe('last stop after a base merge', () => {
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: join(root, 'worktrees', `issue-${n}`), created: false }),
         headInfo: async () => ({ sha: `abc-${committedAt}`, committedAt }),
-        commitMessagesAgainstBase: async () => ['Fix undo on empty ledger'],
+        againstBase: async () => fakeView({ messages: async () => ['Fix undo on empty ledger'] }),
         // main moved while the item waited: merging it makes a merge commit newer than the park comment.
         mergeBase: async () => { if (posted.length) committedAt = T3; return 'clean'; },
       }, root),
@@ -1975,7 +1997,7 @@ describe('held-out checks', () => {
       runAgent: async () => queue.shift(),
       runChecks: async () => ({ ok: false, failed: 'sh /h/check.sh', output: 'SECRET-ASSERTION', heldOut: true }),
       gh: { addLabel: async () => {}, removeLabel: async () => {}, comment: async (c, n, b) => comments.push(b), findPullRequest: async () => null },
-      ws: fakeWorkspace({ changesAgainstBase: async () => [{ status: 'M', path: 'src/a.js' }] }),
+      ws: fakeWorkspace({ againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/a.js' }] }) }),
     };
     const issue = { number: 1, kind: 'issue', title: 'T', body: 'B', author: 'dennis-brutski', bodyEditedAt: null, labels: ['agent:implement'],
       labelEvents: [{ label: 'agent:implement', actor: 'dennis-brutski', at: T }], comments: [], headRef: null, headRepo: null };
