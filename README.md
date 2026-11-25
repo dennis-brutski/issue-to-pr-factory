@@ -215,7 +215,8 @@ To add a repo, follow *Getting started*. Missing `agent:*` labels are created on
 |---|---|---|
 | `maxParallel` | 2 | runs at a time |
 | `confidenceThreshold` | 70 | the gate score an issue needs before it is built |
-| `maxTurns` | 150 | turns per agent session |
+| `maxTurns` | 150 | turns per agent session, unless `turns` sets one for its type |
+| `turns` | `{ gate: 30, review: 60, explore: 80, implement: 80 }` | turns per session type; fix, rework and merge get `maxTurns` |
 | `sessionTimeoutMin` | 45 | minutes per agent session |
 | `checkTimeoutMin` | 15 | minutes per setup or check command |
 | `model` | `opus` | every session except the gate and the first draft of simple issues |

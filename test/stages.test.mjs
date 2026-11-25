@@ -123,6 +123,11 @@ test('review findings trigger exactly one fix session', async () => {
   assert.match(d.agentCalls[3].prompt, /guard is inverted/);
   assert.equal(d.agentCalls[2].readOnly, true);
 });
+test('each session is started with its session type', async () => {
+  const d = fakes({ agent: [gate(90), work(), review(['x']), work()] });
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.deepEqual(d.agentCalls.map((a) => a.session), ['gate', 'implement', 'review', 'fix']);
+});
 test('a failed fix session parks', async () => {
   const d = fakes({ agent: [gate(90), work(), review(['x']), work('incomplete', 'cannot reproduce')] });
   const r = await runItem(issue, 'implement', d.deps, 4201);

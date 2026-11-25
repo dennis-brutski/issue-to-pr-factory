@@ -47,7 +47,7 @@ test('every screenshot slot has alt text and points into docs/img/', () => {
 
 test('every config key a user changes is named in a table row', () => {
   for (const key of ['maxParallel', 'confidenceThreshold', 'maxTurns', 'sessionTimeoutMin', 'checkTimeoutMin', 'model',
-    'gateModel', 'simpleModel', 'pollSec', 'autoMerge', 'maxBudgetUsd'])
+    'gateModel', 'simpleModel', 'pollSec', 'autoMerge', 'maxBudgetUsd', 'turns'])
     assert.match(README, new RegExp(`^\\| \`${key}\``, 'm'), key);
 });
 

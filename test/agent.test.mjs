@@ -200,3 +200,38 @@ process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify
     process.env.PATH = saved;
   }
 });
+
+async function maxTurnsOf(session, cfg) {
+  const { mkdtempSync, writeFileSync, readFileSync, chmodSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { runAgent } = await import('../lib/agent.mjs');
+  const bin = mkdtempSync(join(tmpdir(), 'turns-claude-')), dump = join(bin, 'args.json');
+  writeFileSync(join(bin, 'claude'), `#!/usr/bin/env node
+require('fs').writeFileSync(${JSON.stringify(dump)}, JSON.stringify(process.argv.slice(2)));
+process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify({ terminal_reason: 'completed', is_error: false, structured_output: {} })));
+`);
+  chmodSync(join(bin, 'claude'), 0o755);
+  const saved = process.env.PATH;
+  process.env.PATH = `${bin}:${saved}`;
+  try {
+    const r = await runAgent({ cwd: bin, prompt: 'p', schema: { type: 'object' }, cfg, port: 4201, session });
+    assert.equal(r.ok, true, r.reason);
+    const args = JSON.parse(readFileSync(dump, 'utf8'));
+    return args[args.indexOf('--max-turns') + 1];
+  } finally {
+    process.env.PATH = saved;
+  }
+}
+
+test('a gate session is started with the gate\'s turn limit', async () =>
+  assert.equal(await maxTurnsOf('gate', config), String(config.turns.gate)));
+
+test('a fix session is started with maxTurns', async () =>
+  assert.equal(await maxTurnsOf('fix', config), String(config.maxTurns)));
+
+test('a session type without its own turn limit uses maxTurns', async () =>
+  assert.equal(await maxTurnsOf('review', { ...config, turns: { gate: 30 }, maxTurns: 99 }), '99'));
+
+test('the default turn limits per session type', () =>
+  assert.deepEqual(config.turns, { gate: 30, review: 60, explore: 80, implement: 80 }));
