@@ -1,6 +1,6 @@
 import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { run } from '../lib/exec.mjs';
@@ -196,11 +196,12 @@ describe('worktrees and branches', () => {
     await ws.push(dir, 'factory/issue-7', checked);
     assert.equal((await git(seed, 'ls-remote', origin, 'refs/heads/factory/issue-7')).split('\t')[0], checked);
   });
-  test('currentBranch names the checked-out branch, null when HEAD is detached', async () => {
+  test('preparePush on its branch gives HEAD, and a detached HEAD is refused with no branch', async () => {
     const { dir } = await ws.ensureWorktree(root, 7, 'master');
-    assert.equal(await ws.currentBranch(dir), 'factory/issue-7');
-    await git(dir, 'checkout', '-q', '--detach');
-    assert.equal(await ws.currentBranch(dir), null);
+    assert.deepEqual(await ws.preparePush(dir, 'factory/issue-7'), { sha: await git(dir, 'rev-parse', 'HEAD'), reattached: false });
+    await commitFile(dir, 'b.txt');
+    await git(dir, 'checkout', '-q', '--detach', 'HEAD~1');
+    assert.deepEqual(await ws.preparePush(dir, 'factory/issue-7'), { refused: 'not-on-branch', branch: null });
   });
   test('a tampered .git link is refused', async () => {
     const { dir } = await ws.ensureWorktree(root, 7, 'master');
@@ -266,14 +267,15 @@ describe('worktrees and branches', () => {
   });
 });
 
-// attachBranch puts a worktree whose HEAD an agent detached back on its branch, but only when HEAD builds on it.
-describe('detached HEAD', () => {
+// preparePush puts a worktree whose HEAD an agent detached back on its branch, but only when HEAD builds on it.
+describe('preparing the push', () => {
   const git = async (dir, ...args) => {
     const r = await run('git', ['-C', dir, ...ID, ...args]);
     assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
     return r.stdout.trim();
   };
   const commitFile = async (dir, name) => { writeFileSync(join(dir, name), name); await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', `add ${name}`); };
+  const branchOf = async (dir) => (await run('git', ['-C', dir, 'symbolic-ref', '-q', '--short', 'HEAD'])).stdout.trim() || null;
 
   let root;
   beforeEach(async () => {
@@ -292,8 +294,8 @@ describe('detached HEAD', () => {
     await git(dir, 'checkout', '-q', '--detach');
     await commitFile(dir, 'work.txt');
     const head = (await ws.headInfo(dir)).sha;
-    assert.equal(await ws.attachBranch(dir, 'factory/issue-7'), true);
-    assert.equal(await ws.currentBranch(dir), 'factory/issue-7');
+    assert.deepEqual(await ws.preparePush(dir, 'factory/issue-7'), { sha: head, reattached: true });
+    assert.equal(await branchOf(dir), 'factory/issue-7');
     assert.equal((await ws.headInfo(dir)).sha, head);
   });
 
@@ -302,15 +304,30 @@ describe('detached HEAD', () => {
     await commitFile(dir, 'on-branch.txt');
     await git(dir, 'checkout', '-q', '--detach', 'HEAD~1');
     await commitFile(dir, 'elsewhere.txt');
-    assert.equal(await ws.attachBranch(dir, 'factory/issue-7'), false);
-    assert.equal(await ws.currentBranch(dir), null);
+    assert.deepEqual(await ws.preparePush(dir, 'factory/issue-7'), { refused: 'not-on-branch', branch: null });
+    assert.equal(await branchOf(dir), null);
   });
 
-  test('a worktree already on a branch is left alone', async () => {
+  test('a worktree on another branch is refused and left alone', async () => {
     const { dir } = await ws.ensureWorktree(root, 7, 'master');
     await git(dir, 'checkout', '-q', '-b', 'other');
-    assert.equal(await ws.attachBranch(dir, 'factory/issue-7'), false);
-    assert.equal(await ws.currentBranch(dir), 'other');
+    assert.deepEqual(await ws.preparePush(dir, 'factory/issue-7'), { refused: 'not-on-branch', branch: 'other' });
+    assert.equal(await branchOf(dir), 'other');
+  });
+
+  test('a dirty tree is refused', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    writeFileSync(join(dir, 'loose.txt'), 'not committed');
+    assert.deepEqual(await ws.preparePush(dir, 'factory/issue-7'), { refused: 'uncommitted', branch: 'factory/issue-7' });
+  });
+
+  test('sandbox leftovers do not count as dirty, and are removed', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    writeFileSync(join(dir, '.bashrc'), ''); chmodSync(join(dir, '.bashrc'), 0o444);
+    mkdirSync(join(dir, 'sub/.claude/.cc-writes'), { recursive: true });
+    assert.deepEqual(await ws.preparePush(dir, 'factory/issue-7'), { sha: await git(dir, 'rev-parse', 'HEAD'), reattached: false });
+    assert.ok(!existsSync(join(dir, '.bashrc')));
+    assert.ok(!existsSync(join(dir, 'sub/.claude')));
   });
 });
 
@@ -479,7 +496,7 @@ describe('handle guard', () => {
     assert.deepEqual(await view.changes(), [{ status: 'A', path: 'b.txt' }]);
     assert.match(await view.diff(['b.txt']), /\+x/);
     assert.equal((await view.messages()).length, 1);
-    assert.equal(await h.currentBranch(dir), 'factory/issue-7');
+    assert.deepEqual(await h.preparePush(dir, 'factory/issue-7'), { sha: (await h.headInfo(dir)).sha, reattached: false });
     assert.deepEqual(await h.listWorktrees(), [7]);
   });
 
@@ -488,7 +505,7 @@ describe('handle guard', () => {
     const { dir } = await h.ensureWorktree(7);
     await plant();
     for (const [name, call] of [['ensureWorktree', () => h.ensureWorktree(8)], ['headInfo', () => h.headInfo(dir)], ['isClean', () => h.isClean(dir)],
-      ['againstBase', () => h.againstBase(dir)], ['mergeBase', () => h.mergeBase(dir)], ['push', () => h.push(dir, 'factory/issue-7', 'abc')],
+      ['againstBase', () => h.againstBase(dir)], ['mergeBase', () => h.mergeBase(dir)], ['push', () => h.push(dir, 'factory/issue-7', 'abc')], ['preparePush', () => h.preparePush(dir, 'factory/issue-7')],
       ['removeWorktree', () => h.removeWorktree(7)], ['ensureClone', () => h.ensureClone()], ['checkClone', () => h.checkClone()]])
       await assert.rejects(call, /credential\.helper/, name);
   });
