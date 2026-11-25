@@ -7,8 +7,12 @@ import { join, dirname } from 'node:path';
 import { run } from '../lib/exec.mjs';
 import { workspace } from '../lib/workspace.mjs';
 import { verifyBranch } from '../lib/verify.mjs';
+import { FAKE_BWRAP_BIN } from './behavior/world.mjs';
 
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid'];
+
+// The factory's git runs under bwrap. Inside an agent's own sandbox bwrap cannot start: the fake runs git unconfined there.
+if ((await run('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true'])).code !== 0) process.env.PATH = `${FAKE_BWRAP_BIN}:${process.env.PATH}`;
 const git = async (dir, ...args) => {
   const r = await run('git', ['-C', dir, ...ID, ...args]);
   assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
