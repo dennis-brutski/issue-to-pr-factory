@@ -505,12 +505,13 @@ describe('automerge', () => {
   const clean = ok({ verdict: 'clean', findings: [] });
   const findings = ok({ verdict: 'findings', findings: ['Missing test for redo'] });
 
-  function deps({ sessions, autoMerge = true, size = { additions: 30, deletions: 10 }, mergeFails = null, protectedChange = false, existing = null } = {}) {
+  function deps({ sessions, autoMerge = true, size = { additions: 30, deletions: 10 }, mergeFails = null, protectedChange = false, existing = null, heldOut = true } = {}) {
     const calls = [], comments = [], labels = [], seen = [];
+    const held = heldOut ? { heldOutDir: '/held-out/web-app', heldOutChecks: [['node', ['--test', '{heldOut}/']]] } : {};
     const queue = [...sessions];
     let commits = 0;
     const d = {
-      cfg: { ...config, ...scorePad, target: 'web-app', autoMerge }, root: '/f', log: () => {},
+      cfg: { ...config, ...scorePad, ...held, target: 'web-app', autoMerge }, root: '/f', log: () => {},
       runSetup: async () => ({ ok: true, failed: null, output: '' }),
       runAgent: async (a) => {
         seen.push(a.prompt.match(/<!-- session: (\w+) -->/)[1]);
@@ -550,6 +551,23 @@ describe('automerge', () => {
     assert.match(note, /not a draft/);
     assert.match(note, /https:\/\/github\.com\/x\/y\/pull\/50/);
     assert.match(r.detail, /^https:\/\/github\.com\/x\/y\/pull\/50 \(handed to auto-merge\)$/);
+  });
+
+  test('a target without held-out checks is not auto-merged, and the log line says why', async () => {
+    const x = deps({ sessions: [ok(gate()), work, clean], heldOut: false });
+    const r = await runItem(issue, 'implement', x.d, 4201);
+    assert.equal(r.outcome, 'done', r.detail);
+    assert.deepEqual(merges(x), []);
+    assert.match(r.detail, /^https:\/\/github\.com\/x\/y\/pull\/50 \(not auto-merged: no held-out checks\)$/);
+    assert.ok(!x.comments.some((b) => b.includes('Auto-merge')));
+  });
+
+  test('an empty heldOutChecks list counts as none', async () => {
+    const x = deps({ sessions: [ok(gate()), work, clean] });
+    x.d.cfg.heldOutChecks = [];
+    const r = await runItem(issue, 'implement', x.d, 4201);
+    assert.deepEqual(merges(x), []);
+    assert.match(r.detail, /\(not auto-merged: no held-out checks\)$/);
   });
 
   test('a normal issue is not auto-merged, and the log line says why', async () => {
