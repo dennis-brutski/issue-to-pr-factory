@@ -358,6 +358,24 @@ describe('moved base ref', () => {
     assert.deepEqual(await (await ws.againstBase(dir, 'master')).changes(), []);
   });
 
+  test('a view keeps judging against the sha it was made with after the remote base moves', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await commitFile(dir, 'b.txt', 'x', 'Add b');
+    const view = await ws.againstBase(dir, 'master');
+    const before = view.sha;
+    // The remote's master takes the branch's commit and then later.txt, which the branch does not have.
+    // Against that new base the branch changes nothing; against the view's sha it still adds b.txt.
+    await git(dir, 'push', '-q', origin, 'HEAD:master');
+    await git(seed, 'pull', '-q', '--ff-only', 'origin', 'master');
+    await commitFile(seed, 'later.txt'); await git(seed, 'push', '-q', 'origin', 'master');
+    await git(join(root, 'repo'), 'fetch', '-q', 'origin');
+    assert.equal(view.sha, before);
+    assert.deepEqual(await view.changes(), [{ status: 'A', path: 'b.txt' }]);
+    assert.match(await view.diff(['b.txt', 'later.txt']), /\+x/);
+    assert.doesNotMatch(await view.diff(['b.txt', 'later.txt']), /later\.txt/);
+    assert.equal((await view.messages()).length, 1);
+  });
+
   test('againstBase fails when the remote has no such branch', async () => {
     const { dir } = await ws.ensureWorktree(root, 7, 'master');
     await assert.rejects(ws.againstBase(dir, 'nope'), /nope/);
