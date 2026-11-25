@@ -312,3 +312,21 @@ describe('review load', () => {
     assert.ok(s.calls.every((c) => c[0] === 'api' && !c.includes('-X') && c.includes('--paginate')));
   });
 });
+
+describe('open issues', () => {
+  beforeEach(() => {
+    const stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
+    const it = (number, kind, state) => ({ number, kind, title: 't', body: '', author: 'dennis-brutski', state, labels: [], labelEvents: [], comments: [] });
+    writeFileSync(stateFile, JSON.stringify({ login: 'dennis-brutski', nextNumber: 6, calls: [],
+      items: [it(1, 'issue', 'OPEN'), it(2, 'issue', 'CLOSED'), it(3, 'pr', 'OPEN'), it(4, 'issue', 'OPEN'), it(5, 'pr', 'MERGED')] }));
+    process.env.FAKE_GH_STATE = stateFile;
+    if (!process.env.PATH.startsWith(BIN)) process.env.PATH = `${BIN}:${process.env.PATH}`;
+  });
+
+  test('openIssueNumbers returns the open issues, labelled or not, and no pull requests, in one read', async () => {
+    assert.deepEqual(await gh.openIssueNumbers(cfg), [1, 4]);
+    const { calls } = JSON.parse(readFileSync(process.env.FAKE_GH_STATE, 'utf8'));
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0][0] === 'api' && !calls[0].includes('-X') && calls[0].includes('--paginate'));
+  });
+});

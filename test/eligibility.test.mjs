@@ -91,3 +91,27 @@ test('a body edit in the same second as the approval parks', () =>
 
 test('edits before the approval still run', () =>
   assert.equal(classify(issue({ bodyEditedAt: '2026-11-01T09:59:59Z', renames: [{ actor: 'mallory', at: '2026-11-01T09:59:59Z' }] }), config).action, 'run'));
+
+// An issue may wait for others under "## Depends on", one "- #n" per line.
+describe('depends on', () => {
+  const waiting = (body) => issue({ number: 160, author: config.owner, body });
+  const body = 'Do it.\n\n## Depends on\n\n- #151\n- #152\n\n## Out of scope\n\n- #153\n';
+
+  test('an issue that depends on an open issue is skipped and says what it waits for', () =>
+    assert.deepEqual(classify(waiting(body), config, [151, 200]), { action: 'skip', reason: 'waits for #151', waitsFor: [151] }));
+  test('once the issues it depends on are closed it runs', () =>
+    assert.deepEqual(classify(waiting(body), config, [153, 200]), { action: 'run', stage: 'implement' }));
+  test('it names every open issue it waits for', () =>
+    assert.deepEqual(classify(waiting(body), config, [151, 152]).waitsFor, [151, 152]));
+  test('lines that are not "- #n" under the heading are ignored', () =>
+    assert.equal(classify(waiting('## Depends on\n\n- #151 first\n- other/repo#152\nsee #153\n- 154\n'), config, [151, 152, 153, 154]).action, 'run'));
+  test('without the open issues it cannot tell, so an issue with dependencies waits', () =>
+    assert.deepEqual(classify(waiting(body), config).waitsFor, [151, 152]));
+  test('without the open issues an issue with no dependencies still runs', () =>
+    assert.equal(classify(waiting('Do it.'), config).action, 'run'));
+  test('an issue never waits for itself', () =>
+    assert.equal(classify(waiting('## Depends on\n- #160\n'), config, [160]).action, 'run'));
+  test('a pull request does not wait', () =>
+    assert.equal(classify({ ...issue({ kind: 'pr', labels: ['agent:review'], labelEvents: [{ label: 'agent:review', actor: config.owner, at: T }],
+      headRef: 'factory/issue-1', headRepo: config.repo, body }) }, config, [151]).action, 'run'));
+});

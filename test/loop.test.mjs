@@ -28,6 +28,7 @@ function fakes(o = {}) {
     runItem: async (item, stage, deps, port) => { d.started.push({ n: item.number, stage, port }); await (o.hold ?? Promise.resolve()); return { outcome: 'done' }; },
     gh: {
       listCandidates: async () => { if (o.listFails) throw new Error('GitHub is down'); return o.candidates ?? []; },
+      openIssueNumbers: async () => [],
       addLabel: async (c, n, l) => { d.labelsAdded.push(`${n}:${l}`); },
       removeLabel: async (c, n, l) => { d.labelsRemoved.push(`${n}:${l}`); },
       comment: async (c, n, b) => { d.comments.push(`${n}:${b}`); },
@@ -180,6 +181,7 @@ describe('conflicting pull requests', () => {
       runItem: async (item, stage) => { d.started.push([item.number, stage]); return { outcome: 'done' }; },
       gh: {
         listCandidates: async () => candidates,
+        openIssueNumbers: async () => [],
         listPullRequests: async () => { if (pullsFail) throw new Error('GitHub is down'); return pulls; },
         addLabel: async () => {}, removeLabel: async () => {}, comment: async () => {},
       },
@@ -251,7 +253,7 @@ describe('free port', () => {
     const started = [];
     const deps = {
       cfg: { ...config, maxParallel: 2 }, log: () => {},
-      gh: { listCandidates: async () => [issue(3), issue(503)] },
+      gh: { listCandidates: async () => [issue(3), issue(503)], openIssueNumbers: async () => [] },
       runItem: async (item, stage, d, port) => { started.push({ n: item.number, port, free: await canBind(port) }); return { outcome: 'done' }; },
     };
     const running = new Map();
@@ -276,7 +278,7 @@ describe('pull request tags', () => {
     const deps = {
       cfg: { ...config, ...scorePad }, root: '/f', log: (m) => logs.push(m),
       runItem: async () => outcome,
-      gh: { listCandidates: async () => [item], listPullRequests: async () => [], addLabel: async () => {}, removeLabel: async () => {}, comment: async () => {} },
+      gh: { listCandidates: async () => [item], listPullRequests: async () => [], openIssueNumbers: async () => [], addLabel: async () => {}, removeLabel: async () => {}, comment: async () => {} },
       ws: fakeWorkspace({}),
     };
     const running = new Map();
@@ -321,7 +323,7 @@ describe('pull request tags', () => {
     const deps = {
       cfg: { ...config, ...scorePad }, root: '/f', log: (m) => logs.push(m),
       runItem: async () => ({ outcome: 'done' }),
-      gh: { listCandidates: async () => [item], listPullRequests: async () => [], addLabel: async () => {}, removeLabel: async () => {}, comment: async () => {} },
+      gh: { listCandidates: async () => [item], listPullRequests: async () => [], openIssueNumbers: async () => [], addLabel: async () => {}, removeLabel: async () => {}, comment: async () => {} },
       ws: fakeWorkspace({}),
       ...o,
     };
@@ -398,7 +400,7 @@ describe('issue titles', () => {
     await tick({
       cfg: config, log: (m) => logs.push(m),
       runItem: async () => ({ outcome: 'done' }),
-      gh: { listCandidates: async () => [item] },
+      gh: { listCandidates: async () => [item], openIssueNumbers: async () => [] },
     }, running);
     await Promise.all(running.values());
     return logs.find((l) => l.includes('started'));
@@ -447,5 +449,47 @@ describe('check line', () => {
     const line = await pollLine({ cfg: { ...config, localRun: true }, planUsage: async () => { calls++; return { fiveHour: 1, week: 1 }; } }, 1, 0);
     assert.equal(line, '1 running');
     assert.equal(calls, 0);
+  });
+});
+
+describe('issues that depend on others', () => {
+  const waiting = issue(160, { body: '## Depends on\n\n- #151\n- #152\n' });
+  function deps(open) {
+    const d = { started: [], logs: [] };
+    d.deps = {
+      cfg: config, log: (m) => d.logs.push(m),
+      runItem: async (item) => { d.started.push(item.number); return { outcome: 'done' }; },
+      gh: { listCandidates: async () => [waiting], listPullRequests: async () => [], openIssueNumbers: async () => open() },
+    };
+    return d;
+  }
+  const ticked = async (d, running = new Map()) => { const s = await tick(d.deps, running); await Promise.all(running.values()); return s; };
+
+  test('an issue waits while an issue it depends on is open, then runs', async () => {
+    let open = [151, 152, 160];
+    const d = deps(() => open);
+    assert.deepEqual(await ticked(d), []);
+    open = [160];
+    assert.deepEqual(await ticked(d), [160]);
+  });
+
+  test('the wait is logged once per waiting spell, not on every poll', async () => {
+    let open = [151, 152, 160];
+    const d = deps(() => open);
+    await ticked(d); await ticked(d);
+    open = [152, 160];
+    await ticked(d);
+    assert.deepEqual(d.logs, ['#160 waits for #151, #152']);
+    open = [160];
+    await ticked(d);
+    open = [151, 160];
+    await ticked(d);
+    assert.deepEqual(d.logs.filter((l) => l.includes('waits')), ['#160 waits for #151, #152', '#160 waits for #151']);
+  });
+
+  test('when the open issues cannot be listed, an issue with dependencies waits', async () => {
+    const d = deps(() => { throw new Error('GitHub is down'); });
+    assert.deepEqual(await ticked(d), []);
+    assert.deepEqual(d.logs, ['could not list open issues: GitHub is down', '#160 waits for #151, #152']);
   });
 });
