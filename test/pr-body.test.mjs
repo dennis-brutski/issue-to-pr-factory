@@ -78,6 +78,17 @@ describe('addTestChanges', () => {
       'Closes #7\n\n## Tests changed\n\n- `test/a.test.js` · a — renamed\n- `test/b.test.js` · b — removed with the old flag\n\n## Checks\n\nok');
   });
 
+  test('a body edited on GitHub, with CRLF line endings, gets its test changes in the section already there', () => {
+    const body = 'Closes #7\r\n\r\n## Tests changed\r\n\r\n- `test/a.test.js` · a — renamed\r\n\r\n## Checks\r\n\r\nok';
+    assert.equal(addTestChanges(body, [two]),
+      'Closes #7\r\n\r\n## Tests changed\r\n\r\n- `test/a.test.js` · a — renamed\r\n- `test/b.test.js` · b — removed with the old flag\r\n\r\n## Checks\r\n\r\nok');
+  });
+
+  test('a CRLF body without the section gets one before the checks, with CRLF line endings', () => {
+    assert.equal(addTestChanges('Closes #7\r\n\r\n## Checks\r\n\r\nok', [one]),
+      'Closes #7\r\n\r\n## Tests changed\r\n\r\n- `test/a.test.js` · a — renamed\r\n\r\n## Checks\r\n\r\nok');
+  });
+
   test('the first test changes get a section before the checks', () => {
     assert.equal(addTestChanges('Closes #7\n\n## Checks\n\nok', [one]), 'Closes #7\n\n## Tests changed\n\n- `test/a.test.js` · a — renamed\n\n## Checks\n\nok');
   });
