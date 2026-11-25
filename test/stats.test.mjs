@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { countPullRequests, stopLabel, groupStops, formatStats, runStats, countAutoMerges, formatAutoMerges, groupAgentUse, formatAgentUse, agentUseSection, readSessions } from '../stats.mjs';
+import { countPullRequests, stopLabel, groupStops, formatStats, runStats, countAutoMerges, formatAutoMerges, groupAgentUse, formatAgentUse, agentUseSection, readSessions, countReviewLoad, formatReviewLoad } from '../stats.mjs';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -396,5 +396,64 @@ describe('session usage', () => {
       '  review             1       1                   2k        5    $1.00',
       '  total              2       2              2k (0%)       10    $2.00', // the gate's cachedIn 0 counts in the total
     ]);
+  });
+});
+
+// npm run stats: how often the owner stepped in per merged pull request, and how long those waited to merge.
+describe('review load', () => {
+  const cfg = { repo: 'dennis-brutski/demo', owner: 'dennis-brutski' };
+  const merged = (number, issue, at, mergedAt, extra = {}) => ({ number, ref: `factory/issue-${issue}`, repo: 'dennis-brutski/demo', at, mergedAt, ...extra });
+  const on = (n, body, extra = {}) => ({ author: 'dennis-brutski', body, at: '2026-11-10T10:00:00Z', on: n, ...extra });
+  const STOP = stopped('implement', 'The agent could not finish:\n\nNo.', 'agent:needs-human');
+  const REWORK = '🏭 **Rework**\n\nRenamed a';
+  const H = 3600000;
+
+  test('countReviewLoad counts reworks and stops on each merged pull request and its issue', () => {
+    const prs = [
+      merged(10, 1, '2026-11-10T10:00:00Z', '2026-11-10T12:00:00Z'), // 2h
+      merged(11, 2, '2026-11-10T10:00:00Z', '2026-11-11T10:00:00Z'), // 24h
+      merged(12, 3, '2026-11-10T10:00:00Z', '2026-11-10T20:00:00Z'), // 10h
+      merged(13, 4, '2026-11-10T10:00:00Z', '2026-11-10T11:00:00Z', { repo: 'mallory/demo' }), // a fork
+      merged(14, 0, '2026-11-10T10:00:00Z', '2026-11-10T11:00:00Z', { ref: 'fix-typo' }), // not a factory branch
+    ];
+    const comments = [
+      on(1, STOP, { at: '2026-10-01T10:00:00Z' }), // on the issue, before the pull request, and long before --since
+      on(10, REWORK), on(10, STOP), // a rework that then stopped counts twice
+      on(2, STOP, { author: 'mallory' }), // not the owner
+      on(11, stopped('review', 'There are no new comments from you since the last push.', 'agent:needs-human')), // a park, not counted
+      on(11, 'please rename it'), // the owner's own words
+      on(12, REWORK),
+      on(13, STOP), on(14, REWORK), on(4, STOP), // pull requests not counted
+      on(99, STOP), // another issue
+    ];
+    assert.deepEqual(countReviewLoad(prs, comments, cfg), { merged: 3, steps: 4, medianMs: 10 * H });
+  });
+
+  test('countReviewLoad with since counts pull requests opened from that day, with all their reworks and stops', () => {
+    const prs = [
+      merged(10, 1, '2026-11-01T23:59:59Z', '2026-11-02T10:00:00Z'),
+      merged(11, 2, '2026-11-02T00:00:00Z', '2026-11-02T00:45:00Z'),
+      merged(12, 3, '2026-11-02T00:00:00Z', '2026-11-02T01:15:00Z'),
+    ];
+    const comments = [on(1, STOP), on(2, STOP, { at: '2026-10-01T10:00:00Z' }), on(11, REWORK)];
+    assert.deepEqual(countReviewLoad(prs, comments, cfg, '2026-11-02'), { merged: 2, steps: 2, medianMs: H });
+  });
+
+  test('countReviewLoad with no merged pull requests counts nothing', () => {
+    assert.deepEqual(countReviewLoad([], [on(1, STOP)], cfg), { merged: 0, steps: 0, medianMs: null });
+  });
+
+  test('formatReviewLoad shows the average and the median wait', () => {
+    assert.equal(formatReviewLoad({ merged: 5, steps: 4, medianMs: 14.9 * H }), 'review load: 0.8 reworks or stops per merged PR · median 14h to merge');
+    assert.equal(formatReviewLoad({ merged: 1, steps: 0, medianMs: 72 * H }), 'review load: 0.0 reworks or stops per merged PR · median 72h to merge');
+  });
+
+  test('formatReviewLoad shows whole minutes under an hour', () => {
+    assert.equal(formatReviewLoad({ merged: 2, steps: 3, medianMs: 45.9 * 60000 }), 'review load: 1.5 reworks or stops per merged PR · median 45m to merge');
+    assert.equal(formatReviewLoad({ merged: 2, steps: 3, medianMs: H }), 'review load: 1.5 reworks or stops per merged PR · median 1h to merge');
+  });
+
+  test('formatReviewLoad with no merged pull requests shows - , not NaN', () => {
+    assert.equal(formatReviewLoad({ merged: 0, steps: 0, medianMs: null }), 'review load: - reworks or stops per merged PR · median - to merge');
   });
 });

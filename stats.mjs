@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { issueOfBranch, issueOfWorktree } from './lib/names.mjs';
 import { addUp, count, usageOf } from './lib/usage.mjs';
 import { loadSettings, targetNames } from './lib/settings.mjs';
-import { autoMergedPull, isCountedStop, stopLabel } from './lib/comments.mjs';
+import { autoMergedPull, isCountedStop, isRework, stopLabel } from './lib/comments.mjs';
 
 const same = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
 const after = (at, since) => !since || Date.parse(at) >= Date.parse(since);
@@ -37,6 +37,24 @@ export function countAutoMerges(comments, prs, cfg, since = null) {
 }
 
 export const formatAutoMerges = (a) => `auto-merged: ${a.autoMerged} · reverted: ${a.reverted}`;
+
+// Merged factory pull requests opened since `since` ({ number, ref, repo, at, mergedAt }), and comments
+// with the number they are on: how many reworks and stops the owner had to answer on each pull request
+// or its issue, whenever they were made, and the median wait from opened to merged. Pure.
+export function countReviewLoad(merged, comments, cfg, since = null) {
+  const ours = merged.filter((p) => issueOfBranch(p.ref) !== null && same(p.repo, cfg.repo) && after(p.at, since));
+  const steps = ours.reduce((n, p) => n + comments.filter((c) => same(c.author, cfg.owner)
+    && (c.on === p.number || c.on === issueOfBranch(p.ref)) && (isRework(c.body) || isCountedStop(c.body))).length, 0);
+  const waits = ours.map((p) => Date.parse(p.mergedAt) - Date.parse(p.at)).sort((a, b) => a - b);
+  const mid = Math.floor(waits.length / 2);
+  const medianMs = !waits.length ? null : waits.length % 2 ? waits[mid] : (waits[mid - 1] + waits[mid]) / 2;
+  return { merged: ours.length, steps, medianMs };
+}
+
+// Whole minutes under an hour, otherwise whole hours.
+const wait = (ms) => (ms < 3600000 ? `${Math.floor(ms / 60000)}m` : `${Math.floor(ms / 3600000)}h`);
+export const formatReviewLoad = (l) => `review load: ${l.merged ? (l.steps / l.merged).toFixed(1) : '-'} reworks or stops per merged PR`
+  + ` · median ${l.medianMs === null ? '-' : wait(l.medianMs)} to merge`;
 
 // The stop labels and reasons live in lib/comments.mjs, next to the text they label.
 export { stopLabel };
@@ -146,11 +164,15 @@ async function statsOf(cfg, gh, since) {
   const [prs, comments] = await Promise.all([gh.listAllPullRequests(cfg), gh.listAllIssueComments(cfg)]);
   // The titles are only needed to find reverts, so they are fetched only when something was auto-merged.
   const titled = handedOver(comments, cfg, since).length ? await gh.listAllPullRequestTitles(cfg) : [];
+  // Merge times and which issue a comment is on are only needed when something was merged.
+  const pulls = countPullRequests(prs, cfg, since);
+  const [merged, commentsOn] = pulls.merged ? await Promise.all([gh.listAllMergedPullRequests(cfg), gh.listAllIssueCommentsOn(cfg)]) : [[], []];
   return [
     `${cfg.repo}${since ? ` since ${since}` : ''}`,
     agentUseSection(join(cfg.runDir, 'logs'), since),
     formatAutoMerges(countAutoMerges(comments, titled, cfg, since)),
-    formatStats(countPullRequests(prs, cfg, since), groupStops(comments, cfg, since)),
+    formatReviewLoad(countReviewLoad(merged, commentsOn, cfg, since)),
+    formatStats(pulls, groupStops(comments, cfg, since)),
   ].join('\n');
 }
 
