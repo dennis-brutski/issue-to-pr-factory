@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
-import { runItem, renderPrompt, schemas, lastStopReason, withTestChanges, testsThatChangeOf, testsThatChange, implementModel } from '../lib/stages.mjs';
+import { runItem, renderPrompt, schemas, lastStopReason, withTestChanges, testsThatChangeOf, testsThatChange, protectedThatChangeOf, implementModel } from '../lib/stages.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 import { runChecks } from '../lib/checks.mjs';
 import { execFileSync } from 'node:child_process';
@@ -1472,6 +1472,16 @@ test('text outside the section is ignored', () => {
     '## Out of scope', '', '- `test/b.test.js`', '',
   ].join('\n');
   assert.deepEqual(testsThatChange(body), ['test/a.test.js']);
+});
+
+// The issue lists the protected files a run may change under "## Protected files that change". A pull request gives none:
+// a branch with protected changes parks before setup on every later run, so only the first implement run reads the list.
+test('the protected files an issue lists are read from their own section', () => {
+  const body = '## Tests that change\n\n- `test/a.test.js`\n\n## Protected files that change\n\n- `config.mjs`: a turns key\n- `lib/agent.mjs`\n';
+  assert.deepEqual(protectedThatChangeOf({ kind: 'issue', number: 7, body }), ['config.mjs', 'lib/agent.mjs']);
+  assert.deepEqual(testsThatChange(body), ['test/a.test.js']);
+  assert.deepEqual(protectedThatChangeOf({ kind: 'pr', number: 12, headRef: 'factory/issue-7', body: `Closes #7\n\n${body}\n## What changed\n` }), []);
+  assert.deepEqual(protectedThatChangeOf({ kind: 'issue', number: 7, body: '## Problem\n\n- `config.mjs`\n' }), []);
 });
 
 test('no section gives an empty list', () => {
