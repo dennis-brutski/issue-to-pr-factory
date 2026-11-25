@@ -120,3 +120,19 @@ describe('test change rules', () => {
     assert.doesNotMatch(renderPrompt('implement', vars, { testDirs: ['test/'] }), /fakes and contract tests/);
   });
 });
+
+// The owner can let a run change protected files by listing them in the issue. The pull request stays a draft.
+describe('protected files the task lists', () => {
+  const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F' };
+
+  test('the rules allow the listed protected files, as a draft', () => {
+    for (const name of ['gate', 'implement', 'review', 'fix']) {
+      const p = renderPrompt(name, { ...vars, protectedThatChange: ['config.mjs', 'lib/agent.mjs'] }, { protectedFiles: ['config.mjs', 'lib/agent.mjs'] });
+      assert.match(p, /Do not touch .*`config\.mjs`.*\. You may change `config\.mjs`, `lib\/agent\.mjs` because the task lists them under `## Protected files that change`; the pull request is then a draft\. Add new test cases/, name);
+    }
+  });
+  test('without a list the rules allow no protected file', () => {
+    assert.doesNotMatch(renderPrompt('implement', vars, { protectedFiles: ['config.mjs'] }), /Protected files that change/);
+    assert.doesNotMatch(renderPrompt('implement', { ...vars, protectedThatChange: [] }, {}), /Protected files that change/);
+  });
+});
