@@ -6,8 +6,6 @@
 import { basename } from 'node:path';
 import { paths } from '../../lib/workspace.mjs';
 
-export const T = '2026-11-01T10:00:00Z';
-
 export const BASE = 'b'.repeat(40);
 
 // What againstBase gives: the branch judged against one base commit. `over` replaces
@@ -33,7 +31,7 @@ export function fakeWorkspace(over = {}, root = '/f') {
     ensureWorktree: async (n) => ({ dir: paths(root, n).worktree, created: true }),
     removeWorktree: async () => {},
     listWorktrees: async () => [],
-    headInfo: async () => ({ sha: 'abc', committedAt: T }),
+    headInfo: async () => ({ sha: 'abc' }),
     againstBase: async () => fakeView(),
     isClean: async () => true,
     mergeBase: async () => 'clean',

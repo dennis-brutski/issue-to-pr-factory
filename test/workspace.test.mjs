@@ -90,11 +90,11 @@ describe('worktrees and branches', () => {
     writeFileSync(join(dir, 'stray.txt'), 's');
     assert.equal(await ws.isClean(dir), false);
   });
-  test('headInfo returns sha and commit time', async () => {
+  test('headInfo returns only the sha', async () => {
     const { dir } = await ws.ensureWorktree(root, 7, 'master');
     const h = await ws.headInfo(dir);
     assert.match(h.sha, /^[0-9a-f]{40}$/);
-    assert.ok(!Number.isNaN(Date.parse(h.committedAt)));
+    assert.deepEqual(Object.keys(h), ['sha']);
   });
   test('mergeBase is clean when master moved without conflict', async () => {
     const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'x.txt');
