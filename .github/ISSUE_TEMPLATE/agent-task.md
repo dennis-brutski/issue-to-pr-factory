@@ -23,6 +23,10 @@ Optional. One bullet per existing test file this change has to change or delete:
 
 - `test/example.test.mjs`: the error message test expects the new wording.
 
+## Depends on
+
+Optional. One bullet per issue of this repo that must be closed before the factory starts this one, such as `- #151`. Until then the factory leaves this issue alone.
+
 ## Out of scope
 
 What this issue does not cover, so the agent does not do it.
