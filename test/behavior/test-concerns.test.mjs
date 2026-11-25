@@ -2,6 +2,9 @@
 // They never reach the fix session.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { world } from './world.mjs';
 import { gate, implement, ok, settled } from './steps.mjs';
 
@@ -55,7 +58,10 @@ test('a concern from a review with findings is kept from the fix session and kee
 });
 
 test('with autoMerge on, a concern from the review after the fix makes a draft that names it', async () => {
-  const w = await world({ settings: { autoMerge: true } });
+  // Auto-merge needs held-out checks; these pass, kept outside the world's run folder, so the draft is what keeps it from auto-merge.
+  const held = mkdtempSync(join(tmpdir(), 'factory-held-out-'));
+  writeFileSync(join(held, 'ok.test.mjs'), "import { test } from 'node:test';\ntest('held out', () => {});\n");
+  const w = await world({ settings: { autoMerge: true, heldOutDir: held, heldOutChecks: [['node', ['--test', '{heldOut}/ok.test.mjs']]] } });
   try {
     const n = w.issue({ labels: ['agent:implement'] });
     const concern = 'test/a.test.js: expected value widened in test a';
@@ -67,6 +73,7 @@ test('with autoMerge on, a concern from the review after the fix makes a draft t
     assert.equal(pr.isDraft, true);
     assert.ok(pr.body.includes(concern));
     assert.notEqual(pr.autoMerge, 'squash');
+    assert.deepEqual(w.state().calls.filter((c) => c[0] === 'pr' && c[1] === 'merge'), []);
     f.signal('SIGINT'); await f.exited;
-  } finally { w.close(); }
+  } finally { w.close(); rmSync(held, { recursive: true, force: true }); }
 });

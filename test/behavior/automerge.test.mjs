@@ -1,13 +1,24 @@
 // A target with autoMerge on: a simple, cleanly reviewed issue ends handed to GitHub's auto-merge.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { world } from './world.mjs';
 import { clean, implement, factoryComments, settled } from './steps.mjs';
 
 const simpleGate = { session: 'gate', output: { confidence: 90, questions: [], difficulty: 'simple', files: ['src/a.js'] } };
 
+// Auto-merge needs held-out checks; these pass, kept outside the world's run folder.
+function heldOut() {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-held-out-'));
+  writeFileSync(join(dir, 'ok.test.mjs'), "import { test } from 'node:test';\ntest('held out', () => {});\n");
+  return { dir, settings: { heldOutDir: dir, heldOutChecks: [['node', ['--test', '{heldOut}/ok.test.mjs']]] } };
+}
+
 test('a simple issue on an autoMerge target is handed to auto-merge', async () => {
-  const w = await world({ settings: { autoMerge: true } });
+  const held = heldOut();
+  const w = await world({ settings: { autoMerge: true, ...held.settings } });
   try {
     const n = w.issue({ labels: ['agent:implement'] });
     w.script(n, [simpleGate, implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), clean]);
@@ -20,7 +31,7 @@ test('a simple issue on an autoMerge target is handed to auto-merge', async () =
     assert.ok(factoryComments(w, n).some((c) => c.body.startsWith('🏭 **Auto-merge**\n')));
     await w.until(() => /handed to auto-merge/.test(f.output()), 5000, 'the log line');
     f.signal('SIGINT'); await f.exited;
-  } finally { w.close(); }
+  } finally { w.close(); rmSync(held.dir, { recursive: true, force: true }); }
 });
 
 test('without autoMerge the same issue is not merged', async () => {
