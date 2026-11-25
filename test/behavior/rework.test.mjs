@@ -71,3 +71,38 @@ test("the factory's own comments never reach the agent", async () => {
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
 });
+
+test('with a future commit date, a comment written after the last factory comment still starts a rework', async () => {
+  const w = await world();
+  try {
+    const n = w.issue({ labels: ['agent:implement'] });
+    w.script(n, [gate(90), { ...implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), committerDate: '2099-01-01T00:00:00Z' }, clean]);
+    const f = w.start();
+    await w.until(settled(w, n, 'agent:done'), 20000, 'a pull request');
+    const p = w.pr().number;
+    w.comment(p, 'rename a to b');
+    w.script(n, [{ session: 'rework', write: { 'src/a.js': 'export const b = 2;\n' }, commit: 'Rename a to b', output: ok('Renamed a') }]);
+    w.label(p, 'agent:review');
+    await w.until(reworked(w, p), 20000, 'the rework');
+    assert.ok(factoryComments(w, p).some((c) => c.body.includes('Renamed a')));
+    assert.ok(!w.item(p).labels.includes('agent:needs-human'));
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});
+
+test('with a past commit date, comments a rework already handled do not count as new', async () => {
+  const w = await world();
+  try {
+    const [n, p, f] = await toPullRequest(w);
+    w.comment(p, 'rename a to b');
+    w.script(n, [{ session: 'rework', write: { 'src/a.js': 'export const b = 2;\n' }, commit: 'Rename a to b', committerDate: '2000-01-01T00:00:00Z', output: ok('Renamed a') }]);
+    w.label(p, 'agent:review');
+    await w.until(reworked(w, p), 20000, 'the rework');
+    const sessions = w.claudeCalls().length;
+    w.label(p, 'agent:review');
+    await w.until(settled(w, p, 'agent:needs-human'), 20000, 'the park');
+    assert.match(factoryComments(w, p).at(-1).body, /no new comments/);
+    assert.equal(w.claudeCalls().length, sessions);
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});

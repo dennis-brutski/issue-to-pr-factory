@@ -31,6 +31,7 @@ for (const [path, content] of Object.entries(step.write ?? {})) {
   writeFileSync(join(cwd, path), content);
 }
 for (const path of step.remove ?? []) rmSync(join(cwd, path), { force: true });
+if (step.committerDate) process.env.GIT_COMMITTER_DATE = step.committerDate; // what a session could do: date its commits at will
 if (step.commit) { git('add', '-A'); git('commit', '-q', '-m', step.commit); }
 if (step.replaceHead) { // what a hostile session could do: show a commit without the change in place of the head
   const fake = git('commit-tree', 'HEAD~1^{tree}', '-p', 'HEAD~1', '-m', step.commit ?? 'fake');
