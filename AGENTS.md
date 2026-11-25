@@ -30,6 +30,7 @@ Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or 
 | `test/behavior/` | The real `factory.mjs` against a fake `gh` and fake `claude` (`fakes/`), driven through `world.mjs`. |
 | `smoke/` | Live checks with real Claude. |
 | `docs/adr/` | Decisions already made, and why. |
+| `GLOSSARY.md` | The factory's own terms, in one or two plain lines each. |
 
 ## Rules
 
