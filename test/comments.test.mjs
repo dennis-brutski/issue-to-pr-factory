@@ -7,7 +7,7 @@ import scorePad from './fixtures/web-app-target.mjs';
 import { verifyBranch } from '../lib/verify.mjs';
 import { interpret } from '../lib/agent.mjs';
 import { classify } from '../lib/eligibility.mjs';
-import { fakeWorkspace } from './fakes/workspace.mjs';
+import { fakeWorkspace, fakeView } from './fakes/workspace.mjs';
 
 const OWNER = 'dennis-brutski', T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
 const LABEL = 'agent:needs-human';
@@ -85,19 +85,19 @@ describe('stop labels', () => {
 
   // lib/verify.mjs
   test('protected files before setup get their own label', async () => {
-    const ws = fakeWorkspace({ changesAgainstBase: async () => [{ status: 'M', path: 'package.json' }] });
+    const ws = fakeWorkspace({ againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'package.json' }] }) });
     const { park } = await verifyBranch(ws, cfg, dir, { before: 'setup' });
     assert.equal(label(park), 'protected files (before setup)');
   });
 
   test('attribution lines get their own label', async () => {
-    const ws = fakeWorkspace({ commitMessagesAgainstBase: async () => ['Fix undo\n\nCo-Authored-By: someone'] });
+    const ws = fakeWorkspace({ againstBase: async () => fakeView({ messages: async () => ['Fix undo\n\nCo-Authored-By: someone'] }) });
     const { park } = await verifyBranch(ws, cfg, dir);
     assert.equal(label(park), 'attribution lines');
   });
 
   test('CI workflow files are labelled workflow files', async () => {
-    const ws = fakeWorkspace({ changesAgainstBase: async () => [{ status: 'M', path: '.github/workflows/ci.yml' }] });
+    const ws = fakeWorkspace({ againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: '.github/workflows/ci.yml' }] }) });
     const { park } = await verifyBranch(ws, cfg, dir);
     assert.equal(label(park), 'workflow files');
   });
