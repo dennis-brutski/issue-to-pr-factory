@@ -64,7 +64,7 @@ function fakes(o = {}) {
     // before its next git command; here every worktree command after a session throws.
     ws: fakeWorkspace(guarded(() => d.agentCalls.length && (o.configChanged || o.gitLinkChanged), {
       ensureWorktree: async (n) => { d.worktrees.push(n); return { dir: `/f/worktrees/issue-${n}`, created: true }; },
-      headInfo: async () => ({ sha: head(), committedAt: T }),
+      headInfo: async () => ({ sha: head() }),
       // Before setup: what the branch held when the run began (o.setupChanges); after it, what the sessions left.
       againstBase: async () => fakeView({
         changes: async (since) => (!d.installs.length ? o.setupChanges ?? []
@@ -231,7 +231,7 @@ test('rework uses the issue\'s worktree, pushes and removes the review label', a
 });
 test('rework without new owner comments parks', async () => {
   const d = fakes({ agent: [] });
-  const r = await runItem(pr([{ author: 'dennis-brutski', body: 'old comment', at: '2026-11-01T09:00:00Z' }]), 'review', d.deps, 4201);
+  const r = await runItem(pr([{ author: 'dennis-brutski', body: 'old comment', at: '2026-11-01T09:00:00Z' }, { author: 'dennis-brutski', body: '🏭 **Rework**\n\nDone', at: T }]), 'review', d.deps, 4201);
   assert.equal(r.outcome, 'parked');
   assert.equal(d.agentCalls.length, 0);
   assert.ok(d.labelsAdded.includes('4:agent:needs-human'));
@@ -272,7 +272,7 @@ test('in-progress label is removed even when a step throws', async () => {
 });
 test('explore: a session that commits on a clean tree parks as read-only', async () => {
   const d = fakes({ agent: [explore(true, true)] });
-  d.deps.ws.headInfo = async () => ({ sha: d.agentCalls.length ? 'def' : 'abc', committedAt: T });
+  d.deps.ws.headInfo = async () => ({ sha: d.agentCalls.length ? 'def' : 'abc' });
   const r = await runItem({ ...issue, labels: ['agent:explore'] }, 'explore', d.deps, 4201);
   assert.deepEqual(r, { outcome: 'parked', detail: 'The explore step is read-only but changed files in the worktree.' });
   assert.ok(!d.labelsAdded.includes('1:agent:implement'));
@@ -561,7 +561,7 @@ describe('automerge', () => {
         autoMerge: async (c, n) => { calls.push(['merge', n]); if (mergeFails) throw new Error(mergeFails); },
       },
       ws: fakeWorkspace({
-        headInfo: async () => ({ sha: `abc${commits}`, committedAt: T }),
+        headInfo: async () => ({ sha: `abc${commits}` }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: protectedChange ? 'package.json' : 'src/state.js' }] }),
       }),
     };
@@ -898,7 +898,7 @@ describe('owner comments in prompts', () => {
         setDraft: async () => {}, updatePullRequestBody: async () => {},
       },
       ws: fakeWorkspace({
-        headInfo: async () => ({ sha: `abc${calls.filter((a) => !a.readOnly).length}`, committedAt: T }),
+        headInfo: async () => ({ sha: `abc${calls.filter((a) => !a.readOnly).length}` }),
         againstBase: async () => fakeView({ messages: async () => ['Fix undo on empty ledger'] }),
       }),
     };
@@ -1007,7 +1007,7 @@ describe('draft stops', () => {
       },
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
-        headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
+        headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'test/unit/scoring.test.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {},
@@ -1040,7 +1040,7 @@ describe('draft stops', () => {
     const { d, comments } = deps();
     d.runAgent = async () => ok({ status: 'complete', summary: 'Renamed.', detail: '' });
     let n = 0;
-    d.ws.headInfo = async () => ({ sha: `abc${n++}`, committedAt: '2026-11-01T10:00:00Z' });
+    d.ws.headInfo = async () => ({ sha: `abc${n++}` });
     const r = await runItem(asked, 'review', d, 4201);
     assert.equal(r.outcome, 'parked');
     assertDraftStop(comments.at(-1));
@@ -1081,7 +1081,7 @@ describe('gate model', () => {
       },
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
-        headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
+        headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/state.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {},
@@ -1148,7 +1148,7 @@ describe('implement model', () => {
       },
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
-        headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
+        headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/state.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {},
@@ -1267,7 +1267,7 @@ describe('provenance', () => {
       },
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
-        headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
+        headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/state.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {},
@@ -1321,7 +1321,7 @@ describe('park and pull request text', () => {
       },
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
-        headInfo: async () => ({ sha: `abc${sessions}`, committedAt: '2026-11-01T10:00:00Z' }),
+        headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => changes, messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {},
@@ -1385,7 +1385,7 @@ describe('park and pull request text', () => {
     const reworked = deps({ changes: [{ status: 'M', path: 'test/unit/scoring.test.js' }] });
     reworked.d.runAgent = async () => ok({ status: 'complete', summary: 'Renamed.', detail: '' });
     let n = 0;
-    reworked.d.ws.headInfo = async () => ({ sha: `abc${n++}`, committedAt: '2026-11-01T10:00:00Z' });
+    reworked.d.ws.headInfo = async () => ({ sha: `abc${n++}` });
     const r2 = await runItem(asked, 'review', reworked.d, 4201);
     assert.match(r2.detail, /it changes files you should check, so the pull request is now a draft:\n\n- /);
   });
@@ -1678,7 +1678,7 @@ describe('warning lines', () => {
       },
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: `/f/worktrees/issue-${n}`, created: true }),
-        headInfo: async () => ({ sha: 'abc', committedAt: '2026-11-01T10:00:00Z' }),
+        headInfo: async () => ({ sha: 'abc' }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/undo.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
         push: async () => {},
@@ -1735,7 +1735,7 @@ describe('last stop reason', () => {
       },
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: join(root, 'worktrees', `issue-${n}`), created: true }),
-        headInfo: async () => { if (d.o.crash) { d.o.crash = false; throw new Error('disk on fire'); } return { sha: `abc${commits}`, committedAt: d.o.pushedAt ?? T }; },
+        headInfo: async () => { if (d.o.crash) { d.o.crash = false; throw new Error('disk on fire'); } return { sha: `abc${commits}` }; },
         againstBase: async () => fakeView({ messages: async () => ['Fix undo on empty ledger'] }),
         mergeBase: async () => d.o.merge ?? 'clean',
       }, root),
@@ -1752,19 +1752,19 @@ describe('last stop reason', () => {
 
   test('the newest 🏭 Factory stopped comment is the last stop reason; a 🏭 Pull request comment is not', () => {
     const item = { ...issue, comments: [
+      stopped('🏭 Pull request: https://github.com/x/y/pull/50', T),
       stopped('🏭 **Factory stopped (implement).**\n\nold reason', '2026-11-01T10:30:00Z'),
       stopped('🏭 **Factory stopped (implement).**\n\n`npm test` failed: RED', T2),
-      stopped('🏭 Pull request: https://github.com/x/y/pull/50', '2026-11-01T12:00:00Z'),
     ] };
-    assert.equal(lastStopReason(item, cfg, T), '🏭 **Factory stopped (implement).**\n\n`npm test` failed: RED');
-    assert.equal(lastStopReason({ ...issue, comments: [stopped('🏭 Pull request: https://github.com/x/y/pull/50')] }, cfg, T), '');
+    assert.equal(lastStopReason(item, cfg), '🏭 **Factory stopped (implement).**\n\n`npm test` failed: RED');
+    assert.equal(lastStopReason({ ...issue, comments: [stopped('🏭 Pull request: https://github.com/x/y/pull/50')] }, cfg), '');
   });
 
   test('a stop reason older than the last push, or not by the owner, does not count', () => {
-    const item = { ...issue, comments: [stopped('🏭 **Factory stopped (implement).**\n\nRED')] };
-    assert.equal(lastStopReason(item, cfg, '2026-11-01T12:00:00Z'), '');
-    assert.equal(lastStopReason({ ...issue, comments: [stopped('🏭 **Factory stopped (implement).**\n\nRED', T2, 'someone')] }, cfg, T), '');
-    assert.equal(lastStopReason({ ...issue, comments: [stopped('Factory stopped: do X')] }, cfg, T), '');
+    const item = { ...issue, comments: [stopped('🏭 **Factory stopped (implement).**\n\nRED'), stopped('🏭 Pull request: https://github.com/x/y/pull/50', '2026-11-01T12:00:00Z')] };
+    assert.equal(lastStopReason(item, cfg), '');
+    assert.equal(lastStopReason({ ...issue, comments: [stopped('🏭 **Factory stopped (implement).**\n\nRED', T2, 'someone')] }, cfg), '');
+    assert.equal(lastStopReason({ ...issue, comments: [stopped('Factory stopped: do X')] }, cfg), '');
   });
 
   test('a park for no new comments is never a stop reason', () => {
@@ -1772,7 +1772,7 @@ describe('last stop reason', () => {
       stopped('🏭 **Factory stopped (review).**\n\nThe agent could not finish the rework', '2026-11-01T10:30:00Z'),
       stopped('🏭 **Factory stopped (review).**\n\nThere are no new comments from you since the last push.', T2),
     ] };
-    assert.match(lastStopReason(item, cfg, T), /could not finish the rework/);
+    assert.match(lastStopReason(item, cfg), /could not finish the rework/);
   });
 
   test('after a red check park the implement prompt carries the check output, the judges do not', async () => {
@@ -1793,13 +1793,13 @@ describe('last stop reason', () => {
     }
   });
 
-  test('when Dennis pushed after the park, the old reason is not shown', async () => {
+  test('when Dennis pushed after the park, the old reason is still shown', async () => {
     const d = factory({ agent: [gate(90), work(), review()], checks: red });
     await runItem(issue, 'implement', d.deps, 4201);
     d.agentCalls.length = 0;
-    d.o.agent = [gate(90), work(), review()]; d.o.checks = null; d.o.pushedAt = '2026-11-01T12:00:00Z';
+    d.o.agent = [gate(90), work(), review()]; d.o.checks = null;
     await runItem(d.seen(issue), 'implement', d.deps, 4201);
-    assert.ok(!d.prompt('implement').includes(HEADING));
+    assert.ok(d.prompt('implement').includes(HEADING));
     assert.ok(!d.prompt('implement').includes('{{'));
   });
 
@@ -1856,6 +1856,28 @@ describe('last stop reason', () => {
     assert.match(d.prompt('fix'), /RED-OUTPUT/);
   });
 
+  test('a successful merge stage says so, and an older stop no longer counts', async () => {
+    const d = factory({ agent: [] });
+    const item = { ...pr([stopped('🏭 **Factory stopped (merge).**\n\nRED-OUTPUT', T)]), labels: ['agent:merge'] };
+    assert.equal(lastStopReason(item, cfg), item.comments[0].body);
+    assert.equal((await runItem(item, 'merge', d.deps, 4201)).outcome, 'done');
+    assert.deepEqual(d.comments, ['🏭 Merged the base branch and pushed.']);
+    assert.equal(lastStopReason(d.seen(item), cfg), '');
+  });
+
+  test('a commit date never moves the last push: a stop after the newest factory comment counts', async () => {
+    const d = factory({ agent: [work()] });
+    const item = pr([
+      stopped('🏭 **Rework**\n\nDone', T),
+      { author: 'dennis-brutski', body: 'please fix', at: '2026-11-01T10:15:00Z' },
+      stopped('🏭 **Factory stopped (review).**\n\nThe agent could not finish the rework: RED-OUTPUT', '2026-11-01T10:30:00Z'),
+    ]);
+    d.deps.ws.headInfo = async () => ({ sha: `abc${d.agentCalls.length}`, committedAt: '2099-01-01T00:00:00Z' });
+    assert.equal((await runItem(item, 'review', d.deps, 4201)).outcome, 'done');
+    assert.match(d.prompt('rework'), /please fix/);
+    assert.match(d.prompt('rework'), /RED-OUTPUT/);
+  });
+
   test('the stop reason is fenced and the section shows only in code-changing prompts', () => {
     const vars = { number: 7, branch: 'b', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', lastStop: 'x ```y``` z' };
     for (const name of ['implement', 'fix', 'rework', 'merge']) {
@@ -1882,7 +1904,7 @@ describe('last stop after a base merge', () => {
     const calls = [], posted = [];
     let agent = [ok({ confidence: 90, questions: [] }), ok({ status: 'complete', summary: 's', detail: '' }), ok({ verdict: 'clean', findings: [] })];
     let checks = { ok: false, failed: 'npm test', output: 'AssertionError: RED-OUTPUT 1 !== 2' };
-    let committedAt = T;
+    let head = T;
     const deps = {
       cfg: { ...config, ...scorePad }, root, log: () => {},
       runSetup: async () => ({ ok: true, failed: null, output: '' }),
@@ -1897,10 +1919,10 @@ describe('last stop after a base merge', () => {
       },
       ws: fakeWorkspace({
         ensureWorktree: async (n) => ({ dir: join(root, 'worktrees', `issue-${n}`), created: false }),
-        headInfo: async () => ({ sha: `abc-${committedAt}`, committedAt }),
+        headInfo: async () => ({ sha: `abc-${head}` }),
         againstBase: async () => fakeView({ messages: async () => ['Fix undo on empty ledger'] }),
         // main moved while the item waited: merging it makes a merge commit newer than the park comment.
-        mergeBase: async () => { if (posted.length) committedAt = T3; return 'clean'; },
+        mergeBase: async () => { if (posted.length) head = T3; return 'clean'; },
       }, root),
     };
     assert.equal((await runItem(issue, 'implement', deps, 4201)).outcome, 'parked');

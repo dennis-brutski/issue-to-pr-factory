@@ -1,7 +1,7 @@
 // The factory's own GitHub comments: what one module writes, the same module reads back.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stopped, didNotStart, explore, rework, pullRequest, isFactory, lastStop, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel, isRework } from '../lib/comments.mjs';
+import { stopped, didNotStart, explore, rework, pullRequest, merged, isFactory, lastStop, lastPush, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel, isRework } from '../lib/comments.mjs';
 import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { verifyBranch } from '../lib/verify.mjs';
@@ -26,7 +26,7 @@ test('the wording of each comment stays word for word', () => {
 });
 
 test('every comment the factory writes is recognised as its own; others are not', () => {
-  for (const body of [stopped('implement', 'x', LABEL), didNotStart('y', LABEL), explore('w', false, true), rework('s'), pullRequest('u')])
+  for (const body of [stopped('implement', 'x', LABEL), didNotStart('y', LABEL), explore('w', false, true), rework('s'), pullRequest('u'), merged])
     assert.ok(isFactory(body), body);
   assert.equal(isFactory('rename it'), false);
   assert.equal(isFactory('Factory stopped: do X'), false);
@@ -34,24 +34,36 @@ test('every comment the factory writes is recognised as its own; others are not'
 
 test('what stopped() writes, lastStop() finds: the newest one since the push', () => {
   const comments = [
-    c(stopped('implement', 'old reason', LABEL), '2026-11-01T10:30:00Z'),
+    c(stopped('implement', 'old reason', LABEL), '2026-11-01T09:30:00Z'),
+    c(pullRequest('https://github.com/x/y/pull/50'), T),
     c(stopped('implement', 'RED', LABEL), T2),
-    c(pullRequest('https://github.com/x/y/pull/50'), '2026-11-01T12:00:00Z'),
     c(didNotStart('issue text was edited', LABEL), '2026-11-01T12:30:00Z'),
   ];
-  assert.equal(lastStop(comments, T, OWNER), stopped('implement', 'RED', LABEL));
-  assert.equal(lastStop(comments, '2026-11-01T11:30:00Z', OWNER), '');
-  assert.equal(lastStop(comments.slice(0, 1), null, OWNER), stopped('implement', 'old reason', LABEL));
+  assert.equal(lastStop(comments, OWNER), stopped('implement', 'RED', LABEL));
+  assert.equal(lastStop([...comments, c(rework('s'), '2026-11-01T11:30:00Z')], OWNER), '');
+  assert.equal(lastStop(comments.slice(0, 1), OWNER), stopped('implement', 'old reason', LABEL));
 });
 
 test('a "no new comments" stop is skipped', () => {
   const comments = [c(stopped('review', 'could not finish the rework', LABEL), '2026-11-01T10:30:00Z'), c(stopped('review', NO_NEW_COMMENTS, LABEL), T2)];
-  assert.equal(lastStop(comments, T, OWNER), stopped('review', 'could not finish the rework', LABEL));
+  assert.equal(lastStop([c(rework('s'), T), ...comments], OWNER), stopped('review', 'could not finish the rework', LABEL));
 });
 
 test('stop comments by others are ignored; the owner matches in any case', () => {
-  assert.equal(lastStop([c(stopped('implement', 'RED', LABEL), T2, 'someone')], T, OWNER), '');
-  assert.equal(lastStop([c(stopped('implement', 'RED', LABEL), T2, 'Dennis-Brutski')], T, OWNER), stopped('implement', 'RED', LABEL));
+  assert.equal(lastStop([c(rework('s'), T), c(stopped('implement', 'RED', LABEL), T2, 'someone')], OWNER), '');
+  assert.equal(lastStop([c(rework('s'), T), c(stopped('implement', 'RED', LABEL), T2, 'Dennis-Brutski')], OWNER), stopped('implement', 'RED', LABEL));
+});
+
+test('the last push is the newest factory comment by the owner that is not a stop', () => {
+  assert.equal(lastPush([], OWNER), null);
+  assert.equal(lastPush([c(pullRequest('u'), T), c(rework('s'), T2)], OWNER), T2);
+  assert.equal(lastPush([c(rework('s'), T2), c(merged, T)], OWNER), T2);
+  assert.equal(lastPush([c(merged, T), c(stopped('merge', 'RED', LABEL), T2), c(didNotStart('y', LABEL), T2)], OWNER), T);
+  assert.equal(lastPush([c(merged, T), c('looks good', T2), c(rework('s'), T2, 'someone')], OWNER), T);
+});
+
+test('the merge comment says the base branch was merged and pushed', () => {
+  assert.equal(merged, '🏭 Merged the base branch and pushed.');
 });
 
 // The auto-merge comments: written and read back by lib/comments.mjs.
