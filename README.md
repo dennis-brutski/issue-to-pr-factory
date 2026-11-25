@@ -44,7 +44,7 @@ Blue is you, grey is the factory, orange is a stop.
 - ⚠ Agents run Claude Code with your login (`~/.claude`) and spend your Claude plan.
 - ⚠ After a push, unchanged CI workflows run the branch's code on GitHub's machines.
 - ⚠ With `autoMerge`, auto-merged code reaches the base branch before you read it. Read the merged pull requests afterwards and revert what you do not like.
-- ⚠ With two runs at once, git commands for one can run in the short window after the other's agent session changed the clone's git config and before the next check. Upgrade path: run the factory's own git confined as well, and push from a clone agents never touch.
+- ⚠ With two runs at once, one run's agent can change the shared clone's git config just before the factory's git reads it for the other run. Whatever that config makes git run stays confined, and the push goes out from the factory's own clone, but in that window it can change what git reports to the brakes. The next check stops the factory.
 - ⚠ Setup has network and runs code from the branch (install scripts, for example) that you have not read.
 - ⚠ The sandbox is only as good as `bwrap` and Claude Code's sandbox.
 
@@ -167,7 +167,7 @@ flowchart TD
 | a held-out check failed | The output is in the factory's terminal, not in the comment. Sharpen the issue or fix it by hand, remove the label. |
 | changes CI workflow files, so the factory did not push it | GitHub would run that workflow the moment it is pushed. Read the diff in the comment; if it is right, push the branch from `runs/<target>/worktrees/issue-<n>` yourself. |
 | commits must not carry attribution lines | An agent added a co-author or similar trailer. Reword the commits in the worktree, remove the label. |
-| the worktree's .git link / the clone's git config was changed | A session tried to change where git looks or what it runs. The factory stops entirely. Read the session log, fix or delete `runs/<target>/repo`, then start again. |
+| the worktree's .git link / the clone's git config was changed | A session tried to change where git looks or what it runs. The factory stops entirely. Read the session log, fix or delete `runs/<target>/repo`, then start again. `runs/<target>/upstream.git` is the factory's own clone; no agent can write it. |
 | **Factory did not start:** issue text was edited / issue title was changed after it was approved | An issue someone else opened was edited after you labelled it (by anyone, you included), or someone else renamed it, so the factory did not run it. Re-read it, remove the label to approve it again. |
 | timed out / max_turns / usage limit / spent its budget | Remove the label when you want it to continue. A budget stop comes from `maxBudgetUsd`. After a usage limit, `npm run start:local <target>` goes on with a local model. |
 
@@ -231,7 +231,7 @@ To add a repo, follow *Getting started*. Missing `agent:*` labels are created on
 - ✅ **Agents** run in Claude Code's sandbox: no network, no `git push`, no `gh`, no web tools, writes only in their worktree.
 - ✅ **What agents can read**, all of it in one place: their worktree; the target's run folder `runs/<target>/` (its clone, the other worktrees and the logs), never the factory folder, which holds every target's; the `runtimeRead` and `sandboxRead` folders; the factory's `skills/` folder, read-only. Claude Code itself reads your login in `~/.claude`. The rest of the home folder is hidden.
 - ✅ Agents get only an allowlisted environment: no tokens, API keys or agent sockets.
-- ✅ **Setup and checks**, which run the branch's code before you have read it, run under `bwrap`: the system read-only, the home folder hidden except `runtimeRead` and `sandboxRead`, `/run` and `/tmp` empty, the clone's git data read-only, writes only to the worktree (and, for setup, `setupWrite`). Setup has network, to download dependencies; checks have none. Held-out checks also read `heldOutDir`.
+- ✅ **Setup and checks**, which run the branch's code before you have read it, run under `bwrap`: the system read-only, the home folder hidden except `runtimeRead` and `sandboxRead`, `/run` and `/tmp` empty, the clone's git data read-only, writes only to the worktree (and, for setup, `setupWrite`). Setup has network, to download dependencies; checks have none. Held-out checks also read `heldOutDir`. The factory's own git in the clone and its worktrees runs the same way, without network, writing only the clone's git data and the worktree. Only the factory's own clone, `upstream.git`, which no agent can write, talks to GitHub: it fetches, asks for the base, and pushes the checked commit, which it takes from the agents' clone through a confined `git upload-pack`.
 - ✅ **Brakes:** before every push the branch is checked against the base commit GitHub reports (`git ls-remote`), not the clone's own ref. Changed **workflow files** under `.github/workflows/` stop the push: the factory never pushes them. Commits with **attribution lines** (`Co-Authored-By`, "Generated with", `Claude-Session` trailers, which commits must not carry) stop it too. Changed protected files (listed under the issue's `## Protected files that change` or not), changed or deleted existing tests the issue does not list under `## Tests that change`, and added skips or `.only` make the pull request a draft. Listed test changes, new test cases added to an existing test file and lines only added to a `testSupport` file are listed in the pull request instead. Setup does not run on a branch that already changes protected files, since it has network. The factory pushes exactly the commit it checked.
 - ✅ **Git itself:** agents can write the clone's `.git/config`, so before git runs on a worktree, and on every poll, it must hold only what a plain clone holds with `origin` the target repo, or the issue parks and the factory stops. The factory's git ignores replace refs and grafts, which could show a history other than the one pushed.
 - ✅ If the sandbox cannot start, the factory refuses to start.
@@ -260,7 +260,7 @@ The `factory-inbox` Claude Code skill walks you through the stops. It ships with
 - `prompts/` — what each agent step is told.
 - `skills/` — the skills agents may use, read-only.
 - `factory-inbox/` — the `factory-inbox` skill for you, not for agents.
-- `runs/<target>/` — the target's clone (`repo/`), per-issue worktrees and logs, and its lock (not in git).
+- `runs/<target>/` — the agents' clone (`repo/`), the factory's own clone (`upstream.git/`), per-issue worktrees and logs, and its lock (not in git).
 
 ## Testing the factory
 
