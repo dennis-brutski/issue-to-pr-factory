@@ -40,6 +40,7 @@ const pr = (comments = [{ author: 'dennis-brutski', body: 'also handle redo', at
 
 function fakes(o = {}) {
   const d = { installs: [], agentCalls: [], comments: [], labelsAdded: [], labelsRemoved: [], pushed: [], opened: [], drafts: [], bodies: [], worktrees: [] };
+  const head = () => (o.noNewCommits ? 'abc' : `abc${d.agentCalls.filter((a) => !a.readOnly).length}`);
   const queue = [...(o.agent ?? [])];
   d.deps = {
     cfg: { ...config, ...scorePad }, root: '/f', log: () => {},
@@ -63,7 +64,7 @@ function fakes(o = {}) {
     // before its next git command; here every worktree command after a session throws.
     ws: fakeWorkspace(guarded(() => d.agentCalls.length && (o.configChanged || o.gitLinkChanged), {
       ensureWorktree: async (n) => { d.worktrees.push(n); return { dir: `/f/worktrees/issue-${n}`, created: true }; },
-      headInfo: async () => ({ sha: o.noNewCommits ? 'abc' : `abc${d.agentCalls.filter((a) => !a.readOnly).length}` }),
+      headInfo: async () => ({ sha: head() }),
       // Before setup: what the branch held when the run began (o.setupChanges); after it, what the sessions left.
       againstBase: async () => fakeView({
         changes: async (since) => (!d.installs.length ? o.setupChanges ?? []
@@ -75,7 +76,8 @@ function fakes(o = {}) {
       mergeBase: async () => o.merge ?? 'clean',
       mergeResolved: async () => o.resolved ?? true,
       push: async (dir, b, sha) => { if (o.pushFails) throw new Error('push rejected'); d.pushed.push(b); d.pushedSha = sha; },
-      currentBranch: async () => (o.detached ? null : 'factory/issue-1'),
+      preparePush: async () => (o.detached ? { refused: 'not-on-branch', branch: null }
+        : !(o.clean ?? true) ? { refused: 'uncommitted', branch: 'factory/issue-1' } : { sha: head(), reattached: false }),
     }, () => (o.configChanged ? "the clone's git config at /f/repo was changed: credential.helper" : "the worktree's .git link at /f/worktrees/issue-1 was changed"))),
   };
   return d;
@@ -303,9 +305,7 @@ test('a failing in-progress removal keeps the outcome and is logged', async () =
 });
 test('files still uncommitted after the leftovers are removed park', async () => {
   const d = fakes({ agent: [gate(90), work(), review()] });
-  let removed = false;
-  d.deps.ws.removeSandboxLeftovers = async () => { removed = true; };
-  d.deps.ws.isClean = async () => !removed;
+  d.deps.ws.preparePush = async () => ({ refused: 'uncommitted', branch: 'factory/issue-1' }); // clean before the push, not after the leftovers went
   const r = await runItem(issue, 'implement', d.deps, 4201);
   assert.deepEqual(r, { outcome: 'parked', detail: 'The agent left uncommitted changes in the worktree.' });
   assert.equal(d.checksRan, undefined);
@@ -943,8 +943,12 @@ describe('detached HEAD', () => {
         setDraft: async () => {}, updatePullRequestBody: async () => {},
       },
       ws: fakeWorkspace({
-        currentBranch: async () => (onBranch ? 'factory/issue-1' : branchAfter),
-        attachBranch: async (dir, branch) => { attached.push(branch); if (attaches) onBranch = true; return attaches; },
+        // As the real one: only a detached HEAD on top of the branch is moved.
+        preparePush: async (dir, branch) => {
+          if (onBranch) return { sha: 'abc', reattached: false };
+          if (branchAfter === null && attaches) { attached.push(branch); return { sha: 'abc', reattached: true }; }
+          return { refused: 'not-on-branch', branch: branchAfter };
+        },
         push: async (dir, branch, sha) => { pushed.push([branch, sha]); },
       }),
     };
@@ -1006,7 +1010,7 @@ describe('draft stops', () => {
         headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'test/unit/scoring.test.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
-        push: async () => {}, currentBranch: async () => 'factory/issue-7',
+        push: async () => {},
       }),
     };
     return { d, opened, comments };
@@ -1080,7 +1084,7 @@ describe('gate model', () => {
         headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/state.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
-        push: async () => {}, currentBranch: async () => 'factory/issue-7',
+        push: async () => {},
       }),
     };
     return { d, opened, seen };
@@ -1147,7 +1151,7 @@ describe('implement model', () => {
         headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/state.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
-        push: async () => {}, currentBranch: async () => 'factory/issue-7',
+        push: async () => {},
       }),
     };
     return { d, opened, seen };
@@ -1227,13 +1231,13 @@ describe('leftovers', () => {
         setDraft: async () => {}, updatePullRequestBody: async () => {},
       },
       ws: fakeWorkspace({
-        removeSandboxLeftovers: async () => { if (sessionsDone) order.push('leftovers'); },
-        isClean: async () => { if (sessionsDone) order.push('clean?'); return true; },
+        isClean: async () => { if (sessionsDone) order.push('clean?'); return true; }, // the review's read-only check
+        preparePush: async () => { if (sessionsDone) order.push('leftovers, clean?'); return { sha: 'abc', reattached: false }; },
       }),
     };
     const r = await runItem(issue, 'implement', d, 4201);
     assert.equal(r.outcome, 'done', r.detail);
-    assert.deepEqual(order.slice(-3), ['leftovers', 'clean?', 'checks']); // earlier: the review's read-only check
+    assert.deepEqual(order.slice(-2), ['leftovers, clean?', 'checks']); // leftovers before the clean check: test/workspace.test.mjs
   });
 });
 
@@ -1266,7 +1270,7 @@ describe('provenance', () => {
         headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/state.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
-        push: async () => {}, currentBranch: async () => 'factory/issue-7',
+        push: async () => {},
       }),
       ...extra,
     };
@@ -1320,7 +1324,7 @@ describe('park and pull request text', () => {
         headInfo: async () => ({ sha: `abc${sessions}` }),
         againstBase: async () => fakeView({ changes: async () => changes, messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
-        push: async () => {}, currentBranch: async () => 'factory/issue-7',
+        push: async () => {},
       }),
       ...extra,
     };
@@ -1527,7 +1531,7 @@ describe('session usage', () => {
         openPullRequest: async (c, a) => { opened.push(a); return { number: 50, url: 'https://github.com/x/y/pull/50' }; },
         setDraft: async () => {}, updatePullRequestBody: async () => {},
       },
-      ws: fakeWorkspace({ currentBranch: async () => 'factory/issue-7' }, root),
+      ws: fakeWorkspace({}, root),
     };
     return { d, logs, opened, root };
   }
@@ -1677,7 +1681,7 @@ describe('warning lines', () => {
         headInfo: async () => ({ sha: 'abc' }),
         againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/undo.js' }], messages: async () => ['Fix undo'] }),
         isClean: async () => true, mergeBase: async () => 'clean',
-        push: async () => {}, currentBranch: async () => 'factory/issue-7',
+        push: async () => {},
       }),
     };
     await runItem(issue, 'implement', d, 4201);

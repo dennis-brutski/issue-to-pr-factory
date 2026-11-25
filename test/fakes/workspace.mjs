@@ -3,7 +3,6 @@
 // a test passes `over` to replace the ones it cares about. A contract test keeps its
 // method names equal to the real handle's.
 // ponytail: fixed answers, not a model of the branch; grow one if tests keep faking state by hand.
-import { basename } from 'node:path';
 import { paths } from '../../lib/workspace.mjs';
 
 export const BASE = 'b'.repeat(40);
@@ -38,9 +37,7 @@ export function fakeWorkspace(over = {}, root = '/f') {
     abortMerge: async () => {},
     mergeResolved: async () => true,
     push: async () => {},
-    currentBranch: async (dir) => `factory/${basename(dir)}`,
-    attachBranch: async () => false,
-    removeSandboxLeftovers: async () => {},
+    preparePush: async () => ({ sha: 'abc', reattached: false }),
     ...over,
   };
 }
