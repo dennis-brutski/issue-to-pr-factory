@@ -5,7 +5,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 // The prompts name whoever runs the factory, from cfg.ownerName, not a fixed person.
-const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F' };
+const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', baseSha: 'b'.repeat(40) };
 
 test('every prompt uses the configured owner name and no other', () => {
   for (const name of ['gate', 'implement', 'review', 'fix', 'rework', 'merge', 'explore']) {
@@ -21,7 +21,7 @@ test('without an owner name the prompts say "the owner"', () =>
 
 // The review session also checks changes to existing tests, and reports what it finds as test concerns.
 describe('review of test changes', () => {
-  const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C' };
+  const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', baseSha: 'b'.repeat(40) };
   const p = renderPrompt('review', vars, { testDirs: ['test/'] });
 
   test('the review prompt asks whether added lines form new tests', () => {
@@ -123,7 +123,7 @@ describe('test change rules', () => {
 
 // The owner can let a run change protected files by listing them in the issue. The pull request stays a draft.
 describe('protected files the task lists', () => {
-  const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F' };
+  const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', baseSha: 'b'.repeat(40) };
 
   test('the rules allow the listed protected files, as a draft', () => {
     for (const name of ['gate', 'implement', 'review', 'fix']) {
@@ -134,5 +134,26 @@ describe('protected files the task lists', () => {
   test('without a list the rules allow no protected file', () => {
     assert.doesNotMatch(renderPrompt('implement', vars, { protectedFiles: ['config.mjs'] }), /Protected files that change/);
     assert.doesNotMatch(renderPrompt('implement', { ...vars, protectedThatChange: [] }, {}), /Protected files that change/);
+  });
+});
+
+// The review diffs against the base commit the factory pinned, not the clone's origin ref, which a session can move.
+describe('the base the sessions compare against', () => {
+  const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', baseSha: 'c0ffee'.padEnd(40, '0') };
+
+  test('the review prompt diffs against the pinned sha and not origin/', () => {
+    const p = renderPrompt('review', vars);
+    assert.ok(p.includes(`git diff ${vars.baseSha}...HEAD`));
+    assert.doesNotMatch(p, /origin\//);
+  });
+  test('the merge prompt names MERGE_HEAD and not origin/', () => {
+    const p = renderPrompt('merge', vars);
+    assert.match(p, /`MERGE_HEAD`/);
+    assert.match(p, /`git rev-parse MERGE_HEAD`/);
+    assert.doesNotMatch(p, /origin\//);
+  });
+  test('no prompt tells a session to use origin/', () => {
+    for (const name of ['gate', 'implement', 'review', 'fix', 'rework', 'merge', 'explore'])
+      assert.doesNotMatch(renderPrompt(name, vars), /origin\//, name);
   });
 });
