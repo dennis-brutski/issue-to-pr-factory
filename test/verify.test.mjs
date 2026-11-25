@@ -153,6 +153,26 @@ describe('protected files and tests', () => {
     assert.deepEqual(await verifyBranch(ws, cfg, dir, { testsThatChange: ['lib/brakes.mjs'] }),
       { park: null, flags: ['protected file changed: lib/brakes.mjs'] });
   });
+
+  // Each ask is an ls-remote and a confined git call; one verify judges against one base.
+  test('the remote base is asked once per verify and every read against the base uses it', async () => {
+    await commit(dir, { 'test/a.test.mjs': "test('a', () => {})\ntest('b', () => {})\n", 'test/b.test.mjs': "test('b', () => {})\n" });
+    const asked = [], reads = [];
+    const spy = {
+      ...ws,
+      remoteBase: async (d) => { const sha = await ws.remoteBase(d); asked.push(sha); return sha; },
+      changesAgainstBase: (d, since, opts) => { reads.push(['changes', since, opts?.at]); return ws.changesAgainstBase(d, since, opts); },
+      diffAgainstBase: (d, p, since, opts) => { reads.push(['diff', since, opts?.at]); return ws.diffAgainstBase(d, p, since, opts); },
+      commitMessagesAgainstBase: (d, opts) => { reads.push(['log', null, opts?.at]); return ws.commitMessagesAgainstBase(d, opts); },
+    };
+    assert.deepEqual(await verifyBranch(spy, cfg, dir), { park: null, flags: [], notes: ['test cases added: test/a.test.mjs'] });
+    assert.equal(asked.length, 1);
+    assert.deepEqual(reads.map(([what]) => what), ['log', 'changes', 'diff', 'diff']);
+    for (const [what, , at] of reads) assert.equal(at, asked[0], `${what} reads against the base asked once`);
+    asked.length = 0; reads.length = 0;
+    assert.deepEqual(await verifyBranch(spy, cfg, dir, { before: 'setup' }), { park: null, flags: [] });
+    assert.deepEqual([asked.length, reads], [1, [['changes', null, asked[0]]]]);
+  });
 });
 
 // The dotfile guard is a push brake: verifyBranch (protected) refuses the branch, not the stage code.
