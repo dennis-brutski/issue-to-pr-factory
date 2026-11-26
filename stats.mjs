@@ -61,8 +61,10 @@ export const formatReviewLoad = (l) => `review load: ${l.merged ? (l.steps / l.m
 // their footer (bodies: { number, body }), and the owner's "not clear enough" stops. A rework is a
 // Rework comment of the owner's on the pull request or its issue (comments with the number they are on). Pure.
 const GATE_GROUPS = ['70–79', '80–89', '90+', 'other'];
+// The confidence comes from the last footer line only: the text above it may mention "gate confidence" too.
 const gateGroup = (body) => {
-  const m = /gate confidence (\d+)/.exec(body ?? '');
+  const footer = (body ?? '').split('\n').filter((l) => l.startsWith('🏭 Built by issue-to-pr-factory ')).at(-1) ?? '';
+  const m = / · gate confidence (\d+) · /.exec(footer);
   const n = m ? Number(m[1]) : -1;
   return n >= 90 ? '90+' : n >= 80 ? '80–89' : n >= 70 ? '70–79' : 'other';
 };

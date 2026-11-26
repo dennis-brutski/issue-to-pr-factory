@@ -501,6 +501,17 @@ describe('gate calibration', () => {
     });
   });
 
+  test('countGate reads the confidence from the footer line, not from text above it', () => {
+    const prs = [pull(10, 1, 'merged'), pull(11, 2, 'merged')];
+    const bodies = [
+      { number: 10, body: `The gate confidence 90 rule.\n\n${body(10, 75).body}` },
+      { number: 11, body: 'Closes #2\n\nAt gate confidence 95 · it stops.' }, // no footer
+    ];
+    assert.deepEqual(rows(countGate(prs, bodies, [], [], cfg)), {
+      '70–79': [1, 0, 0], '80–89': [0, 0, 0], '90+': [0, 0, 0], other: [1, 0, 0],
+    });
+  });
+
   test('countGate counts the owner\'s not clear enough stops, contradiction stops included, not failed gate sessions', () => {
     const comments = [on(1, NOT_CLEAR), on(2, CONTRADICTS), on(3, GATE_FAILED), on(4, STOP), on(5, NOT_CLEAR, { author: 'mallory' })];
     assert.equal(countGate([], [], [], comments, cfg).stops, 2);
