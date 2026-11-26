@@ -815,6 +815,17 @@ describe('tests on the base', () => {
     assert.deepEqual([read('src/a.js'), read('src/new.js'), read('src/gone.js'), read('stray.txt')], ['two\n', 'new\n', null, null]);
   });
 
+  test('untracked files the checks left are removed before the run, not a reason to stop', async () => {
+    await branchChanges();
+    const head = await git(dir, 'rev-parse', 'HEAD');
+    write(dir, { 'coverage/report.txt': 'left by the checks\n', 'results.tap': 'ok 1\n' });
+    let seen;
+    await ws.testsOnBase(dir, sha, ['test/'], async () => { seen = [read('coverage/report.txt'), read('results.tap'), read('src/a.js')]; });
+    assert.deepEqual(seen, [null, null, 'one\n']);
+    assert.equal(await git(dir, 'rev-parse', 'HEAD'), head);
+    assert.equal(await git(dir, 'status', '--porcelain'), '');
+  });
+
   test('the branch is restored when the run throws', async () => {
     await branchChanges();
     await assert.rejects(() => ws.testsOnBase(dir, sha, ['test/'], async () => { throw new Error('boom'); }), /boom/);
