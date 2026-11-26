@@ -39,6 +39,7 @@ try { mkdirSync(root, { recursive: true }); release = acquireLock(join(root, 'fa
 
 const running = new Map();
 let stopping = false, wake = () => {};
+/** @type {(ms: number) => Promise<void>} */
 const sleep = (ms) => new Promise((resolve) => { const t = setTimeout(resolve, ms); wake = () => { clearTimeout(t); resolve(); }; });
 
 process.on('SIGINT', () => {
