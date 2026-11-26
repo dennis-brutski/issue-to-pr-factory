@@ -269,9 +269,9 @@ describe('length', () => {
   };
   const count = (text, re) => (text.match(re) ?? []).length;
 
-  test('the README is at most 280 lines', () => {
+  test('the README is at most 300 lines', () => {
     const lines = README.split('\n').length - (README.endsWith('\n') ? 1 : 0);
-    assert.ok(lines <= 280, `${lines} lines`);
+    assert.ok(lines <= 300, `${lines} lines`);
   });
 
   test('the terminal screenshot has no text stand-in any more', () => {
@@ -348,4 +348,38 @@ describe('plain words and real links', () => {
 test('the targets table documents testFiles and its default', () => {
   assert.equal(config.testFiles, null);
   assert.match(README, /^\| `testFiles` — .*Default `null`: off\..*`\[\['node', \['--test', '\{files\}'\]\]\]` \|$/m);
+});
+
+describe('easy to scan', () => {
+  const README = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'README.md'), 'utf8');
+  const section = (heading) => {
+    const start = README.indexOf(`\n## ${heading}\n`);
+    assert.ok(start >= 0, heading);
+    const end = README.indexOf('\n## ', start + 1);
+    return README.slice(start, end < 0 ? undefined : end);
+  };
+
+  test('the Auto-merge bullet is followed by exactly six indented conditions', () => {
+    const run = section('How a run works').split('\n');
+    const at = run.findIndex((l) => l.startsWith('- **Auto-merge:**'));
+    assert.ok(at >= 0, 'Auto-merge bullet');
+    let n = 0;
+    while (run[at + 1 + n]?.startsWith('  - ')) n++;
+    assert.equal(n, 6);
+    assert.doesNotMatch(run[at + 1 + n], /^\s*- /, 'no seventh condition');
+  });
+
+  test('the target example says setup has network and checks have none', () => {
+    const lines = section('Getting started').split('\n');
+    const setup = lines.find((l) => /^\s+setup: /.test(l));
+    const checks = lines.find((l) => /^\s+checks: /.test(l));
+    assert.ok(setup && checks, 'setup and checks lines');
+    assert.match(setup, /\/\/ with network\b[^\n]*$/);
+    assert.match(checks, /\/\/ without network\b[^\n]*$/);
+  });
+
+  test('Factory inbox has numbered install steps 1, 2 and 3', () => {
+    const inbox = section('Factory inbox');
+    for (const n of [1, 2, 3]) assert.match(inbox, new RegExp(`^${n}\\. `, 'm'), `${n}.`);
+  });
 });

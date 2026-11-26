@@ -70,9 +70,12 @@ Then:
    ```js
    export default {
      repo: 'you/your-repo', baseBranch: 'main',
-     setup: [['npm', ['ci', '--ignore-scripts']]], checks: [['npm', ['test']]], testDirs: ['test/'],
-     protectedFiles: ['package.json', 'package-lock.json'],
-     env: { npm_config_cache: '{runDir}/npm-cache' }, setupWrite: ['{runDir}/npm-cache'],
+     setup: [['npm', ['ci', '--ignore-scripts']]],         // with network, before the first agent session
+     checks: [['npm', ['test']]],                          // without network, before every push
+     testDirs: ['test/'],                                  // changing an existing test here makes a draft
+     protectedFiles: ['package.json', 'package-lock.json'], // so does changing these
+     env: { npm_config_cache: '{runDir}/npm-cache' },      // the npm cache stays in the run folder,
+     setupWrite: ['{runDir}/npm-cache'],                   // not in your own ~/.npm
    };
    ```
    Setup has network, checks have none, and `--ignore-scripts` stops install scripts from running unread code with network.
@@ -146,7 +149,15 @@ flowchart TD
 - **Explore:** one read-only session writes up the cause or the shape of the change, the files it touches and its side effects. It needs no network: it reads the code and history, and can run the tests in its sandbox to reproduce a bug. If it judges the change easy to undo (one `git revert`) and small in reach, it swaps `agent:explore` for `agent:implement`; otherwise it stops for your decision.
 - **The gate:** the first step of `implement`. A read-only session scores how clearly the issue can be built as written, from 0 to 100. Below `confidenceThreshold` (70), or when it finds statements in the issue that cannot all hold, it stops with its questions (and any contradictions, and files the issue names that do not exist). It also rates the difficulty (`simple`, `normal`, `hard`): a `simple` issue gets its first draft from `simpleModel`, unless it is likely to touch protected files or the last run stopped. Review and fixes always use `model`.
 - **Implement:** implement → review (read-only) → fix, if there were findings → the brakes and the factory's own checks → push of exactly the checked commit → pull request. The pull request is a **draft** only when the branch changes protected files; the run then stops so you read that part. Mark it ready yourself after reading; the factory never does. Removing `agent:needs-human` from the issue starts another implement run on the same branch.
-- **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request, and says so in a comment, only when all of these hold: the target has `heldOutChecks` (the agent can read and change the target's `checks`, so they alone could be bent until they pass); the pull request is not a draft; it lists no tests that pass without the change (see `testFiles`); the gate rated the issue `simple`; the review was clean, or it had findings, the fix finished and a second review after the fix was clean (the second review always runs after a fix; its findings start no second fix but go into the pull request body under `## Review findings after the fix`); fewer than 100 lines changed (additions + deletions, as GitHub counts them). `agent:review` and `agent:merge` runs never auto-merge. Otherwise the terminal line says which one failed (`not auto-merged: …`), with no comment. If GitHub refuses (auto-merge not allowed in the repo settings, or anything else), a comment says why and asks you to merge it by hand; the run still ends `done`. With required checks, GitHub waits for them.
+- **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request, and says so in a comment, only when all of these hold:
+  - the target has `heldOutChecks` (the agent can read and change the target's `checks`, so they alone could be bent until they pass);
+  - the pull request is not a draft;
+  - it lists no tests that pass without the change (see `testFiles`);
+  - the gate rated the issue `simple`;
+  - the review was clean, or it had findings, the fix finished and a second review after the fix was clean (the second review always runs after a fix; its findings start no second fix but go into the pull request body under `## Review findings after the fix`);
+  - fewer than 100 lines changed (additions + deletions, as GitHub counts them).
+
+  `agent:review` and `agent:merge` runs never auto-merge. Otherwise the terminal line says which one failed (`not auto-merged: …`), with no comment. If GitHub refuses (auto-merge not allowed in the repo settings, or anything else), a comment says why and asks you to merge it by hand; the run still ends `done`. With required checks, GitHub waits for them.
 - **Retry:** the steps that change code (`implement`, `fix`, `rework`, `merge`) are told why the last run stopped: the newest "Factory stopped" comment since the last commit, marked as information. Gate, review and explore judge without it.
 - **Brakes:** what stops a push or makes the pull request a draft is under *Confinement and brakes*.
 
@@ -250,7 +261,15 @@ What stays outside: see *⚠ Risks you accept* above.
 
 ## Factory inbox
 
-The `factory-inbox` Claude Code skill walks you through the stops. It ships with this repo in `factory-inbox/`. Install it once from this folder with `ln -s "$PWD/factory-inbox" ~/.claude/skills/factory-inbox`, so it lives at `~/.claude/skills/factory-inbox/SKILL.md`, and copy `factory-inbox/config.example.json` to `config.json` next to it, so its settings are in `~/.claude/skills/factory-inbox/config.json` (not in git): `owner` (your GitHub login), `factoryDir` (the path to this folder) and optionally `notebookId` (a NotebookLM notebook it asks for background; `null` skips it). It lists the stops itself with `gh search issues "label:agent:needs-human" --state open --owner <owner>`, across every repo of the owner, oldest first. For each stop it shows what the issue wants, why the factory stopped, and a proposed reply, hand fix or relabel. Nothing is posted, labelled or committed until you approve that one item (approve / edit / skip). Start it in any Claude Code session with `/factory-inbox`, or ask in words: "factory inbox", "answer the factory", "what is the factory waiting for".
+The `factory-inbox` Claude Code skill walks you through the stops. It ships with this repo in `factory-inbox/`. Start it in any Claude Code session with `/factory-inbox`, or ask in words: "factory inbox", "answer the factory", "what is the factory waiting for". Install it once:
+
+1. From this folder, `ln -s "$PWD/factory-inbox" ~/.claude/skills/factory-inbox`, so it lives at `~/.claude/skills/factory-inbox/SKILL.md`.
+2. Copy `factory-inbox/config.example.json` to `config.json` next to it, so its settings are in `~/.claude/skills/factory-inbox/config.json` (not in git).
+3. Set `owner` (your GitHub login), `factoryDir` (the path to this folder) and optionally `notebookId` (a NotebookLM notebook it asks for background; `null` skips it).
+
+- It lists the stops itself with `gh search issues "label:agent:needs-human" --state open --owner <owner>`, across every repo of the owner, oldest first.
+- For each stop it shows what the issue wants, why the factory stopped, and a proposed reply, hand fix or relabel.
+- Nothing is posted, labelled or committed until you approve that one item (approve / edit / skip).
 
 ## Files
 
