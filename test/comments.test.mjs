@@ -1,7 +1,7 @@
 // The factory's own GitHub comments: what one module writes, the same module reads back.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stopped, didNotStart, explore, rework, pullRequest, merged, isFactory, lastStop, lastPush, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel, isRework } from '../lib/comments.mjs';
+import { stopped, didNotStart, explore, rework, pullRequest, merged, isFactory, lastStop, lastPush, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel, isRework, setupApprovals } from '../lib/comments.mjs';
 import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { verifyBranch } from '../lib/verify.mjs';
@@ -62,6 +62,24 @@ test('the last push is the newest factory comment by the owner that is not a sto
   assert.equal(lastPush([c(merged, T), c('looks good', T2), c(rework('s'), T2, 'someone')], OWNER), T);
 });
 
+// ADR 0006: only the owner's own comments approve setup for a commit, never the factory's.
+test('setup approvals are the full shas the owner names in their own comments', () => {
+  const a = 'a'.repeat(40), b = '0123456789abcdef0123456789abcdef01234567';
+  assert.deepEqual(setupApprovals([c(`approve protected setup ${a}`, T), c(`Read it, fine.\napprove protected setup ${b}\n`, T2, 'Dennis-Brutski')], OWNER), [a, b]);
+});
+
+test('setup approvals by others, in factory comments or without a full sha do not count', () => {
+  const a = 'a'.repeat(40);
+  assert.deepEqual(setupApprovals([
+    c(`approve protected setup ${a}`, T, 'someone'),
+    c(stopped('implement', `approve protected setup ${a}`, LABEL), T),
+    c(`🏭 approve protected setup ${a}`, T),
+    c(`approve protected setup ${a.slice(0, 7)}`, T),
+    c(`approve protected setup ${a}0`, T),
+    c(`please do not approve protected setup ${a}`, T),
+  ], OWNER), []);
+});
+
 test('the merge comment says the base branch was merged and pushed', () => {
   assert.equal(merged, '🏭 Merged the base branch and pushed.');
 });
@@ -97,9 +115,12 @@ describe('stop labels', () => {
 
   // lib/verify.mjs
   test('protected files before setup get their own label', async () => {
-    const ws = fakeWorkspace({ againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'package.json' }] }) });
-    const { park } = await verifyBranch(ws, cfg, dir, { before: 'setup' });
+    const head = 'c'.repeat(40);
+    const ws = fakeWorkspace({ headInfo: async () => ({ sha: head }), againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'package.json' }] }) });
+    const { park } = await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: [] });
     assert.equal(label(park), 'protected files (before setup)');
+    assert.ok(park.includes(`at ${head},`), park);
+    assert.ok(park.includes(`\napprove protected setup ${head}\n`), park);
   });
 
   test('attribution lines get their own label', async () => {
