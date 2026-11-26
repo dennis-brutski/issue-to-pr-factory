@@ -634,6 +634,25 @@ describe('parallel runs', () => {
   });
 });
 
+// Whatever hints a git version prints, an error keeps only the lines that say what went wrong.
+describe('git error messages', () => {
+  test('git errors leave out hint lines', async () => {
+    const base = mkdtempSync(join(tmpdir(), 'factory-hint-'));
+    const bin = join(base, 'bin'), root = join(base, 'factory');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'git'), "#!/bin/sh\nprintf 'hint: a\\nhint: b\\nfatal: real reason\\n' >&2\nexit 1\n");
+    chmodSync(join(bin, 'git'), 0o755);
+    mkdirSync(join(root, 'upstream.git'), { recursive: true });
+    writeFileSync(join(root, 'upstream.git', 'HEAD'), 'ref: refs/heads/master\n');
+    mkdirSync(join(root, 'repo', '.git'), { recursive: true });
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      await assert.rejects(() => ws.ensureClone(root, 'unused'), (e) => e.message.includes('fatal: real reason') && !e.message.includes('hint:'));
+    } finally { process.env.PATH = path; }
+  });
+});
+
 // Replace refs and grafts in the clone must not change what the factory's git sees.
 describe('replace refs and grafts', () => {
   const git = async (dir, ...args) => {
