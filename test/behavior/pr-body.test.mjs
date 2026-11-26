@@ -54,3 +54,36 @@ test('a body edited after the poll keeps the edit when the review stage adds tes
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
 });
+
+const findingsReview = (findings) => ({ session: 'review', output: { verdict: 'findings', findings } });
+const fixA = { session: 'fix', write: { 'src/a.js': 'export const a = 3;\n' }, commit: 'Fix a', output: ok('Fixed a') };
+
+test('with autoMerge off, findings from the review after the fix go into the pull request body, which stays ready', async () => {
+  const w = await world();
+  try {
+    const n = w.issue({ labels: ['agent:implement'] });
+    w.script(n, [gate(90), implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), findingsReview(['src/a.js: a is wrong']),
+      fixA, findingsReview(['src/a.js: a is still off by one', 'src/b.js: b is unused'])]);
+    const f = w.start();
+    await w.until(settled(w, n, 'agent:done'), 20000, 'agent:done');
+    assert.equal(w.claudeCalls().filter((c) => c.session === 'review').length, 2);
+    assert.equal(w.claudeCalls().filter((c) => c.session === 'fix').length, 1);
+    const pr = w.pr();
+    assert.equal(pr.isDraft, false);
+    assert.match(pr.body, /## Review findings after the fix\n\n- src\/a\.js: a is still off by one\n- src\/b\.js: b is unused\n/);
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});
+
+test('a clean review after the fix adds no review findings section', async () => {
+  const w = await world();
+  try {
+    const n = w.issue({ labels: ['agent:implement'] });
+    w.script(n, [gate(90), implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), findingsReview(['src/a.js: a is wrong']), fixA, clean]);
+    const f = w.start();
+    await w.until(settled(w, n, 'agent:done'), 20000, 'agent:done');
+    assert.equal(w.claudeCalls().filter((c) => c.session === 'review').length, 2);
+    assert.doesNotMatch(w.pr().body, /## Review findings after the fix/);
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});

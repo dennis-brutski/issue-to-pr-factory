@@ -121,17 +121,17 @@ test('agents only ever see the owner\'s comments', async () => {
   for (const c of d.agentCalls) assert.ok(!c.prompt.includes('IGNORE-ME'));
 });
 test('review findings trigger exactly one fix session', async () => {
-  const d = fakes({ agent: [gate(90), work(), review(['src/state.js: guard is inverted']), work()] });
+  const d = fakes({ agent: [gate(90), work(), review(['src/state.js: guard is inverted']), work(), review()] });
   const r = await runItem(issue, 'implement', d.deps, 4201);
   assert.equal(r.outcome, 'done');
-  assert.equal(d.agentCalls.length, 4);
+  assert.equal(d.agentCalls.length, 5);
   assert.match(d.agentCalls[3].prompt, /guard is inverted/);
   assert.equal(d.agentCalls[2].readOnly, true);
 });
 test('each session is started with its session type', async () => {
-  const d = fakes({ agent: [gate(90), work(), review(['x']), work()] });
+  const d = fakes({ agent: [gate(90), work(), review(['x']), work(), review()] });
   await runItem(issue, 'implement', d.deps, 4201);
-  assert.deepEqual(d.agentCalls.map((a) => a.session), ['gate', 'implement', 'review', 'fix']);
+  assert.deepEqual(d.agentCalls.map((a) => a.session), ['gate', 'implement', 'review', 'fix', 'review']);
 });
 test('a failed fix session parks', async () => {
   const d = fakes({ agent: [gate(90), work(), review(['x']), work('incomplete', 'cannot reproduce')] });
@@ -664,13 +664,26 @@ describe('automerge', () => {
     assert.match(r.detail, /\(not auto-merged: review not clean\)$/);
   });
 
-  test('autoMerge off: no second review, no size or merge call, the log line as before', async () => {
-    const x = deps({ autoMerge: false, sessions: [ok(gate()), work, findings, ok({ status: 'complete', summary: 'Fixed.', detail: '' })] });
+  test('autoMerge off: a second review, no size or merge call, the log line as before', async () => {
+    const x = deps({ autoMerge: false, sessions: [ok(gate()), work, findings, ok({ status: 'complete', summary: 'Fixed.', detail: '' }), clean] });
     const r = await runItem(issue, 'implement', x.d, 4201);
     assert.equal(r.outcome, 'done', r.detail);
-    assert.deepEqual(x.seen, ['gate', 'implement', 'review', 'fix']);
+    assert.deepEqual(x.seen, ['gate', 'implement', 'review', 'fix', 'review']);
     assert.deepEqual(x.calls, [['open', false]]);
     assert.equal(r.detail, 'https://github.com/x/y/pull/50');
+  });
+
+  test('autoMerge off: findings after the fix go into a ready pull request body as a note, with no second fix', async () => {
+    const x = deps({ autoMerge: false, sessions: [ok(gate()), work, findings, ok({ status: 'complete', summary: 'Fixed.', detail: '' }),
+      ok({ verdict: 'findings', findings: ['src/state.js: redo still breaks'] })] });
+    let body = null;
+    x.d.gh.openPullRequest = async (c, a) => { x.calls.push(['open', a.draft]); body = a.body; return { number: 50, url: 'https://github.com/x/y/pull/50' }; };
+    const r = await runItem(issue, 'implement', x.d, 4201);
+    assert.equal(r.outcome, 'done', r.detail);
+    assert.deepEqual(x.seen, ['gate', 'implement', 'review', 'fix', 'review']);
+    assert.deepEqual(x.calls, [['open', false]]);
+    assert.match(body, /## Review findings after the fix\n\n- src\/state\.js: redo still breaks\n/);
+    assert.ok(!x.labels.includes('agent:needs-human'));
   });
 
   test('autoMerge unset counts as off', async () => {
@@ -907,10 +920,10 @@ describe('owner comments in prompts', () => {
 
   test("review and fix prompts include the owner's comments", async () => {
     const work = ok({ status: 'complete', summary: 'Changed the undo guard.', detail: '' });
-    const { d, calls } = deps([ok({ confidence: 90, questions: [] }), work, ok({ verdict: 'findings', findings: ['x'] }), work]);
+    const { d, calls } = deps([ok({ confidence: 90, questions: [] }), work, ok({ verdict: 'findings', findings: ['x'] }), work, ok({ verdict: 'clean', findings: [] })]);
     const r = await runItem(issue, 'implement', d, 4201);
     assert.equal(r.outcome, 'done');
-    assert.equal(calls.length, 4);
+    assert.equal(calls.length, 5);
     const [, , reviewCall, fixCall] = calls;
     assert.match(reviewCall.prompt, /### Comments from Dennis\n\n- .*Keep the empty ledger read-only/);
     assert.match(fixCall.prompt, /### Comments from Dennis\n\n- .*Keep the empty ledger read-only/);
@@ -1129,7 +1142,7 @@ describe('implement model', () => {
   function deps(gate, models, review = { verdict: 'clean', findings: [] }) {
     const opened = [], seen = [];
     const queue = [ok(gate), ok({ status: 'complete', summary: 'Changed undo.', detail: '' }), ok(review),
-      ok({ status: 'complete', summary: 'Fixed.', detail: '' })];
+      ok({ status: 'complete', summary: 'Fixed.', detail: '' }), ok({ verdict: 'clean', findings: [] })];
     let sessions = 0;
     const d = {
       cfg: { ...config, ...scorePad, target: 'web-app', ...models }, root: '/f', log: () => {},
@@ -1177,7 +1190,7 @@ describe('implement model', () => {
       { verdict: 'findings', findings: ['Missing test for redo'] });
     assert.deepEqual(seen, [
       { session: 'gate', model: 'sonnet' }, { session: 'implement', model: 'sonnet' },
-      { session: 'review', model: 'opus' }, { session: 'fix', model: 'opus' },
+      { session: 'review', model: 'opus' }, { session: 'fix', model: 'opus' }, { session: 'review', model: 'opus' },
     ]);
   });
 
