@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, renameSync, openSync, closeSync, rmSync } 
 import { PULLS_JQ, PULL_TITLES_JQ, COMMENTS_JQ } from '../../../lib/github.mjs';
 import { MERGED_PULLS_JQ, COMMENTS_ON_JQ } from '../../../lib/github.mjs';
 import { OPEN_ISSUES_JQ } from '../../../lib/github.mjs';
+import { PULL_BODIES_JQ } from '../../../lib/github.mjs';
 
 const argv = process.argv.slice(2);
 const file = process.env.FAKE_GH_STATE;
@@ -113,6 +114,8 @@ try {
     out = s.items.flatMap((i) => i.comments.filter((c) => !c.path).map((c) => JSON.stringify({ author: c.author, body: c.body, at: c.at, on: i.number }))).join('\n');
   } else if (pos[0] === 'api' && !opt.method && opt.paginate && opt.jq === OPEN_ISSUES_JQ && /^repos\/[^/]+\/[^/]+\/issues\?state=open&per_page=100$/.test(pos[1])) {
     out = s.items.filter((i) => i.kind === 'issue' && i.state === 'OPEN').map((i) => i.number).join('\n');
+  } else if (pos[0] === 'api' && !opt.method && opt.paginate && opt.jq === PULL_BODIES_JQ && /^repos\/[^/]+\/[^/]+\/pulls\?state=all&per_page=100$/.test(pos[1])) {
+    out = s.items.filter((i) => i.kind === 'pr').map((i) => JSON.stringify({ number: i.number, body: i.body ?? null })).join('\n');
   } else if (pos[0] === 'pr' && pos[1] === 'list') {
     const keys = opt.json.split(',');
     const prs = s.items.filter((i) => i.kind === 'pr' && i.headRefName === opt.head && (opt.state === 'all' || i.state === 'OPEN'));
