@@ -196,3 +196,43 @@ describe('review load', () => {
     } finally { w.close(); }
   });
 });
+
+// node stats.mjs <target> against the fake gh: closed factory pull requests by the gate confidence in their footer.
+describe('gate calibration', () => {
+  const footer = (n) => `Closes #1\n\n---\n🏭 Built by issue-to-pr-factory abc · model opus · gate confidence ${n} · checks: x`;
+  const pr = (number, issueNo, state, body, comments = []) => ({ number, kind: 'pr', title: `#${number}`, body, author: OWNER, state,
+    labels: [], labelEvents: [], comments, headRefName: `factory/issue-${issueNo}`, headRepo: REPO, createdAt: '2026-11-10T10:00:00Z', mergedAt: '2026-11-10T12:00:00Z' });
+  const c = (body) => ({ author: OWNER, body, at: '2026-11-10T10:00:00Z' });
+  const CONTRADICTS = stopped('This issue is not clear enough to build without guessing (confidence 90 of 100, needs 70).\n\nContradictions:\n\n- A; not A\n\nQuestions:\n\n- Which?');
+
+  test('stats prints the gate section after the review load line and before the stops list', async () => {
+    const w = await world();
+    try {
+      const file = join(w.dir, 'gh.json');
+      const s = JSON.parse(readFileSync(file, 'utf8'));
+      s.items.push(
+        { number: 1, kind: 'issue', title: '#1', body: '', author: OWNER, state: 'OPEN', labels: [], labelEvents: [], comments: [c(NOT_CLEAR), c(CONTRADICTS)] },
+        { number: 3, kind: 'issue', title: '#3', body: '', author: OWNER, state: 'CLOSED', labels: [], labelEvents: [], comments: [c('🏭 **Rework**\n\nRenamed a')] },
+        pr(10, 2, 'MERGED', footer(75)),
+        pr(11, 3, 'MERGED', footer(85)), // reworked on its issue
+        pr(12, 4, 'MERGED', footer(92)),
+        pr(13, 5, 'CLOSED', footer(96)),
+        pr(14, 6, 'MERGED', 'no footer'),
+        pr(15, 7, 'OPEN', footer(90)), // open: left out
+      );
+      writeFileSync(file, JSON.stringify(s));
+      const r = await stats(w, file);
+      assert.equal(r.code, 0, r.stderr + r.stdout);
+      assert.match(r.stdout, new RegExp(['^review load: [^\\n]+',
+        'gate confidence of factory pull requests: merged without rework · merged after rework · closed unmerged',
+        '   70–79  1 · 0 · 0',
+        '   80–89  0 · 1 · 0',
+        '     90\\+  1 · 0 · 1',
+        '   other  1 · 0 · 0',
+        'gate stops \\(not clear enough\\): 2',
+        'pull requests from factory/issue-\\* branches: [^\\n]+',
+        'stops \\(agent:needs-human comments, by first line of the reason\\):',
+        ' {3}2 {2}not clear enough\\n$'].join('\\n'), 'm'));
+    } finally { w.close(); }
+  });
+});

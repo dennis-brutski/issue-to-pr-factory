@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { countPullRequests, stopLabel, groupStops, formatStats, runStats, countAutoMerges, formatAutoMerges, groupAgentUse, formatAgentUse, agentUseSection, readSessions, countReviewLoad, formatReviewLoad } from '../stats.mjs';
+import { countPullRequests, stopLabel, groupStops, formatStats, runStats, countAutoMerges, formatAutoMerges, groupAgentUse, formatAgentUse, agentUseSection, readSessions, countReviewLoad, formatReviewLoad, countGate, formatGate } from '../stats.mjs';
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -463,5 +463,73 @@ describe('review load', () => {
 
   test('formatReviewLoad with no merged pull requests shows - , not NaN', () => {
     assert.equal(formatReviewLoad({ merged: 0, steps: 0, medianMs: null }), 'review load: - reworks or stops per merged PR · median - to merge');
+  });
+});
+
+// npm run stats: how well the gate confidence in a pull request's footer predicted how it went, and how often the gate stopped.
+describe('gate calibration', () => {
+  const cfg = { repo: 'dennis-brutski/demo', owner: 'dennis-brutski' };
+  const pull = (number, issue, state, extra = {}) => ({ number, ref: `factory/issue-${issue}`, repo: 'dennis-brutski/demo',
+    state: state === 'open' ? 'open' : 'closed', merged: state === 'merged', at: '2026-11-10T10:00:00Z', ...extra });
+  const body = (number, confidence) => ({ number, body: `Closes #1\n\n---\n🏭 Built by issue-to-pr-factory abc · model opus · gate confidence ${confidence} · checks: x` });
+  const on = (n, text, extra = {}) => ({ author: 'dennis-brutski', body: text, at: '2026-11-10T10:00:00Z', on: n, ...extra });
+  const REWORK = '🏭 **Rework**\n\nRenamed a';
+  const NOT_CLEAR = stopped('implement', reasons.notClear(40, 70, '- Which?'), 'agent:needs-human');
+  const CONTRADICTS = stopped('implement', reasons.notClear(90, 70, '- Which?', '- A; not A'), 'agent:needs-human');
+  const STOP = stopped('implement', 'The agent could not finish:\n\nNo.', 'agent:needs-human');
+  const GATE_FAILED = stopped('implement', reasons.stepFailed('gate', 'the agent session failed'), 'agent:needs-human');
+  const rows = (g) => Object.fromEntries(g.groups);
+
+  test('countGate groups closed factory pull requests by the confidence in their footer', () => {
+    const prs = [
+      pull(10, 1, 'merged'), pull(11, 2, 'merged'), pull(12, 3, 'merged'), pull(13, 4, 'closed'),
+      pull(14, 5, 'merged'), pull(15, 6, 'merged'), pull(16, 7, 'closed'),
+      pull(17, 8, 'open'), // open: left out
+      pull(18, 9, 'merged', { repo: 'mallory/demo' }), // a fork
+      pull(19, 0, 'merged', { ref: 'fix-typo' }), // not a factory branch
+    ];
+    const bodies = [body(10, 75), body(11, 85), body(12, 89), body(13, 95), body(14, 100), body(15, 60), { number: 16, body: 'no footer' },
+      body(17, 90), body(18, 90), body(19, 90)];
+    const commentsOn = [
+      on(12, REWORK), // on the pull request
+      on(5, REWORK), // on the issue of #14
+      on(2, STOP), on(11, 'please rename it'), // a stop and the owner's own words are not reworks
+      on(10, REWORK, { author: 'mallory' }), // not the owner
+    ];
+    assert.deepEqual(rows(countGate(prs, bodies, commentsOn, [], cfg)), {
+      '70–79': [1, 0, 0], '80–89': [1, 1, 0], '90+': [0, 1, 1], other: [1, 0, 1],
+    });
+  });
+
+  test('countGate counts the owner\'s not clear enough stops, contradiction stops included, not failed gate sessions', () => {
+    const comments = [on(1, NOT_CLEAR), on(2, CONTRADICTS), on(3, GATE_FAILED), on(4, STOP), on(5, NOT_CLEAR, { author: 'mallory' })];
+    assert.equal(countGate([], [], [], comments, cfg).stops, 2);
+  });
+
+  test('countGate with since leaves out older pull requests and stops', () => {
+    const prs = [pull(10, 1, 'merged', { at: '2026-11-01T23:59:59Z' }), pull(11, 2, 'merged', { at: '2026-11-02T00:00:00Z' })];
+    const comments = [on(1, NOT_CLEAR, { at: '2026-11-01T23:59:59Z' }), on(2, NOT_CLEAR, { at: '2026-11-02T00:00:00Z' })];
+    const g = countGate(prs, [body(10, 90), body(11, 90)], [], comments, cfg, '2026-11-02');
+    assert.deepEqual(rows(g)['90+'], [1, 0, 0]);
+    assert.equal(g.stops, 1);
+  });
+
+  test('formatGate prints every row, zeros included', () => {
+    assert.equal(formatGate(countGate([], [], [], [], cfg)), [
+      'gate confidence of factory pull requests: merged without rework · merged after rework · closed unmerged',
+      '   70–79  0 · 0 · 0',
+      '   80–89  0 · 0 · 0',
+      '     90+  0 · 0 · 0',
+      '   other  0 · 0 · 0',
+      'gate stops (not clear enough): 0',
+    ].join('\n'));
+    assert.equal(formatGate({ groups: [['70–79', [1, 0, 0]], ['80–89', [2, 1, 0]], ['90+', [4, 0, 1]], ['other', [0, 0, 0]]], stops: 3 }), [
+      'gate confidence of factory pull requests: merged without rework · merged after rework · closed unmerged',
+      '   70–79  1 · 0 · 0',
+      '   80–89  2 · 1 · 0',
+      '     90+  4 · 0 · 1',
+      '   other  0 · 0 · 0',
+      'gate stops (not clear enough): 3',
+    ].join('\n'));
   });
 });
