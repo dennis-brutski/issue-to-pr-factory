@@ -56,6 +56,10 @@ describe('review: try to break it', () => {
   test('it asks for concrete inputs or states that go wrong', () => assert.match(p, /concrete inputs or states/));
   test('it asks for changes the issue did not ask for', () => assert.match(p, /the issue did not ask for/));
   test('it asks whether each new test would fail without the change', () => assert.match(p, /would fail without the change/));
+  test('it asks for new code that repeats existing logic', () => {
+    const section = p.slice(p.indexOf('## Try to break it'), p.indexOf('## What to report'));
+    assert.match(section, /repeats logic already in the repo/);
+  });
 });
 
 const root = join(import.meta.dirname, '..');

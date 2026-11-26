@@ -20,6 +20,7 @@ After those checks, try to break the change:
 - Name concrete inputs or states for which the change does the wrong thing: empty, missing, repeated, very large, already done, run twice.
 - Look for changes the issue did not ask for.
 - For each new test, say whether it would fail without the change. A test that passes either way is a finding.
+- Look for new code that repeats logic already in the repo (a helper, a regex, a loop over the same data). Name the existing function to reuse.
 
 Each finding names the file and what to change. No style comments.
 
