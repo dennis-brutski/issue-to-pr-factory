@@ -55,21 +55,21 @@ const online = (await run('node', ['-e', net], { timeoutMs: 5000 })).code === 0;
 
 test('confined checks cannot read home, write outside the worktree or reach the network', real, async () => {
   const id = randomBytes(4).toString('hex');
-  const canary = join(homedir(), '.cache', `factory-canary-${id}`), escape = join(homedir(), `factory-escape-${id}`);
+  const canary = join(homedir(), '.cache', `factory-canary-${id}`), outside = join(homedir(), `factory-escape-${id}`);
   mkdirSync(join(homedir(), '.cache'), { recursive: true });
   writeFileSync(canary, 'canary');
   const dir = mkdtempSync(join(tmpdir(), 'confine-'));
   const cfg = (checks) => ({ ...config, checks });
   try {
     assert.equal((await runChecks(dir, cfg([['cat', [canary]]]), 4201)).ok, false, 'read a file in home');
-    await runChecks(dir, cfg([['sh', ['-c', `echo x > ${escape}`]]]), 4201);
-    assert.ok(!existsSync(escape), 'wrote outside the worktree');
+    await runChecks(dir, cfg([['sh', ['-c', `echo x > ${outside}`]]]), 4201);
+    assert.ok(!existsSync(outside), 'wrote outside the worktree');
     assert.equal((await runChecks(dir, cfg([['node', ['-e', net]]]), 4201)).ok, false, 'reached the network');
     assert.equal((await runChecks(dir, cfg([['sh', ['-c', 'echo ok > inside.txt']]]), 4201)).ok, true);
     assert.ok(existsSync(join(dir, 'inside.txt')), 'can write in the worktree');
     if (online) assert.equal((await runSetup(dir, { ...config, setup: [['node', ['-e', net]]] }, 4201)).ok, true, 'setup reaches the network');
     assert.equal((await runSetup(dir, { ...config, setup: [['cat', [canary]]] }, 4201)).ok, false, 'setup read a file in home');
-  } finally { rmSync(canary, { force: true }); rmSync(escape, { force: true }); }
+  } finally { rmSync(canary, { force: true }); rmSync(outside, { force: true }); }
 });
 test('a missing check program reports which one', real, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'confine-'));

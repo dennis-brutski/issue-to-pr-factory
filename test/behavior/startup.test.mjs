@@ -10,14 +10,14 @@ import { config } from '../../config.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const version = () => { try { return execFileSync('git', ['-C', ROOT, 'describe', '--tags', '--always', '--dirty'], { encoding: 'utf8' }).trim(); } catch { return 'unknown'; } };
-const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 test('the start line names the factory version', async () => {
   const w = await world();
   try {
     const f = w.start();
     await w.until(() => polls(f) >= 1, 10000, 'a poll');
-    assert.match(f.output(), new RegExp(`\\(demo\\) at ${escape(version())} — polling`));
+    assert.match(f.output(), new RegExp(`\\(demo\\) at ${escapeRe(version())} — polling`));
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
 });
