@@ -9,7 +9,7 @@ import * as gh from './lib/github.mjs';
 import { workspace } from './lib/workspace.mjs';
 import { runAgent } from './lib/agent.mjs';
 import { planUsage } from './lib/plan.mjs';
-import { runChecks, runSetup } from './lib/checks.mjs';
+import { runChecks, runSetup, runTestFiles } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
 import { recover, tick, cleanup, acquireLock, lockHolder, preflight, pollLine } from './lib/loop.mjs';
 import { driftWarnings, configuredPaths, pollText } from './lib/startup.mjs';
@@ -28,7 +28,7 @@ const log = (msg) => { const line = show(new Date().toTimeString().slice(0, 8), 
 // Read once: which version of the factory built each pull request.
 const head = await run('git', ['-C', factoryRoot, 'describe', '--tags', '--always', '--dirty']);
 const factoryCommit = head.code === 0 && head.stdout.trim() ? head.stdout.trim() : 'unknown';
-const deps = { cfg, root, log, gh, ws, run, runAgent, runSetup, runChecks, runItem, factoryCommit,
+const deps = { cfg, root, log, gh, ws, run, runAgent, runSetup, runChecks, runTestFiles, runItem, factoryCommit,
   planUsage: () => planUsage({ url: cfg.planUsageUrl }) };
 
 let release;
