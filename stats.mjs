@@ -57,6 +57,36 @@ const wait = (ms) => (ms < 3600000 ? `${Math.floor(ms / 60000)}m` : `${Math.floo
 export const formatReviewLoad = (l) => `review load: ${l.merged ? (l.steps / l.merged).toFixed(1) : '-'} reworks or stops per merged PR`
   + ` · median ${l.medianMs === null ? '-' : wait(l.medianMs)} to merge`;
 
+// Closed factory pull requests ({ number, ref, repo, state, merged, at }) by the gate confidence in
+// their footer (bodies: { number, body }), and the owner's "not clear enough" stops. A rework is a
+// Rework comment of the owner's on the pull request or its issue (comments with the number they are on). Pure.
+const GATE_GROUPS = ['70–79', '80–89', '90+', 'other'];
+// The confidence comes from the last footer line only: the text above it may mention "gate confidence" too.
+const gateGroup = (body) => {
+  const footer = (body ?? '').split('\n').filter((l) => l.startsWith('🏭 Built by issue-to-pr-factory ')).at(-1) ?? '';
+  const m = / · gate confidence (\d+) · /.exec(footer);
+  const n = m ? Number(m[1]) : -1;
+  return n >= 90 ? '90+' : n >= 80 ? '80–89' : n >= 70 ? '70–79' : 'other';
+};
+export function countGate(prs, bodies, commentsOn, comments, cfg, since = null) {
+  const groups = new Map(GATE_GROUPS.map((g) => [g, [0, 0, 0]]));
+  const reworked = (p) => commentsOn.some((c) => same(c.author, cfg.owner) && isRework(c.body) && (c.on === p.number || c.on === issueOfBranch(p.ref)));
+  for (const p of prs) {
+    if (issueOfBranch(p.ref) === null || !same(p.repo, cfg.repo) || !after(p.at, since) || p.state === 'open') continue;
+    const row = groups.get(gateGroup(bodies.find((b) => b.number === p.number)?.body));
+    row[!p.merged ? 2 : reworked(p) ? 1 : 0] += 1;
+  }
+  const stops = comments.filter((c) => same(c.author, cfg.owner) && isCountedStop(c.body) && after(c.at, since)
+    && stopLabel(c.body) === 'not clear enough').length;
+  return { groups: [...groups], stops };
+}
+
+export const formatGate = (g) => [
+  'gate confidence of factory pull requests: merged without rework · merged after rework · closed unmerged',
+  ...g.groups.map(([label, counts]) => `${label.padStart(8)}  ${counts.join(' · ')}`),
+  `gate stops (not clear enough): ${g.stops}`,
+].join('\n');
+
 // The stop labels and reasons live in lib/comments.mjs, next to the text they label.
 export { stopLabel };
 
@@ -168,11 +198,14 @@ async function statsOf(cfg, gh, since) {
   // Merge times and which issue a comment is on are only needed when something was merged.
   const pulls = countPullRequests(prs, cfg, since);
   const [merged, commentsOn] = pulls.merged ? await Promise.all([gh.listAllMergedPullRequests(cfg), gh.listAllIssueCommentsOn(cfg)]) : [[], []];
+  // The footers are only needed when a pull request was closed, merged or not.
+  const bodies = pulls.merged + pulls.closedUnmerged ? await gh.listAllPullRequestBodies(cfg) : [];
   return [
     `${cfg.repo}${since ? ` since ${since}` : ''}`,
     agentUseSection(join(cfg.runDir, 'logs'), since),
     formatAutoMerges(countAutoMerges(comments, titled, cfg, since)),
     formatReviewLoad(countReviewLoad(merged, commentsOn, cfg, since)),
+    formatGate(countGate(prs, bodies, commentsOn, comments, cfg, since)),
     formatStats(pulls, groupStops(comments, cfg, since)),
   ].join('\n');
 }

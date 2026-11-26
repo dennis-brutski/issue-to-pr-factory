@@ -330,3 +330,38 @@ describe('open issues', () => {
     assert.ok(calls[0][0] === 'api' && !calls[0].includes('-X') && calls[0].includes('--paginate'));
   });
 });
+
+// The fake gh lists every pull request with its body, as the gate stats need (the footer holds the gate confidence);
+// checked against the real adapter.
+describe('pull request bodies', () => {
+  let stateFile;
+  const pr = (number, state, body) => ({ number, kind: 'pr', title: `#${number}`, body, author: 'dennis-brutski', state,
+    labels: [], labelEvents: [], comments: [], headRefName: `factory/issue-${number}`, headRepo: 'dennis-brutski/demo', createdAt: T });
+
+  beforeEach(() => {
+    if (!existsSync(join(BIN, 'gh'))) throw new Error(`fake gh missing at ${BIN}/gh`);
+    stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
+    writeFileSync(stateFile, JSON.stringify({ login: 'dennis-brutski', nextNumber: 5, calls: [], items: [
+      { number: 1, kind: 'issue', title: 'an issue', body: 'not a pull request', author: 'dennis-brutski', state: 'OPEN', labels: [], labelEvents: [], comments: [] },
+      pr(2, 'MERGED', 'Closes #1\n\n---\n🏭 Built by issue-to-pr-factory abc · gate confidence 85 · checks: x'),
+      pr(3, 'OPEN', ''),
+    ] }));
+    process.env.FAKE_GH_STATE = stateFile;
+    if (!process.env.PATH.startsWith(BIN)) process.env.PATH = `${BIN}:${process.env.PATH}`;
+  });
+
+  test('listAllPullRequestBodies returns the number and body of every pull request', async () => {
+    assert.deepEqual(await gh.listAllPullRequestBodies(cfg), [
+      { number: 2, body: 'Closes #1\n\n---\n🏭 Built by issue-to-pr-factory abc · gate confidence 85 · checks: x' },
+      { number: 3, body: '' },
+    ]);
+  });
+
+  test('listAllPullRequestBodies only reads, all pages', async () => {
+    const before = JSON.parse(readFileSync(stateFile, 'utf8')).items;
+    await gh.listAllPullRequestBodies(cfg);
+    const s = JSON.parse(readFileSync(stateFile, 'utf8'));
+    assert.deepEqual(s.items, before);
+    assert.ok(s.calls.every((c) => c[0] === 'api' && !c.includes('-X') && c.includes('--paginate')));
+  });
+});

@@ -1172,6 +1172,13 @@ describe('implement model', () => {
     assert.ok(required.includes('confidence') && required.includes('questions'));
   });
 
+  test('the gate reports contradictions and missing files as lists', () => {
+    const { properties, required } = schemas.gate;
+    assert.deepEqual(properties.contradictions, { type: 'array', items: { type: 'string' } });
+    assert.deepEqual(properties.missing, { type: 'array', items: { type: 'string' } });
+    assert.ok(required.includes('contradictions') && required.includes('missing'));
+  });
+
   test('a simple issue is drafted on simpleModel, reviewed and fixed on model', async () => {
     const { seen } = await run(simpleGate, { model: 'opus', gateModel: 'sonnet', simpleModel: 'sonnet' },
       { verdict: 'findings', findings: ['Missing test for redo'] });
@@ -1373,6 +1380,48 @@ describe('park and pull request text', () => {
     const touched = deps({ changes: [{ status: 'M', path: 'test/unit/scoring.test.js' }] });
     const r2 = await runItem(issue, 'implement', touched.d, 4201);
     assert.match(r2.detail, /is a draft because it changes files you should check:\n\n- /);
+  });
+
+  test('a contradiction stops the run whatever the confidence, and the stop lists it', async () => {
+    const { d, comments, opened } = deps({ gate: { confidence: 90, questions: ['Which one?'], contradictions: ['Item 2 says A, item 4 says not A'], missing: [] } });
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.outcome, 'parked');
+    assert.equal(r.detail, [
+      `This issue is not clear enough to build without guessing (confidence 90 of 100, needs ${d.cfg.confidenceThreshold}).`,
+      'Contradictions:\n\n- Item 2 says A, item 4 says not A',
+      'Questions:\n\n- Which one?',
+      'Answer in a comment, then remove the label.',
+    ].join('\n\n'));
+    assert.equal(stopLabel(comments.at(-1)), 'not clear enough');
+    assert.equal(opened.length, 0);
+  });
+
+  test('the gate\'s stop lists missing files after the questions', async () => {
+    const { d } = deps({ gate: { confidence: 20, questions: ['Which?'], contradictions: [], missing: ['lib/undo.mjs'] } });
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.detail, [
+      `This issue is not clear enough to build without guessing (confidence 20 of 100, needs ${d.cfg.confidenceThreshold}).`,
+      'Questions:\n\n- Which?',
+      'Missing:\n\n- lib/undo.mjs',
+      'Answer in a comment, then remove the label.',
+    ].join('\n\n'));
+  });
+
+  test('missing entries alone do not stop a run, and later stops do not list them', async () => {
+    const clear = deps({ gate: { confidence: 90, questions: [], contradictions: [], missing: ['lib/undo.mjs'] } });
+    assert.equal((await runItem(issue, 'implement', clear.d, 4201)).outcome, 'done');
+    const failing = deps({ gate: { confidence: 90, questions: [], contradictions: [], missing: ['lib/undo.mjs'] },
+      runChecks: async () => ({ ok: false, failed: 'npm test', output: 'not ok' }) });
+    const r = await runItem(issue, 'implement', failing.d, 4201);
+    assert.equal(r.outcome, 'parked');
+    assert.doesNotMatch(r.detail, /Missing|lib\/undo\.mjs/);
+  });
+
+  test('a gate answer without contradictions or missing stops only on low confidence', async () => {
+    assert.equal((await runItem(issue, 'implement', deps({ gate: { confidence: 87, questions: [] } }).d, 4201)).outcome, 'done');
+    const r = await runItem(issue, 'implement', deps({ gate: { confidence: 20, questions: ['Which?'] } }).d, 4201);
+    assert.equal(r.detail, `This issue is not clear enough to build without guessing (confidence 20 of 100, needs ${deps().d.cfg.confidenceThreshold}).`
+      + '\n\nQuestions:\n\n- Which?\n\nAnswer in a comment, then remove the label.');
   });
 
   test('rework and merge parks leave an empty line before the list of protected files', async () => {

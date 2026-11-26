@@ -157,3 +157,11 @@ describe('the base the sessions compare against', () => {
       assert.doesNotMatch(renderPrompt(name, vars), /origin\//, name);
   });
 });
+
+// The gate reports contradictions and missing files; its prompt explains both.
+test('the gate prompt explains contradictions and missing', () => {
+  const p = renderPrompt('gate', vars);
+  assert.match(p, /- `contradictions`: statements in the issue that cannot all hold\. One line each, naming both parts/);
+  assert.match(p, /Any contradiction stops the run, whatever the confidence/);
+  assert.match(p, /- `missing`: files, functions or tests the issue names that do not exist in the repo and that the issue does not ask to create/);
+});
