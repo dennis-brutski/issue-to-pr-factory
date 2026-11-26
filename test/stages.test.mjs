@@ -1505,8 +1505,6 @@ describe('skipped tests', () => {
 
 // The existing tests a session changed: in the work answer, the prompts and the pull request body.
 const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', since: null };
-const one = { file: 'test/a.test.js', test: 'a', reason: 'renamed' };
-const two = { file: 'test/b.test.js', test: 'b', reason: 'removed with the old flag' };
 
 test('the work answer asks for the changed tests', () => {
   assert.ok(schemas.work.required.includes('test_changes'));
