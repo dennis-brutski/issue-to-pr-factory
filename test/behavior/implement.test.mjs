@@ -72,3 +72,19 @@ test('changing an existing test opens a draft with the warning', async () => {
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
 });
+
+test('an issue that contradicts itself parks even with high confidence, listing the contradiction', async () => {
+  const w = await world();
+  try {
+    const n = w.issue({ labels: ['agent:implement'] });
+    w.script(n, [{ session: 'gate', output: { confidence: 90, questions: ['Which holds?'], contradictions: ['Item 1 keeps the list; item 4 changes it'], missing: [] } }]);
+    const f = w.start();
+    await w.until(() => w.item(n).labels.includes('agent:needs-human'), 20000, 'agent:needs-human');
+    const park = factoryComments(w, n);
+    assert.equal(park.length, 1);
+    assert.match(park[0].body, /not clear enough to build without guessing \(confidence 90 of 100, needs \d+\)\.\n\nContradictions:\n\n- Item 1 keeps the list; item 4 changes it\n\nQuestions:\n\n- Which holds\?/);
+    assert.equal(w.claudeCalls().length, 1);
+    assert.equal(w.pr(), undefined);
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});
