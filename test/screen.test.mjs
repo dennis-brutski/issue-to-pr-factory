@@ -375,6 +375,31 @@ describe('running polls', () => {
     assert.equal(show('02:33:13', '3 running · plan 5h 54% · week 92%'), '02:33:13  3 running · plan 5h 54% · week 92%');
   }));
 
+  test('on a terminal, a window at 80% or more is yellow, at 90% or more red', () => withColour(() => {
+    const out = setup(100)('02:33:13', '0 eligible · plan 5h 85% · week 92%');
+    assert.match(out, /\u001b\[33m5h 85%\u001b\[39m/);
+    assert.match(out, /\u001b\[31mweek 92%\u001b\[39m/);
+  }));
+
+  test('on a terminal, windows under 80% are neither yellow nor red', () => withColour(() => {
+    const out = setup(100)('02:33:13', '3 running · plan 5h 79% · week 18%');
+    assert.doesNotMatch(out, /\u001b\[3[13]m/);
+    assert.ok(out.includes('5h 79%') && out.includes('week 18%'));
+  }));
+
+  test('on a terminal, 90% is red and 80% is yellow', () => withColour(() => {
+    const out = setup(100)('02:33:13', '3 running · plan 5h 90% (resets 02:00) · week 80%');
+    assert.match(out, /\u001b\[31m5h 90%\u001b\[39m/);
+    assert.match(out, /\u001b\[33mweek 80%\u001b\[39m/);
+    assert.doesNotMatch(out, /\u001b\[3[13]m[^\u001b]*resets/);
+  }));
+
+  test('on a terminal without colour, a line at 92% has no escape codes', () => noColour(() => {
+    const show = setup(100);
+    assert.equal(show('02:33:13', '3 running · plan 5h 92% (resets 02:00) · week 92%'), '02:33:13  ◦ 3 running · next check at 02:38:13 · plan 5h 92% (resets 02:00) · week 92%');
+    assert.equal(show('02:38:13', '0 eligible · plan 5h 92% · week 92%'), '02:38:13  ◦ waiting for labelled issues · next check at 02:43:13 · plan 5h 92% · week 92%');
+  }));
+
   test('on a terminal, without pollSec there is no next check part', () => noColour(() => {
     const show = setup(100, null);
     assert.equal(show('02:33:13', '2 running'), '02:33:13  ◦ 2 running');
