@@ -312,3 +312,35 @@ describe('length', () => {
     assert.doesNotMatch(stats, /Revert "<title>"/);
   });
 });
+
+describe('plain words and real links', () => {
+  const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const README = readFileSync(join(ROOT, 'README.md'), 'utf8');
+  const section = (heading) => {
+    const start = README.indexOf(`\n## ${heading}\n`);
+    assert.ok(start >= 0, heading);
+    const end = README.indexOf('\n## ', start + 1);
+    return README.slice(start, end < 0 ? undefined : end);
+  };
+
+  test('the README says "stop", and "parked:" only once, under When it stops', () => {
+    const parks = [...README.matchAll(/\bpark\w*:?/gi)].map((m) => m[0]);
+    assert.deepEqual(parks, ['parked:']);
+    assert.match(section('When it stops (`agent:needs-human`)'), /⏸ `parked:`/);
+  });
+
+  test('every relative Markdown link points to a file or folder in the repo', () => {
+    const links = [...README.matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1])
+      .filter((href) => !/^([a-z]+:|#)/i.test(href))
+      .map((href) => href.split('#')[0]);
+    for (const href of links) assert.ok(existsSync(join(ROOT, href)), href);
+    for (const path of ['SECURITY.md', '.github/ISSUE_TEMPLATE/agent-task.md', 'LICENSE', 'docs/superpowers/', 'docs/releasing.md'])
+      assert.ok(README.includes(`[\`${path}\`](${path})`), path);
+  });
+
+  test('the first screen says there is nothing to npm install and has no marketing sentence', () => {
+    const firstScreen = README.slice(0, README.indexOf('## Getting started'));
+    assert.match(firstScreen, /nothing to `npm install`/);
+    assert.doesNotMatch(firstScreen, /strategic work/);
+  });
+});
