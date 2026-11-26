@@ -9,7 +9,7 @@ Setup has network. Once a branch changes protected files, every later run stops 
 ## Decision
 
 - The default stays: no setup with network on a branch that changes protected files.
-- The owner may lift it for one commit with a comment on the issue or pull request: `approve protected setup <sha>`, on a line of its own, with the full 40-character sha of the commit they read.
+- The owner may lift it for one commit with a comment on the issue or pull request where the stop comment appeared: `approve protected setup <sha>`, on a line of its own, with the full 40-character sha of the commit they read. The factory reads approvals only from the comments of the item it stopped on; an approval on the issue does not count for a run on the pull request, nor the other way round.
 - Only the owner's own comments count. The factory's comments (they start with 🏭) never do, even though gh posts them as the owner; the stop text quotes the approval line. Agents cannot post comments.
 - The approval covers content, not a branch: setup runs when the diff from the approved commit to HEAD, limited to the protected files and folders, is empty. A sha the clone does not have approves nothing.
 - The base merge before setup brings in only the base's own changes. If those touch a protected file, the diff is no longer empty, and a new approval is needed.
