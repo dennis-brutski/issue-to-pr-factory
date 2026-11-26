@@ -43,7 +43,7 @@ test('a concern from a review with findings is kept from the fix session and kee
   try {
     const n = w.issue({ labels: ['agent:implement'] });
     const concern = 'test/a.test.js: early return in test a';
-    w.script(n, [gate(90), implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), findings([concern]), fix]);
+    w.script(n, [gate(90), implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'), findings([concern]), fix, review([])]);
     const f = w.start();
     await w.until(() => w.item(n).labels.includes('agent:needs-human'), 20000, 'agent:needs-human');
     const fixes = w.claudeCalls().filter((c) => c.session === 'fix');

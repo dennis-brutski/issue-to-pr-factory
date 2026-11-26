@@ -34,7 +34,7 @@ test('a fix that reports a test change lists it in the pull request', async () =
     const n = w.issue({ labels: ['agent:implement'] });
     w.script(n, [gate(90), implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a'),
       { session: 'review', output: { verdict: 'findings', findings: ['rename the test'] } },
-      { session: 'fix', write: { 'test/a.test.js': renamed }, commit: 'Rename test', output: ok('Renamed'), testChanges: [change] }]);
+      { session: 'fix', write: { 'test/a.test.js': renamed }, commit: 'Rename test', output: ok('Renamed'), testChanges: [change] }, clean]);
     const f = w.start();
     await w.until(() => w.item(n).labels.includes('agent:needs-human'), 20000, 'agent:needs-human');
     assert.match(w.pr().body, /## Tests changed\n\n- `test\/a\.test\.js` · a — the test name changed with the issue\n/);

@@ -13,6 +13,16 @@ When the change touches an existing file in the test folders, also check:
 - Does each change to an existing test match what the task's `## Tests that change` section says, if it has one?
 - Is any existing test weakened: removed assertions, looser expected values, a `try`/`catch` around a failure, an early `return`, or a deleted test whose logic still exists?
 
+## Try to break it
+
+After those checks, try to break the change:
+
+- Name concrete inputs or states for which the change does the wrong thing: empty, missing, repeated, very large, already done, run twice.
+- Look for changes the issue did not ask for.
+- For each new test, say whether it would fail without the change. A test that passes either way is a finding.
+
+Each finding names the file and what to change. No style comments.
+
 ## What to report
 
 - `verdict`: `clean` or `findings`.
