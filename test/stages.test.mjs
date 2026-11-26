@@ -7,7 +7,7 @@ import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { runItem, renderPrompt, schemas, lastStopReason, testsThatChange, protectedThatChangeOf, implementModel } from '../lib/stages.mjs';
 import { fakeWorkspace, fakeView } from './fakes/workspace.mjs';
-import { runChecks } from '../lib/checks.mjs';
+import { runChecks, runTestFiles } from '../lib/checks.mjs';
 import { execFileSync } from 'node:child_process';
 import { config as factoryConfig } from '../config.mjs';
 import { stopped } from '../lib/comments.mjs';
@@ -339,6 +339,28 @@ test('runChecks passes the port to the e2e run', real, async () => {
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'exit 0', e2e: 'test "$E2E_PORT" = 4321' } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
   assert.deepEqual(await runChecks(dir, { ...config, ...scorePad }, 4321), { ok: true, failed: null, output: '' });
+});
+test('runTestFiles runs the command once per file and names the files whose run passed', real, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-testfiles-'));
+  writeFileSync(join(dir, 'pass.test.mjs'), "import { test } from 'node:test';\ntest('p', () => {});\n");
+  writeFileSync(join(dir, 'fail.test.mjs'), "import { test } from 'node:test';\ntest('f', () => { throw new Error('no'); });\n");
+  const cfg = { ...config, ...scorePad, testFiles: [['node', ['--test', '{files}']]] };
+  assert.deepEqual(await runTestFiles(dir, cfg, 4321, undefined, ['pass.test.mjs', 'fail.test.mjs']), { passed: ['pass.test.mjs'], timedOut: null });
+});
+test('runTestFiles runs without network', real, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-testfiles-'));
+  // Only the loopback device is there without network.
+  writeFileSync(join(dir, 'net.test.mjs'), "import { test } from 'node:test';\nimport { networkInterfaces } from 'node:os';\ntest('n', () => { if (Object.keys(networkInterfaces()).some((k) => k !== 'lo')) throw new Error('network'); });\n");
+  const cfg = { ...config, ...scorePad, testFiles: [['node', ['--test', '{files}']]] };
+  assert.deepEqual((await runTestFiles(dir, cfg, 4321, undefined, ['net.test.mjs'])).passed, ['net.test.mjs']);
+});
+test('runTestFiles stops on a timeout and names the command', real, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-testfiles-'));
+  const cfg = { ...config, ...scorePad, checkTimeoutMin: 0.01, testFiles: [['sleep', ['{files}']]] };
+  const r = await runTestFiles(dir, cfg, 4321, undefined, ['5', '0']);
+  assert.deepEqual(r.passed, []);
+  assert.equal(r.timedOut.failed, 'sleep 5');
+  assert.match(r.timedOut.output, /timed out/);
 });
 test('a park without commits does not point to a branch', async () => {
   const d = fakes({ agent: [gate(5, ['What?'])], messages: [] });

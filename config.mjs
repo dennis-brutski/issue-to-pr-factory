@@ -8,6 +8,7 @@ export const config = {
   checks: [], // [cmd, [args]] run before every push, confined, without network
   heldOutChecks: [], // [cmd, [args]] run after checks; '{heldOut}' becomes heldOutDir. Agents never see these tests
   heldOutDir: null, // folder with the held-out tests, outside runs/ (agents can read the run folder)
+  testFiles: null, // [cmd, [args]] that runs only the given test files; '{files}' becomes one file. Set: new and changed tests also run on the base's code, and those that pass there are noted in the pull request
   env: {}, // for setup, checks and agent sessions; '{port}' becomes the run's port, '{runDir}' its run folder
   runtimeRead: ['~/.nvm'], // home folders everything may read (the Node install)
   sandboxRead: [], // extra home folders agents, setup and checks may read
