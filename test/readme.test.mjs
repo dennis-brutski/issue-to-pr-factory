@@ -213,7 +213,7 @@ describe('screenshots and sentence length', () => {
   test('Getting started says in one sentence what setup and checks may reach', () => {
     const start = section('Getting started');
     assert.doesNotMatch(start, /score pad's target/);
-    assert.match(start, /^   Setup has network, checks have none[^.\n]*--ignore-scripts[^.\n]*\.$/m);
+    assert.match(start, /^ {3}Setup has network, checks have none[^.\n]*--ignore-scripts[^.\n]*\.$/m);
   });
 
   test('Use keeps the target choice and the lock in one sentence', () => {

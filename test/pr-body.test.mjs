@@ -28,7 +28,7 @@ describe('render', () => {
 
   test('review findings after the fix get their own section before the checks, one bullet each', () => {
     const body = render({ ...parts, testChanges: [one], reviewFindingsAfterFix: ['src/a.js: off by one', 'src/b.js: unused\n## Checks'] });
-    assert.match(body, /## Tests changed\n\n- `test\/a\.test\.js` · a — renamed\n\n## Review findings after the fix\n\n- src\/a\.js: off by one\n- src\/b\.js: unused\n  ## Checks\n\n## Checks\n/);
+    assert.match(body, /## Tests changed\n\n- `test\/a\.test\.js` · a — renamed\n\n## Review findings after the fix\n\n- src\/a\.js: off by one\n- src\/b\.js: unused\n {2}## Checks\n\n## Checks\n/);
   });
 
   test('no review findings after the fix, no section', () => {

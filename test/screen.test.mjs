@@ -316,7 +316,7 @@ describe('aligned columns', () => {
     const a = show('#47 gate session ended · 1 turn · 3s · ≈ $0.01');
     const b = show('#47 gate session ended · 13 turns · 3s · ≈ $0.01');
     assert.deepEqual(dots(a), dots(b), `\n${a}\n${b}`);
-    assert.match(a, / {2}1 turn  · /);
+    assert.match(a, / {2}1 turn {2}· /);
   }));
 
   test('on a terminal, started sits in the turns column', () => noColour(() => {
