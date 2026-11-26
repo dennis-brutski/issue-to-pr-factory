@@ -7,13 +7,15 @@ Claude Code agents confined in a sandbox.
 ## Commands
 
 ```sh
-npm test          # unit and behaviour tests (node --test), about 20 seconds; no network or logins needed
+npm test          # unit and behaviour tests (node --test) with a coverage floor, about 30 seconds; no network or logins needed
+npm run lint      # Biome; warnings fail too
+npm run typecheck # tsc on the .mjs files (checkJs, not strict)
 npm run smoke     # for the human, not agents: one real Claude session checks 9 ways out of the worktree are closed (uses Claude usage)
 ```
 
 Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or network skip themselves where those are missing.
 
-`npm test` must pass before any change is done.
+`npm test`, `npm run lint` and `npm run typecheck` must pass before any change is done, once each is a check of this repo (see `.github/workflows/ci.yml`).
 
 ## Where things go
 
@@ -35,9 +37,9 @@ Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or 
 ## Rules
 
 1. **Test first.** Write a failing test, see it fail, then write the code. Decisions get a unit test; anything the factory does end to end gets a behaviour test in `test/behavior/`.
-2. **No dependencies.** Node's standard library, `gh`, `git`, `bwrap`, `claude` only.
+2. **No dependencies.** Running the factory needs Node's standard library, `gh`, `git`, `bwrap`, `claude` only. Development tools are pinned `devDependencies` (see `docs/adr/0006`); never add a runtime dependency or a new dev dependency.
 3. **A new `gh` call needs the fake to learn it.** The fake `gh` in `test/behavior/fakes/gh.mjs` refuses unknown commands; add the command there and a contract test in `test/behavior/fake-gh.test.mjs` that runs the real adapter against it. Add lines to these files; do not change or remove existing ones. A new workspace method goes into `test/fakes/workspace.mjs` as well; a test checks both have the same methods. The same goes for a new agent session: add its prompt's first line to `SESSIONS` in `fakes/claude.mjs`.
-4. **Never loosen confinement.** Do not touch the protected files: `lib/agent.mjs`, `lib/brakes.mjs`, `lib/checks.mjs`, `lib/confine.mjs`, `lib/eligibility.mjs`, `lib/names.mjs`, `lib/workspace.mjs`, `lib/verify.mjs`, `prompts/_rules.md`, `config.mjs`, `package.json`, `targets/`, `smoke/`, `docs/adr/`, `AGENTS.md`, `.github/`. Change or delete an existing test only when the issue's change needs it (a new signature, message or behaviour the issue changes, logic it removes), and only as much as that needs. Never weaken a test to make it pass: no removed assertions, looser expected values, `try`/`catch` around a failure or early `return`. Add new test cases to the test file they belong in. Name every changed or deleted test and why in your report. The pull request is a draft unless the issue lists that test file under `## Tests that change`. You may change a protected file the issue lists under `## Protected files that change`; the pull request is then a draft. If the right fix needs a protected file the issue does not list, don't work around it: stop and say which file and why.
+4. **Never loosen confinement.** Do not touch the protected files: `lib/agent.mjs`, `lib/brakes.mjs`, `lib/checks.mjs`, `lib/confine.mjs`, `lib/eligibility.mjs`, `lib/names.mjs`, `lib/workspace.mjs`, `lib/verify.mjs`, `prompts/_rules.md`, `config.mjs`, `package.json`, `package-lock.json`, `biome.json`, `tsconfig.json`, `targets/`, `smoke/`, `docs/adr/`, `AGENTS.md`, `.github/`. Change or delete an existing test only when the issue's change needs it (a new signature, message or behaviour the issue changes, logic it removes), and only as much as that needs. Never weaken a test to make it pass: no removed assertions, looser expected values, `try`/`catch` around a failure or early `return`. Add new test cases to the test file they belong in. Name every changed or deleted test and why in your report. The pull request is a draft unless the issue lists that test file under `## Tests that change`. You may change a protected file the issue lists under `## Protected files that change`; the pull request is then a draft. If the right fix needs a protected file the issue does not list, don't work around it: stop and say which file and why.
 5. **Small, readable changes.** Match the style of the file you are in. No drive-by refactors.
 6. **Plain wording.** Comments, log lines and GitHub comments are read by one person in a hurry: short sentences, no jargon.
 7. **Read the decisions.** Before changing a module, read the records in `docs/adr/` that concern it. Do not undo a recorded decision; if your change needs to, stop and say which record and why.
