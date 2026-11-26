@@ -200,7 +200,6 @@ Placeholders, and where each one works:
 | `{port}` | the run's own free port | `env` values, `setupWrite` |
 | `{runDir}` | the target's run folder, `runs/<target>` | `env` values, `setupWrite` |
 | `{heldOut}` | `heldOutDir` | `heldOutChecks` arguments |
-| `{files}` | one test file | `testFiles` arguments |
 
 They are not filled in anywhere else, not even in `setup` and `checks` arguments: pass a port to those through `env`.
 
