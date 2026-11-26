@@ -44,6 +44,20 @@ describe('review of test changes', () => {
   });
 });
 
+// After the general checks, the review tries to break the change.
+describe('review: try to break it', () => {
+  const p = renderPrompt('review', { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', baseSha: 'b'.repeat(40) });
+
+  test('the review prompt has a try-to-break-it part after the existing checks', () => {
+    assert.match(p, /## Try to break it/);
+    assert.ok(p.indexOf('## Try to break it') > p.indexOf('Check, in this order'));
+    assert.ok(p.indexOf('## Try to break it') < p.indexOf('## What to report'));
+  });
+  test('it asks for concrete inputs or states that go wrong', () => assert.match(p, /concrete inputs or states/));
+  test('it asks for changes the issue did not ask for', () => assert.match(p, /the issue did not ask for/));
+  test('it asks whether each new test would fail without the change', () => assert.match(p, /would fail without the change/));
+});
+
 const root = join(import.meta.dirname, '..');
 const read = (p) => readFileSync(join(root, p), 'utf8');
 
