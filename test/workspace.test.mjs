@@ -760,3 +760,97 @@ describe('git config changed during a run', () => {
     assert.deepEqual(await (await ws.againstBase(dir, 'master')).changes(), [{ status: 'M', path: 'a.txt' }]);
   });
 });
+
+// The branch's new and changed tests, run against the base's code: every other file the branch changed is put back
+// to the pinned base for the run, then the branch is restored exactly.
+describe('tests on the base', () => {
+  const git = async (dir, ...args) => {
+    const r = await run('git', ['-C', dir, ...ID, ...args]);
+    assert.equal(r.code, 0, `git ${args.join(' ')}: ${r.stderr}`);
+    return r.stdout.trim();
+  };
+  const write = (dir, files) => { for (const [p, c] of Object.entries(files)) { mkdirSync(join(dir, p, '..'), { recursive: true }); writeFileSync(join(dir, p), c); } };
+
+  let base, root, origin, dir, sha;
+  beforeEach(async () => {
+    base = mkdtempSync(join(tmpdir(), 'factory-onbase-'));
+    origin = join(base, 'origin.git'); root = join(base, 'factory');
+    const seed = join(base, 'seed');
+    await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
+    await run('git', ['init', '-q', '-b', 'master', seed]);
+    write(seed, { 'src/a.js': 'one\n', 'src/gone.js': 'gone\n', 'test/a.test.js': 'old test\n', 'test/kept.test.js': 'kept\n' });
+    await git(seed, 'add', '-A'); await git(seed, 'commit', '-q', '-m', 'init');
+    await git(seed, 'remote', 'add', 'origin', origin); await git(seed, 'push', '-q', 'origin', 'master');
+    mkdirSync(root, { recursive: true });
+    await ws.ensureClone(root, origin);
+    ({ dir } = await ws.ensureWorktree(root, 7, 'master'));
+    sha = await git(dir, 'rev-parse', 'HEAD');
+  });
+
+  const branchChanges = async () => {
+    write(dir, { 'src/a.js': 'two\n', 'src/new.js': 'new\n', 'test/a.test.js': 'new test\n', 'test/b.test.js': 'b test\n' });
+    rmSync(join(dir, 'src/gone.js'));
+    await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', 'Change things');
+  };
+  const read = (p) => (existsSync(join(dir, p)) ? readFileSync(join(dir, p), 'utf8') : null);
+
+  test('the run sees the base code with the branch\'s new and changed tests', async () => {
+    await branchChanges();
+    let seen;
+    const out = await ws.testsOnBase(dir, sha, ['test/'], async (files) => {
+      seen = { files, a: read('src/a.js'), gone: read('src/gone.js'), added: read('src/new.js'), t: read('test/a.test.js'), b: read('test/b.test.js') };
+      return 'result';
+    });
+    assert.equal(out, 'result');
+    assert.deepEqual(seen, { files: ['test/a.test.js', 'test/b.test.js'], a: 'one\n', gone: 'gone\n', added: null, t: 'new test\n', b: 'b test\n' });
+  });
+
+  test('afterwards HEAD and every file are exactly the branch\'s', async () => {
+    await branchChanges();
+    const head = await git(dir, 'rev-parse', 'HEAD');
+    await ws.testsOnBase(dir, sha, ['test/'], async () => { write(dir, { 'stray.txt': 'left by the tests', 'src/a.js': 'changed by the tests\n' }); });
+    assert.equal(await git(dir, 'rev-parse', 'HEAD'), head);
+    assert.equal(await git(dir, 'symbolic-ref', '--short', 'HEAD'), 'factory/issue-7');
+    assert.equal(await git(dir, 'status', '--porcelain'), '');
+    assert.deepEqual([read('src/a.js'), read('src/new.js'), read('src/gone.js'), read('stray.txt')], ['two\n', 'new\n', null, null]);
+  });
+
+  test('untracked files the checks left are removed before the run, not a reason to stop', async () => {
+    await branchChanges();
+    const head = await git(dir, 'rev-parse', 'HEAD');
+    write(dir, { 'coverage/report.txt': 'left by the checks\n', 'results.tap': 'ok 1\n' });
+    let seen;
+    await ws.testsOnBase(dir, sha, ['test/'], async () => { seen = [read('coverage/report.txt'), read('results.tap'), read('src/a.js')]; });
+    assert.deepEqual(seen, [null, null, 'one\n']);
+    assert.equal(await git(dir, 'rev-parse', 'HEAD'), head);
+    assert.equal(await git(dir, 'status', '--porcelain'), '');
+  });
+
+  test('the branch is restored when the run throws', async () => {
+    await branchChanges();
+    await assert.rejects(() => ws.testsOnBase(dir, sha, ['test/'], async () => { throw new Error('boom'); }), /boom/);
+    assert.equal(await git(dir, 'status', '--porcelain'), '');
+    assert.equal(read('src/a.js'), 'two\n');
+  });
+
+  test('a run that moves HEAD stops with an error', async () => {
+    await branchChanges();
+    await assert.rejects(() => ws.testsOnBase(dir, sha, ['test/'], async () => { await git(dir, 'checkout', '-q', '--detach', 'HEAD~1'); }), /HEAD/);
+  });
+
+  test('without new or changed tests nothing runs', async () => {
+    write(dir, { 'src/a.js': 'two\n' });
+    await git(dir, 'commit', '-q', '-am', 'Change a');
+    let ran = false;
+    assert.equal(await ws.testsOnBase(dir, sha, ['test/'], async () => { ran = true; }), null);
+    assert.equal(ran, false);
+  });
+
+  test('the handle runs it against the given base and checks the clone config first', async () => {
+    const h = workspace({ root, url: origin, base: 'master' });
+    await branchChanges();
+    assert.deepEqual(await h.testsOnBase(dir, sha, ['test/'], async (files) => files), ['test/a.test.js', 'test/b.test.js']);
+    await git(join(root, 'repo'), 'config', 'credential.helper', '!touch /tmp/pwned');
+    await assert.rejects(() => h.testsOnBase(dir, sha, ['test/'], async () => {}), /credential\.helper/);
+  });
+});

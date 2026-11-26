@@ -38,6 +38,7 @@ export function fakeWorkspace(over = {}, root = '/f') {
     mergeResolved: async () => true,
     push: async () => {},
     preparePush: async () => ({ sha: 'abc', reattached: false }),
+    testsOnBase: async (_dir, _sha, _testDirs, _run) => null,
     ...over,
   };
 }

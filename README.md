@@ -152,6 +152,7 @@ flowchart TD
 - **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request, and says so in a comment, only when all of these hold:
   - the target has `heldOutChecks` (the agent can read and change the target's `checks`, so they alone could be bent until they pass);
   - the pull request is not a draft;
+  - it lists no tests that pass without the change (see `testFiles`);
   - the gate rated the issue `simple`;
   - the review was clean, or it had findings, the fix finished and a second review after the fix was clean (the second review always runs after a fix; its findings start no second fix but go into the pull request body under `## Review findings after the fix`);
   - fewer than 100 lines changed (additions + deletions, as GitHub counts them).
@@ -195,6 +196,7 @@ One file per repo in `targets/`, on top of the shared defaults in `config.mjs` a
 | `testDirs` — changing or deleting an existing test there is flagged, unless the issue lists it under `## Tests that change` or only lines were added; adding a skip or `.only` is always flagged | `['test/', 'e2e/']` |
 | `testSupport` — fakes and contract tests in `testDirs` that agents may extend: lines only added there are a note, not a draft | `['test/fakes/']` |
 | `heldOutChecks`, `heldOutDir` — checks with tests agents never see, kept outside `runs/`. A failure stops the issue without its output, which goes to the terminal | `[['node', ['--test', '{heldOut}/']]]`, `'~/held-out/score-pad'` |
+| `testFiles` — a command that runs only the given test files, `{files}` standing for one. Default `null`: off. When set, after the checks pass and before the push, each test file in `testDirs` the branch adds or changes (named as a test, like `a.test.js`, `a_test.py` or `test_a.py`; not `testSupport`) runs alone, confined and without network, with every other file the branch changed put back as on the base. A file whose run passes there is listed under `## Tests that pass without the change`: a note, not a draft, but no auto-merge. Any failure there is fine; a timeout, or a branch that cannot be put back, stops the run. Only `implement` runs do this | `[['node', ['--test', '{files}']]]` |
 | `protectedFiles`, `protectedDirs` — flagged when changed | `['playwright.config.js', 'package.json', …]` |
 | `runtimeRead` — home folders everything may read: the Node install. Default `['~/.nvm']`; usually set in `local.mjs`, since it is about your machine | `['~/.local/share/fnm']` |
 | `sandboxRead` — extra home folders agents, setup and checks may read | `['~/.cache/ms-playwright']` |

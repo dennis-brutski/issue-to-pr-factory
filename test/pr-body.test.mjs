@@ -34,6 +34,15 @@ describe('render', () => {
   test('no review findings after the fix, no section', () => {
     assert.doesNotMatch(render({ ...parts, reviewFindingsAfterFix: [] }), /Review findings after the fix/);
   });
+
+  test('tests that pass without the change get their own section before the checks, one file each', () => {
+    const body = render({ ...parts, testChanges: [one], testsPassWithout: ['test/a.test.js', 'test/b.test.js'] });
+    assert.match(body, /## Tests changed\n\n- `test\/a\.test\.js` · a — renamed\n\n## Tests that pass without the change\n\n.+\n\n- `test\/a\.test\.js`\n- `test\/b\.test\.js`\n\n## Checks\n/);
+  });
+
+  test('no tests that pass without the change, no section', () => {
+    assert.doesNotMatch(render(parts), /Tests that pass without the change/);
+  });
 });
 
 describe('parse', () => {

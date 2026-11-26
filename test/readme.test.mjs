@@ -345,6 +345,11 @@ describe('plain words and real links', () => {
   });
 });
 
+test('the targets table documents testFiles and its default', () => {
+  assert.equal(config.testFiles, null);
+  assert.match(README, /^\| `testFiles` — .*Default `null`: off\..*`\[\['node', \['--test', '\{files\}'\]\]\]` \|$/m);
+});
+
 describe('easy to scan', () => {
   const README = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'README.md'), 'utf8');
   const section = (heading) => {
@@ -354,14 +359,14 @@ describe('easy to scan', () => {
     return README.slice(start, end < 0 ? undefined : end);
   };
 
-  test('the Auto-merge bullet is followed by exactly five indented conditions', () => {
+  test('the Auto-merge bullet is followed by exactly six indented conditions', () => {
     const run = section('How a run works').split('\n');
     const at = run.findIndex((l) => l.startsWith('- **Auto-merge:**'));
     assert.ok(at >= 0, 'Auto-merge bullet');
     let n = 0;
     while (run[at + 1 + n]?.startsWith('  - ')) n++;
-    assert.equal(n, 5);
-    assert.doesNotMatch(run[at + 1 + n], /^\s*- /, 'no sixth condition');
+    assert.equal(n, 6);
+    assert.doesNotMatch(run[at + 1 + n], /^\s*- /, 'no seventh condition');
   });
 
   test('the target example says setup has network and checks have none', () => {

@@ -7,7 +7,7 @@ import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { runItem, renderPrompt, schemas, lastStopReason, testsThatChange, protectedThatChangeOf, implementModel } from '../lib/stages.mjs';
 import { fakeWorkspace, fakeView } from './fakes/workspace.mjs';
-import { runChecks } from '../lib/checks.mjs';
+import { runChecks, runTestFiles } from '../lib/checks.mjs';
 import { execFileSync } from 'node:child_process';
 import { config as factoryConfig } from '../config.mjs';
 import { stopped } from '../lib/comments.mjs';
@@ -340,6 +340,28 @@ test('runChecks passes the port to the e2e run', real, async () => {
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
   assert.deepEqual(await runChecks(dir, { ...config, ...scorePad }, 4321), { ok: true, failed: null, output: '' });
 });
+test('runTestFiles runs the command once per file and names the files whose run passed', real, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-testfiles-'));
+  writeFileSync(join(dir, 'pass.test.mjs'), "import { test } from 'node:test';\ntest('p', () => {});\n");
+  writeFileSync(join(dir, 'fail.test.mjs'), "import { test } from 'node:test';\ntest('f', () => { throw new Error('no'); });\n");
+  const cfg = { ...config, ...scorePad, testFiles: [['node', ['--test', '{files}']]] };
+  assert.deepEqual(await runTestFiles(dir, cfg, 4321, undefined, ['pass.test.mjs', 'fail.test.mjs']), { passed: ['pass.test.mjs'], timedOut: null });
+});
+test('runTestFiles runs without network', real, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-testfiles-'));
+  // Only the loopback device is there without network.
+  writeFileSync(join(dir, 'net.test.mjs'), "import { test } from 'node:test';\nimport { networkInterfaces } from 'node:os';\ntest('n', () => { if (Object.keys(networkInterfaces()).some((k) => k !== 'lo')) throw new Error('network'); });\n");
+  const cfg = { ...config, ...scorePad, testFiles: [['node', ['--test', '{files}']]] };
+  assert.deepEqual((await runTestFiles(dir, cfg, 4321, undefined, ['net.test.mjs'])).passed, ['net.test.mjs']);
+});
+test('runTestFiles stops on a timeout and names the command', real, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'factory-testfiles-'));
+  const cfg = { ...config, ...scorePad, checkTimeoutMin: 0.01, testFiles: [['sleep', ['{files}']]] };
+  const r = await runTestFiles(dir, cfg, 4321, undefined, ['5', '0']);
+  assert.deepEqual(r.passed, []);
+  assert.equal(r.timedOut.failed, 'sleep 5');
+  assert.match(r.timedOut.output, /timed out/);
+});
 test('a park without commits does not point to a branch', async () => {
   const d = fakes({ agent: [gate(5, ['What?'])], messages: [] });
   await runItem(issue, 'implement', d.deps, 4201);
@@ -600,6 +622,17 @@ describe('automerge', () => {
     const r = await runItem(issue, 'implement', x.d, 4201);
     assert.deepEqual(merges(x), []);
     assert.match(r.detail, /\(not auto-merged: no held-out checks\)$/);
+  });
+
+  test('a pull request with tests that pass without the change is not auto-merged, and the log line says why', async () => {
+    const x = deps({ sessions: [ok(gate()), work, clean] });
+    x.d.cfg = { ...x.d.cfg, testFiles: [['node', ['--test', '{files}']]] };
+    x.d.ws.testsOnBase = async (dir, sha, testDirs, run) => run(['test/undo.test.js']);
+    x.d.runTestFiles = async () => ({ passed: ['test/undo.test.js'], timedOut: null });
+    const r = await runItem(issue, 'implement', x.d, 4201);
+    assert.equal(r.outcome, 'done', r.detail);
+    assert.deepEqual(merges(x), []);
+    assert.match(r.detail, /^https:\/\/github\.com\/x\/y\/pull\/50 \(not auto-merged: tests pass without the change\)$/);
   });
 
   test('a normal issue is not auto-merged, and the log line says why', async () => {
@@ -2093,5 +2126,73 @@ describe('held-out checks', () => {
     assert.ok(!comments.join('\n').includes('SECRET-ASSERTION'));
     assert.ok(!r.detail.includes('SECRET-ASSERTION'));
     assert.ok(lines.join('\n').includes('SECRET-ASSERTION'));
+  });
+});
+
+// With testFiles set, the branch's new and changed tests run on the base's code after the checks; those that pass are a note.
+describe('tests that pass without the change', () => {
+  const on = (d, { passed = [], timedOut = null, files = ['test/undo.test.js', 'test/fakes/ledger.js'] } = {}) => {
+    d.deps.cfg = { ...d.deps.cfg, testFiles: [['node', ['--test', '{files}']]], testSupport: ['test/fakes/'] };
+    d.onBase = [];
+    d.deps.ws.testsOnBase = async (dir, sha, testDirs, run) => { d.onBase.push({ dir, sha, testDirs, pushedYet: d.pushed.length }); return run(files); };
+    d.deps.runTestFiles = async (dir, cfg, port, gitDir, fs) => { d.ranFiles = fs; d.ranGitDir = gitDir; return { passed, timedOut }; };
+    return d;
+  };
+
+  test('without testFiles nothing runs on the base and the body has no such section', async () => {
+    const d = fakes({ agent: [gate(90), work(), review()] });
+    let called = false;
+    d.deps.ws.testsOnBase = async () => { called = true; return null; };
+    d.deps.runTestFiles = async () => { called = true; return { passed: [], timedOut: null }; };
+    assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
+    assert.equal(called, false);
+    assert.doesNotMatch(d.opened[0].body, /Tests that pass without the change/);
+  });
+
+  test('the new and changed tests run on the pinned base before the push; support files are not run', async () => {
+    const d = on(fakes({ agent: [gate(90), work(), review()] }));
+    assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
+    assert.deepEqual(d.onBase, [{ dir: '/f/worktrees/issue-1', sha: 'b'.repeat(40), testDirs: ['test/', 'e2e/'], pushedYet: 0 }]);
+    assert.deepEqual(d.ranFiles, ['test/undo.test.js']);
+    assert.equal(d.ranGitDir, '/f/repo/.git');
+    assert.deepEqual(d.pushed, ['factory/issue-1']);
+  });
+
+  test('changed helper modules in a test folder hold no tests and are not run', async () => {
+    const files = ['test/behavior/steps.mjs', 'test/behavior/world.mjs', 'test/helpers.mjs', 'test/undo.test.js', 'test/undo_test.py', 'tests/test_undo.py', 'e2e/undo.spec.ts'];
+    const d = on(fakes({ agent: [gate(90), work(), review()] }), { files });
+    assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
+    assert.deepEqual(d.ranFiles, ['test/undo.test.js', 'test/undo_test.py', 'tests/test_undo.py', 'e2e/undo.spec.ts']);
+  });
+
+  test('a test that passes on the base is a note in a ready pull request', async () => {
+    const d = on(fakes({ agent: [gate(90), work(), review()] }), { passed: ['test/undo.test.js'] });
+    assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
+    assert.equal(d.opened[0].draft, false);
+    assert.match(d.opened[0].body, /## Tests that pass without the change\n\n.+\n\n- `test\/undo\.test\.js`\n/);
+  });
+
+  test('tests that fail on the base leave no note', async () => {
+    const d = on(fakes({ agent: [gate(90), work(), review()] }), { passed: [] });
+    assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
+    assert.doesNotMatch(d.opened[0].body, /Tests that pass without the change/);
+  });
+
+  test('a timeout on the base stops the run like a failed check, with no push', async () => {
+    const d = on(fakes({ agent: [gate(90), work(), review()] }), { timedOut: { failed: 'node --test test/undo.test.js', output: '(timed out after 15 min)' } });
+    const r = await runItem(issue, 'implement', d.deps, 4201);
+    assert.equal(r.outcome, 'parked');
+    assert.match(r.detail, /`node --test test\/undo\.test\.js` failed when the factory ran the checks/);
+    assert.match(r.detail, /timed out/);
+    assert.deepEqual(d.pushed, []);
+  });
+
+  test('a branch that cannot be restored stops the run, with no push', async () => {
+    const d = on(fakes({ agent: [gate(90), work(), review()] }));
+    d.deps.ws.testsOnBase = async () => { throw new Error('the worktree could not be put back: HEAD moved'); };
+    const r = await runItem(issue, 'implement', d.deps, 4201);
+    assert.equal(r.outcome, 'parked');
+    assert.match(r.detail, /could not be put back/);
+    assert.deepEqual(d.pushed, []);
   });
 });
