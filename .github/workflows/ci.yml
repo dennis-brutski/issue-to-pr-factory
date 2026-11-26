@@ -15,5 +15,6 @@ jobs:
         with:
           node-version: 25
           cache: npm
+      - run: git config --global user.name CI && git config --global user.email ci@example.invalid # the factory needs a git identity
       - run: npm ci --ignore-scripts
       - run: npm test
