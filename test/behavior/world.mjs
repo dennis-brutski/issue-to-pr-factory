@@ -79,7 +79,7 @@ export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) 
       return n;
     },
     label(n, label, by = OWNER) { change((s) => { const i = s.items.find((x) => x.number === n); i.labels.push(label); i.labelEvents.push({ label, actor: by, at: now() }); }); },
-    rename(n, title, by = OWNER) { change((s) => { const i = s.items.find((x) => x.number === n); i.title = title; (i.renames ??= []).push({ actor: by, at: now() }); }); },
+    rename(n, title, by = OWNER) { change((s) => { const i = s.items.find((x) => x.number === n); i.title = title; i.renames ??= []; i.renames.push({ actor: by, at: now() }); }); },
     unlabel(n, label) { change((s) => { const i = s.items.find((x) => x.number === n); i.labels = i.labels.filter((l) => l !== label); }); },
     comment(n, body, { by = OWNER, path } = {}) { change((s) => { s.items.find((x) => x.number === n).comments.push({ author: by, body, at: now(), ...(path ? { path } : {}) }); }); },
     slowLists(ms) { change((s) => { s.listDelayMs = ms; }); }, // the fake gh waits this long after each list call

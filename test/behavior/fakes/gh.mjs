@@ -44,6 +44,7 @@ try {
   const url = (repo, n) => `https://github.com/${repo}/pull/${n}`;
   const unsupported = () => die(`fake gh: unsupported command: ${argv.join(' ')}`, 2);
   let m;
+  const apiPath = (re) => { m = re.exec(pos[1]); return m; }; // matches the API path and keeps the groups in m
 
   if (pos[0] === 'api' && pos[1] === 'graphql') {
     delay = s.listDelayMs ?? 0; // slow GitHub, outside the lock
@@ -78,7 +79,7 @@ try {
     out = JSON.stringify({ data: { repository: { issues: connection('issues', 'issue'), pullRequests: connection('pullRequests', 'pr') } } });
   } else if (pos[0] === 'api' && pos[1] === 'user') {
     out = s.login;
-  } else if (pos[0] === 'api' && (m = /^repos\/[^/]+\/[^/]+\/issues\/(\d+)\/labels(?:\/(.+))?$/.exec(pos[1]))) {
+  } else if (pos[0] === 'api' && apiPath(/^repos\/[^/]+\/[^/]+\/issues\/(\d+)\/labels(?:\/(.+))?$/)) {
     const i = item(m[1]);
     if (opt.method === 'POST') {
       for (const l of field('labels[]')) if (!i.labels.includes(l)) { i.labels.push(l); i.labelEvents.push({ label: l, actor: s.login, at: now() }); }
@@ -88,17 +89,18 @@ try {
       if (!i.labels.includes(l)) die('gh: Label does not exist (HTTP 404)');
       i.labels = i.labels.filter((x) => x !== l);
     } else unsupported();
-  } else if (pos[0] === 'api' && opt.method === 'POST' && (m = /^repos\/[^/]+\/[^/]+\/issues\/(\d+)\/comments$/.exec(pos[1]))) {
+  } else if (pos[0] === 'api' && opt.method === 'POST' && apiPath(/^repos\/[^/]+\/[^/]+\/issues\/(\d+)\/comments$/)) {
     item(m[1]).comments.push({ author: s.login, body: stdin(), at: now() });
-  } else if (pos[0] === 'api' && opt.method === 'PATCH' && (m = /^repos\/[^/]+\/[^/]+\/pulls\/(\d+)$/.exec(pos[1]))) {
+  } else if (pos[0] === 'api' && opt.method === 'PATCH' && apiPath(/^repos\/[^/]+\/[^/]+\/pulls\/(\d+)$/)) {
     item(m[1]).body = stdin();
-  } else if (pos[0] === 'api' && !opt.method && opt.jq === '.state' && (m = /^repos\/[^/]+\/[^/]+\/issues\/(\d+)$/.exec(pos[1]))) {
+  } else if (pos[0] === 'api' && !opt.method && opt.jq === '.state' && apiPath(/^repos\/[^/]+\/[^/]+\/issues\/(\d+)$/)) {
     out = item(m[1]).state === 'OPEN' ? 'open' : 'closed';
   } else if (pos[0] === 'api' && /^repos\/[^/]+\/[^/]+\/labels$/.test(pos[1]) && opt.jq === '.[].name' && !opt.method) {
     out = (s.repoLabels ?? []).join('\n');
   } else if (pos[0] === 'api' && opt.method === 'POST' && /^repos\/[^/]+\/[^/]+\/labels$/.test(pos[1])) {
     s.repoLabels = [...(s.repoLabels ?? []), field('name')[0]];
-    (s.labelStyles ??= {})[field('name')[0]] = { color: field('color')[0], description: field('description')[0] };
+    s.labelStyles ??= {};
+    s.labelStyles[field('name')[0]] = { color: field('color')[0], description: field('description')[0] };
   } else if (pos[0] === 'api' && !opt.method && opt.paginate && opt.jq === PULLS_JQ && /^repos\/[^/]+\/[^/]+\/pulls\?state=all&per_page=100$/.test(pos[1])) {
     out = s.items.filter((i) => i.kind === 'pr').map((i) => JSON.stringify({ number: i.number, ref: i.headRefName, repo: i.headRepo ?? null,
       state: i.state === 'OPEN' ? 'open' : 'closed', merged: i.state === 'MERGED', at: i.createdAt ?? now() })).join('\n');
