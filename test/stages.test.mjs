@@ -2158,6 +2158,13 @@ describe('tests that pass without the change', () => {
     assert.deepEqual(d.pushed, ['factory/issue-1']);
   });
 
+  test('changed helper modules in a test folder hold no tests and are not run', async () => {
+    const files = ['test/behavior/steps.mjs', 'test/behavior/world.mjs', 'test/helpers.mjs', 'test/undo.test.js', 'test/undo_test.py', 'tests/test_undo.py', 'e2e/undo.spec.ts'];
+    const d = on(fakes({ agent: [gate(90), work(), review()] }), { files });
+    assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
+    assert.deepEqual(d.ranFiles, ['test/undo.test.js', 'test/undo_test.py', 'tests/test_undo.py', 'e2e/undo.spec.ts']);
+  });
+
   test('a test that passes on the base is a note in a ready pull request', async () => {
     const d = on(fakes({ agent: [gate(90), work(), review()] }), { passed: ['test/undo.test.js'] });
     assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
