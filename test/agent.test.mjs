@@ -6,7 +6,7 @@ import scorePad from './fixtures/web-app-target.mjs';
 import { stopLabel } from '../stats.mjs';
 import { stopped } from '../lib/comments.mjs';
 
-const base = { schema: { type: 'object' }, settings: { sandbox: { enabled: true } }, maxTurns: 150, model: null, readOnly: false };
+const base = { schema: { type: 'object' }, settings: { sandbox: { enabled: true } }, maxTurns: 150, model: null, readOnly: false, pluginDir: undefined, maxBudgetUsd: undefined };
 const result = (o = {}) => ({
   code: o.is_error ? 1 : 0, timedOut: false, stderr: '',
   stdout: JSON.stringify({ type: 'result', is_error: false, terminal_reason: 'completed', session_id: 's1', result: 'done', structured_output: { status: 'complete' }, ...o }),

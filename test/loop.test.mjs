@@ -323,7 +323,8 @@ describe('pull request tags', () => {
     const deps = {
       cfg: { ...config, ...scorePad }, root: '/f', log: (m) => logs.push(m),
       runItem: async () => ({ outcome: 'done' }),
-      gh: { listCandidates: async () => [item], listPullRequests: async () => [], openIssueNumbers: async () => [], addLabel: async () => {}, removeLabel: async () => {}, comment: async () => {} },
+      gh: { listCandidates: async () => [item], listPullRequests: async () => [], openIssueNumbers: async () => [], addLabel: async () => {},
+        /** @type {(c: any, n: number, l: string) => Promise<void>} */ removeLabel: async () => {}, comment: async () => {} },
       ws: fakeWorkspace({}),
       ...o,
     };
