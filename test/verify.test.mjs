@@ -61,15 +61,48 @@ describe('protected files and tests', () => {
   });
 
   test('before setup, a protected file parks and test folders do not count', async () => {
-    await commit(dir, { 'lib/brakes.mjs': 'loose\n', 'test/a.test.mjs': 'changed\n' });
-    const r = await verifyBranch(ws, cfg, dir, { before: 'setup' });
-    assert.equal(r.park, `The branch changes protected files, so the factory did not run setup with network on it:\n- protected file changed: lib/brakes.mjs\nReview them in \`${dir}\`; to go ahead, merge or revert them, then remove the label.`);
+    const head = await commit(dir, { 'lib/brakes.mjs': 'loose\n', 'test/a.test.mjs': 'changed\n' });
+    const r = await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: [] });
+    assert.equal(r.park, `The branch changes protected files, so the factory did not run setup with network on it:\n- protected file changed: lib/brakes.mjs\nReview them in \`${dir}\`; to go ahead, merge or revert them, then remove the label.\n\nOr, once you have read them and they are right, approve setup for the branch as it is now, at ${head}, with this comment, then remove the label:\n\n\`\`\`\napprove protected setup ${head}\n\`\`\``);
     assert.deepEqual(r.flags, []);
   });
 
   test('before setup, a changed test alone does not park', async () => {
     await commit(dir, { 'test/a.test.mjs': 'changed\n' });
-    assert.deepEqual(await verifyBranch(ws, cfg, dir, { before: 'setup' }), { park: null, flags: [] });
+    assert.deepEqual(await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: [] }), { park: null, flags: [] });
+  });
+
+  // ADR 0006: the owner may approve setup for one commit whose protected change they read.
+  test('before setup, an approval naming HEAD lets setup run on a protected change', async () => {
+    const head = await commit(dir, { 'lib/brakes.mjs': 'loose\n' });
+    assert.deepEqual(await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: [head] }), { park: null, flags: [] });
+  });
+
+  test('before setup, an approved commit still counts after changes outside protected files', async () => {
+    const approved = await commit(dir, { 'lib/brakes.mjs': 'loose\n', 'smoke/x.mjs': 'x' });
+    await commit(dir, { 'b.txt': 'later\n', 'test/a.test.mjs': 'changed\n' });
+    assert.deepEqual(await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: [approved] }), { park: null, flags: [] });
+  });
+
+  test('before setup, a protected file changed after the approved commit parks again', async () => {
+    const approved = await commit(dir, { 'lib/brakes.mjs': 'loose\n' });
+    const head = await commit(dir, { 'lib/brakes.mjs': 'looser\n' });
+    const r = await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: [approved] });
+    assert.match(r.park, /^The branch changes protected files, so the factory did not run setup with network on it:\n- protected file changed: lib\/brakes\.mjs\n/);
+    assert.ok(r.park.includes(`approve protected setup ${head}`));
+  });
+
+  test('before setup, a protected folder changed after the approved commit parks again', async () => {
+    const approved = await commit(dir, { 'lib/brakes.mjs': 'loose\n' });
+    await commit(dir, { 'smoke/x.mjs': 'x' });
+    const r = await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: [approved] });
+    assert.match(r.park, /did not run setup with network/);
+  });
+
+  test('before setup, an approval naming a commit the clone does not have parks', async () => {
+    await commit(dir, { 'lib/brakes.mjs': 'loose\n' });
+    const r = await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: ['0123456789abcdef0123456789abcdef01234567'] });
+    assert.match(r.park, /did not run setup with network/);
   });
 
   test('a protected path is flagged, not parked', async () => {
@@ -176,7 +209,7 @@ describe('protected files and tests', () => {
     assert.deepEqual(reads.map(([what]) => what), ['log', 'changes', 'diff', 'diff']);
     for (const [what, , at] of reads) assert.equal(at, asked[0], `${what} reads against the base asked once`);
     asked.length = 0; reads.length = 0;
-    assert.deepEqual(await verifyBranch(spy, cfg, dir, { before: 'setup' }), { park: null, flags: [] });
+    assert.deepEqual(await verifyBranch(spy, cfg, dir, { before: 'setup', approvals: [] }), { park: null, flags: [] });
     assert.deepEqual([asked.length, reads], [1, [['changes', null, asked[0]]]]);
   });
 });
