@@ -9,7 +9,11 @@ import { parsePlan, planUsage } from '../lib/plan.mjs';
 const body = { five_hour: { utilization: 41.6, resets_at: '2026-11-24T14:30:00Z' }, seven_day: { utilization: 18, resets_at: '2026-11-28T09:00:00Z' } };
 
 test('parsePlan reads both windows', () => {
-  assert.deepEqual(parsePlan(body), { fiveHour: 42, fiveHourResetsAt: Date.parse('2026-11-24T14:30:00Z'), week: 18 });
+  assert.deepEqual(parsePlan(body), { fiveHour: 41, fiveHourResetsAt: Date.parse('2026-11-24T14:30:00Z'), week: 18 });
+});
+
+test('parsePlan rounds down, as Claude Code /usage does', () => {
+  assert.deepEqual(parsePlan({ five_hour: { utilization: 79.6 }, seven_day: { utilization: 89.99 } }), { fiveHour: 79, week: 89 });
 });
 
 test('parsePlan keeps what is there', () => {
