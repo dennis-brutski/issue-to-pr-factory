@@ -6,11 +6,18 @@
   "scripts": {
     "start": "node factory.mjs",
     "start:local": "node factory.mjs --local",
-    "test": "node --test test/*.test.mjs test/behavior/*.test.mjs",
+    "test": "node --test --experimental-test-coverage --test-coverage-include=\"lib/**\" --test-coverage-include=\"*.mjs\" --test-coverage-lines=99 --test-coverage-branches=97 --test-coverage-functions=97 test/*.test.mjs test/behavior/*.test.mjs",
     "smoke": "node smoke/containment.mjs",
     "smoke:checks": "node smoke/checks.mjs",
     "smoke:skills": "node smoke/skills.mjs",
     "stats": "node stats.mjs",
-    "sync-skills": "node sync-skills.mjs"
+    "sync-skills": "node sync-skills.mjs",
+    "lint": "biome lint --error-on-warnings",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.9",
+    "@types/node": "26.6.11",
+    "typescript": "7.0.2"
   }
 }

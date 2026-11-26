@@ -8,7 +8,7 @@ Two hard guarantees:
 - **It runs only while you have started it.** No service, no schedule, no webhook.
 - **It never pushes to the base branch.** It pushes `factory/issue-<n>` branches only. It never merges either, unless you turn on `autoMerge` (see *How a run works*).
 
-The factory has no dependencies: Node's standard library, `gh`, `git`, `bwrap` and `claude`. There is nothing to `npm install`.
+The factory has no dependencies: Node's standard library, `gh`, `git`, `bwrap` and `claude`. There is nothing to `npm install` to run it; `npm ci` only adds the tools for working on it (lint, type check).
 
 ## A day with the factory
 
