@@ -344,3 +344,8 @@ describe('plain words and real links', () => {
     assert.doesNotMatch(firstScreen, /strategic work/);
   });
 });
+
+test('the targets table documents testFiles and its default', () => {
+  assert.equal(config.testFiles, null);
+  assert.match(README, /^\| `testFiles` — .*Default `null`: off\..*`\[\['node', \['--test', '\{files\}'\]\]\]` \|$/m);
+});
