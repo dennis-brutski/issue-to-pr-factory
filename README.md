@@ -2,13 +2,13 @@
 
 A software factory for a single maintainer (for now). It turns labelled GitHub issues into checked pull requests, with Claude Code agents confined in a sandbox.
 
-It takes the operational work off you and leaves you time for the strategic work, with fewer context switches. You write issues, label them, start the factory and do something else. The factory runs the agents. You come back and review and merge pull requests and answer comments in one batch.
+You write issues, label them, start the factory and do something else. The factory runs the agents. You come back and review and merge pull requests and answer comments in one batch.
 
 Two hard guarantees:
 - **It runs only while you have started it.** No service, no schedule, no webhook.
 - **It never pushes to the base branch.** It pushes `factory/issue-<n>` branches only. It never merges either, unless you turn on `autoMerge` (see *How a run works*).
 
-The factory has no dependencies: Node's standard library, `gh`, `git`, `bwrap` and `claude`.
+The factory has no dependencies: Node's standard library, `gh`, `git`, `bwrap` and `claude`. There is nothing to `npm install`.
 
 ## A day with the factory
 
@@ -48,7 +48,7 @@ Blue is you, grey is the factory, orange is a stop.
 - ⚠ Setup has network and runs code from the branch (install scripts, for example) that you have not read.
 - ⚠ The sandbox is only as good as `bwrap` and Claude Code's sandbox.
 
-What the factory does about it: see *Confinement and brakes* below. To report a way out of the confinement, see `SECURITY.md`.
+What the factory does about it: see *Confinement and brakes* below. To report a way out of the confinement, see [`SECURITY.md`](SECURITY.md).
 
 ## Getting started
 
@@ -76,7 +76,7 @@ Then:
    };
    ```
    Setup has network, checks have none, and `--ignore-scripts` stops install scripts from running unread code with network.
-3. Give your repo an `AGENTS.md`: how to run its tests, where things go, its rules. Copy `.github/ISSUE_TEMPLATE/agent-task.md` into the target repo at the same path, so issues come with acceptance criteria.
+3. Give your repo an `AGENTS.md`: how to run its tests, where things go, its rules. Copy [`.github/ISSUE_TEMPLATE/agent-task.md`](.github/ISSUE_TEMPLATE/agent-task.md) into the target repo at the same path, so issues come with acceptance criteria.
 4. Run `npm run smoke` once, and `npm run smoke:checks -- <name>` for each target. Each runs one real agent session (uses your Claude plan).
 5. `npm start -- <name>`.
 6. Day to day: write an issue as clearly as for a colleague, add `agent:implement` (or `agent:explore` when unsure), and do something else. It ends in a pull request (`agent:done`) or a stop (`agent:needs-human`, with a comment saying why).
@@ -91,7 +91,7 @@ npm run start:local my-app         # agents on a local model instead of Claude (
 
 - With several targets, name one (or it says `choose a target: <names>`); a second start of a target says `already running (pid <n>)` unless the process holding `runs/<target>/factory.lock` died.
 - **Ctrl-C** stops picking up work and lets running agents finish.
-- **Ctrl-C again** kills them at once. Their commits are kept and resume on the next start; uncommitted changes park the issue.
+- **Ctrl-C again** kills them at once. Their commits are kept and resume on the next start; uncommitted changes stop the issue.
 
 ## Labels
 
@@ -144,7 +144,7 @@ flowchart TD
 - **Setup** runs confined, with network, before each run's first session, since agents have no network.
 - **Port:** each run gets one free port for setup, sessions and checks.
 - **Explore:** one read-only session writes up the cause or the shape of the change, the files it touches and its side effects. It needs no network: it reads the code and history, and can run the tests in its sandbox to reproduce a bug. If it judges the change easy to undo (one `git revert`) and small in reach, it swaps `agent:explore` for `agent:implement`; otherwise it stops for your decision.
-- **The gate:** the first step of `implement`. A read-only session scores how clearly the issue can be built as written, from 0 to 100. Below `confidenceThreshold` (70), or when it finds statements in the issue that cannot all hold, it parks with its questions (and any contradictions, and files the issue names that do not exist). It also rates the difficulty (`simple`, `normal`, `hard`): a `simple` issue gets its first draft from `simpleModel`, unless it is likely to touch protected files or the last run stopped. Review and fixes always use `model`.
+- **The gate:** the first step of `implement`. A read-only session scores how clearly the issue can be built as written, from 0 to 100. Below `confidenceThreshold` (70), or when it finds statements in the issue that cannot all hold, it stops with its questions (and any contradictions, and files the issue names that do not exist). It also rates the difficulty (`simple`, `normal`, `hard`): a `simple` issue gets its first draft from `simpleModel`, unless it is likely to touch protected files or the last run stopped. Review and fixes always use `model`.
 - **Implement:** implement → review (read-only) → fix, if there were findings → the brakes and the factory's own checks → push of exactly the checked commit → pull request. The pull request is a **draft** only when the branch changes protected files; the run then stops so you read that part. Mark it ready yourself after reading; the factory never does. Removing `agent:needs-human` from the issue starts another implement run on the same branch.
 - **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request, and says so in a comment, only when all of these hold: the target has `heldOutChecks` (the agent can read and change the target's `checks`, so they alone could be bent until they pass); the pull request is not a draft; the gate rated the issue `simple`; the review was clean, or it had findings, the fix finished and a second review after the fix was clean (the second review always runs after a fix; its findings start no second fix but go into the pull request body under `## Review findings after the fix`); fewer than 100 lines changed (additions + deletions, as GitHub counts them). `agent:review` and `agent:merge` runs never auto-merge. Otherwise the terminal line says which one failed (`not auto-merged: …`), with no comment. If GitHub refuses (auto-merge not allowed in the repo settings, or anything else), a comment says why and asks you to merge it by hand; the run still ends `done`. With required checks, GitHub waits for them.
 - **Retry:** the steps that change code (`implement`, `fix`, `rework`, `merge`) are told why the last run stopped: the newest "Factory stopped" comment since the last commit, marked as information. Gate, review and explore judge without it.
@@ -170,7 +170,7 @@ flowchart TD
 | **Factory did not start:** issue text was edited / issue title was changed after it was approved | An issue someone else opened was edited after you labelled it (by anyone, you included), or someone else renamed it, so the factory did not run it. Re-read it, remove the label to approve it again. |
 | timed out / max_turns / usage limit / spent its budget | Remove the label when you want it to continue. A budget stop comes from `maxBudgetUsd`. After a usage limit, `npm run start:local <target>` goes on with a local model. |
 
-Nothing is ever retried on its own.
+Nothing is ever retried on its own. In the terminal, a stop is a ⏸ `parked:` line.
 
 ## Targets
 
@@ -184,7 +184,7 @@ One file per repo in `targets/`, on top of the shared defaults in `config.mjs` a
 | `env` — for setup, checks and agent sessions | `{ E2E_PORT: '{port}', npm_config_cache: '{runDir}/npm-cache' }` |
 | `testDirs` — changing or deleting an existing test there is flagged, unless the issue lists it under `## Tests that change` or only lines were added; adding a skip or `.only` is always flagged | `['test/', 'e2e/']` |
 | `testSupport` — fakes and contract tests in `testDirs` that agents may extend: lines only added there are a note, not a draft | `['test/fakes/']` |
-| `heldOutChecks`, `heldOutDir` — checks with tests agents never see, kept outside `runs/`. A failure parks without its output, which goes to the terminal | `[['node', ['--test', '{heldOut}/']]]`, `'~/held-out/score-pad'` |
+| `heldOutChecks`, `heldOutDir` — checks with tests agents never see, kept outside `runs/`. A failure stops the issue without its output, which goes to the terminal | `[['node', ['--test', '{heldOut}/']]]`, `'~/held-out/score-pad'` |
 | `protectedFiles`, `protectedDirs` — flagged when changed | `['playwright.config.js', 'package.json', …]` |
 | `runtimeRead` — home folders everything may read: the Node install. Default `['~/.nvm']`; usually set in `local.mjs`, since it is about your machine | `['~/.local/share/fnm']` |
 | `sandboxRead` — extra home folders agents, setup and checks may read | `['~/.cache/ms-playwright']` |
@@ -232,7 +232,7 @@ To add a repo, follow *Getting started*. Missing `agent:*` labels are created on
 - ✅ Agents get only an allowlisted environment: no tokens, API keys or agent sockets.
 - ✅ **Setup and checks**, which run the branch's code before you have read it, run under `bwrap`: the system read-only, the home folder hidden except `runtimeRead` and `sandboxRead`, `/run` and `/tmp` empty, the clone's git data read-only, writes only to the worktree (and, for setup, `setupWrite`). Setup has network, to download dependencies; checks have none. Held-out checks also read `heldOutDir`. The factory's own git in the clone and its worktrees runs the same way, without network, writing only the clone's git data and the worktree. Only the factory's own clone, `upstream.git`, which no agent can write, talks to GitHub: it fetches, asks for the base, and pushes the checked commit, which it takes from the agents' clone through a confined `git upload-pack`.
 - ✅ **Brakes:** before every push the branch is checked against the base commit GitHub reports (`git ls-remote`), not the clone's own ref. Changed **workflow files** under `.github/workflows/` stop the push: the factory never pushes them. Commits with **attribution lines** (`Co-Authored-By`, "Generated with", `Claude-Session` trailers, which commits must not carry) stop it too. Changed protected files (listed under the issue's `## Protected files that change` or not), changed or deleted existing tests the issue does not list under `## Tests that change`, and added skips or `.only` make the pull request a draft. Listed test changes, new test cases added to an existing test file and lines only added to a `testSupport` file are listed in the pull request instead. Setup does not run on a branch that already changes protected files, since it has network. The factory pushes exactly the commit it checked.
-- ✅ **Git itself:** agents can write the clone's `.git/config`, so before git runs on a worktree, and on every poll, it must hold only what a plain clone holds with `origin` the target repo, or the issue parks and the factory stops. The factory's git ignores replace refs and grafts, which could show a history other than the one pushed.
+- ✅ **Git itself:** agents can write the clone's `.git/config`, so before git runs on a worktree, and on every poll, it must hold only what a plain clone holds with `origin` the target repo, or the issue stops and so does the factory. The factory's git ignores replace refs and grafts, which could show a history other than the one pushed.
 - ✅ If the sandbox cannot start, the factory refuses to start.
 
 What stays outside: see *⚠ Risks you accept* above.
@@ -271,9 +271,9 @@ npm run smoke:checks -- <target>   # setup confined with network, as in a real r
 
 ## License
 
-MIT, see `LICENSE`.
+MIT, see [`LICENSE`](LICENSE).
 
 ## History
 
-Design notes and plans are in `docs/superpowers/`; how releases work is in `docs/releasing.md`.
+Design notes and plans are in [`docs/superpowers/`](docs/superpowers/); how releases work is in [`docs/releasing.md`](docs/releasing.md).
 
