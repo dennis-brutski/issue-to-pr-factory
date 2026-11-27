@@ -95,4 +95,8 @@ describe('pages', () => {
     assert.deepEqual(items.map((i) => [i.kind, i.number]), [['issue', 1], ['issue', 2], ['issue', 3], ['pr', 4], ['pr', 5], ['pr', 6]]);
     assert.deepEqual(asked, [['issues', null], ['issues', 'i1'], ['pullRequests', null], ['pullRequests', 'p1']]);
   });
+  test('a page without nodes or pageInfo ends the listing without failing', async () => {
+    const items = await listCandidates(cfg, async (kind) => (kind === 'issues' ? { nodes: [node(1)] } : {}));
+    assert.deepEqual(items.map((i) => [i.kind, i.number]), [['issue', 1]]);
+  });
 });

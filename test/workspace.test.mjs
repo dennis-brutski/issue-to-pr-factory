@@ -119,6 +119,12 @@ describe('worktrees and branches', () => {
     writeFileSync(join(dir, 'a.txt'), 'both\n'); await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', 'merge');
     assert.equal(await ws.mergeResolved(dir), true);
   });
+  test('mergeBase throws when git merge fails without a conflict', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'x.txt');
+    await commitFile(seed, 'other.txt', 'theirs\n'); await git(seed, 'push', '-q', 'origin', 'master');
+    writeFileSync(join(dir, 'other.txt'), 'untracked\n'); // the merge would overwrite it, so git refuses before starting
+    await assert.rejects(ws.mergeBase(dir, 'master'), /git merge failed/);
+  });
   test('mergeBase continues a merge that is already in progress', async () => {
     const { dir } = await ws.ensureWorktree(root, 7, 'master'); await commitFile(dir, 'a.txt', 'mine\n');
     await commitFile(seed, 'a.txt', 'theirs\n'); await git(seed, 'push', '-q', 'origin', 'master');
