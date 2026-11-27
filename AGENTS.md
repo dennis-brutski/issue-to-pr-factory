@@ -10,7 +10,7 @@ Claude Code agents confined in a sandbox.
 npm test          # unit and behaviour tests (node --test) with a coverage floor, about 30 seconds; no network or logins needed
 npm run lint      # Biome; warnings fail too
 npm run typecheck # tsc on the .mjs files (checkJs, not strict)
-npm run smoke     # for the human, not agents: one real Claude session checks 9 ways out of the worktree are closed (uses Claude usage)
+npm run smoke     # for the human, not agents: one real Claude session checks 10 ways out of the worktree are closed (uses Claude usage)
 ```
 
 Needs Linux with `bwrap` and Node (tested on 26). Tests that need real bwrap or network skip themselves where those are missing.
