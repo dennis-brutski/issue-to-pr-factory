@@ -1842,6 +1842,39 @@ describe('warning lines', () => {
 });
 
 // Why the last run stopped: the newest 🏭 park comment since the last push, shown to the next code-changing session.
+// The newest explore write-up by the owner goes to gate and implement, without its heading.
+describe('explore write-up', () => {
+  const HEADING = "### The factory's explore write-up";
+  const writeup = (text, at, author = 'dennis-brutski') =>
+    ({ author, body: `🏭 **Factory explore write-up**\n\n${text}\n\nEasy to undo: yes · Small reach: yes`, at });
+  const run = async (comments) => {
+    const d = fakes({ agent: [gate(90), work(), review()] });
+    await runItem({ ...issue, comments }, 'implement', d.deps, 4201);
+    return Object.fromEntries(d.agentCalls.map((a) => [a.session, a.prompt]));
+  };
+
+  test('gate and implement get the newer of two write-ups, without its heading', async () => {
+    const p = await run([writeup('NEWER-PLAN', T2), writeup('OLDER-PLAN', T)]);
+    for (const name of ['gate', 'implement']) {
+      assert.ok(p[name].includes(`${HEADING}\n\nNEWER-PLAN\n\nEasy to undo: yes · Small reach: yes\n\n`), name);
+      assert.ok(!p[name].includes('OLDER-PLAN'), name);
+      assert.ok(!p[name].includes('**Factory explore write-up**'), name);
+    }
+    assert.ok(!p.review.includes('NEWER-PLAN'));
+  });
+  test('without a write-up the sessions get no section', async () => {
+    const p = await run([]);
+    for (const name of ['gate', 'implement']) assert.ok(!p[name].includes(HEADING), name);
+  });
+  test('a write-up by someone other than the owner is ignored', async () => {
+    const p = await run([writeup('OWNER-PLAN', T), writeup('MALLORY-PLAN', T2, 'mallory')]);
+    for (const name of ['gate', 'implement']) {
+      assert.ok(p[name].includes('OWNER-PLAN'), name);
+      assert.ok(!p[name].includes('MALLORY-PLAN'), name);
+    }
+  });
+});
+
 describe('last stop reason', () => {
   const T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
   const gate = (confidence, questions = []) => ok({ confidence, questions });
