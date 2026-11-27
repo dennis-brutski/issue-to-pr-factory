@@ -15,11 +15,14 @@ import { recover, tick, cleanup, acquireLock, preflight, pollLine } from './lib/
 import { driftWarnings, configuredPaths, pollText } from './lib/startup.mjs';
 import { look, paint } from './lib/look.mjs';
 import { screen } from './lib/screen.mjs';
+/** @import { Config } from './lib/settings.mjs' */
 
 const cannotRun = (why) => { const msg = `factory cannot run: ${why}`; const { icon, tone } = look(msg); console.error(paint(`${icon} ${msg}`, tone, process.stderr)); };
 
 const factoryRoot = dirname(fileURLToPath(import.meta.url));
-let cfg, args;
+/** @type {Config} */
+let cfg;
+let args;
 try { args = parseFactoryArgs(process.argv.slice(2)); cfg = await loadSettings(args.target, { factoryRoot, local: args.local }); } catch (e) { cannotRun(e.message); process.exit(1); }
 const root = cfg.runDir;
 const ws = workspace({ root, url: cloneUrl(cfg), base: cfg.baseBranch }); // checks the clone before each git command

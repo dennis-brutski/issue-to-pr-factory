@@ -16,6 +16,7 @@ import factory from './fixtures/factory-target.mjs';
 import { agentSettings } from '../lib/agent.mjs';
 import { parse } from '../lib/pr-body.mjs';
 import { tempDir } from './fakes/tmp.mjs';
+/** @import { Deps } from '../lib/stages.mjs' */
 
 // Wraps the fake's worktree commands: when broken() is true they throw message(), as the real checks do.
 const guarded = (broken, methods, message) => Object.fromEntries(Object.entries(methods).map(([k, fn]) =>
@@ -1653,8 +1654,9 @@ describe('session usage', () => {
   function setup(sessions) {
     const root = tempDir('stages-usage-');
     const logs = [], opened = [];
+    /** @type {Deps} */
     const d = {
-      cfg: { ...config, ...scorePad, target: 'web-app', model: 'opus-test', localRun: false }, root, log: (m) => logs.push(m),
+      cfg: { ...config, ...scorePad, target: 'web-app', model: 'opus-test' }, root, log: (m) => logs.push(m),
       factoryCommit: 'f00ba12',
       runSetup: async () => ({ ok: true, failed: null, output: '' }),
       runAgent: async (a) => {
@@ -2171,7 +2173,7 @@ describe('held-out checks', () => {
       runSetup: async () => ({ ok: true, failed: null, output: '' }),
       runAgent: async () => queue.shift(),
       runChecks: async () => ({ ok: false, failed: 'sh /h/check.sh', output: 'SECRET-ASSERTION', heldOut: true }),
-      gh: { addLabel: async () => {}, removeLabel: async () => {}, comment: async (c, n, b) => comments.push(b), findPullRequest: async () => null },
+      gh: { addLabel: async () => {}, removeLabel: async () => {}, comment: async (c, n, b) => { comments.push(b); }, findPullRequest: async () => null },
       ws: fakeWorkspace({ againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: 'src/a.js' }] }) }),
     };
     const issue = { number: 1, kind: 'issue', title: 'T', body: 'B', author: 'dennis-brutski', bodyEditedAt: null, labels: ['agent:implement'],

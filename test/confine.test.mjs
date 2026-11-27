@@ -10,6 +10,7 @@ import { runChecks, runSetup } from '../lib/checks.mjs';
 import { runConfined } from '../lib/confine.mjs';
 import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
+/** @import { Config } from '../lib/settings.mjs' */
 import { tempDir } from './fakes/tmp.mjs';
 
 const pairs = (args, flag) => args.flatMap((a, i) => (a === flag ? [[args[i + 1], args[i + 2]]] : []));
@@ -198,6 +199,6 @@ test('a target without setup, checks or held-out checks runs no steps and succee
 test('a target without runtimeRead or sandboxRead builds its read list without throwing', async () => {
   // Spreading a missing list throws before bwrap starts; whether bwrap itself works here does not matter.
   const dir = tempDir('confine-');
-  const r = await runConfined('true', [], { dir, cfg: {}, port: 4201, network: false, timeoutMs: 10_000 });
+  const r = await runConfined('true', [], { dir, cfg: /** @type {Config} */ ({}), port: 4201, network: false, timeoutMs: 10_000 });
   assert.deepEqual(Object.keys(r).sort(), ['code', 'stderr', 'stdout', 'timedOut']);
 });
