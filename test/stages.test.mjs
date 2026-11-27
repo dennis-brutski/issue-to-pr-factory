@@ -1450,7 +1450,7 @@ describe('park and pull request text', () => {
   });
 
   test('a failing setup through the proxy names the hosts the proxy refused', async () => {
-    const { d, comments } = deps({ runSetup: async () => ({ ok: false, failed: 'npm ci', output: 'E403', refused: ['x.com'], requests: 1 }) });
+    const { d, comments } = deps({ runSetup: async () => ({ ok: false, failed: 'npm ci', output: 'E403', refused: [{ host: 'x.com', why: 'unlisted' }], requests: 1 }) });
     const r = await runItem(issue, 'implement', d, 4201);
     assert.equal(r.detail, `\`npm ci\` failed in the worktree (setup):\n\nsetup tried to reach \`x.com\`, which is not in \`setupHosts\`.\n\n${folded('E403', '1 line')}`);
     assert.equal(stopLabel(comments.at(-1)), 'setup failed');

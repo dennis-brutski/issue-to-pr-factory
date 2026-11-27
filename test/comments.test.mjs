@@ -276,11 +276,31 @@ test('isStop: the stop and did-not-start comments, nothing else', () => {
 });
 
 test('a failed setup through the proxy names the hosts it refused, before the output', () => {
-  const one = reasons.setupFailed('npm ci', '<details>out</details>', { refused: ['x.com'], requests: 2 });
+  const one = reasons.setupFailed('npm ci', '<details>out</details>', { refused: [{ host: 'x.com', why: 'unlisted' }], requests: 2 });
   assert.equal(one, '`npm ci` failed in the worktree (setup):\n\nsetup tried to reach `x.com`, which is not in `setupHosts`.\n\n<details>out</details>');
-  const two = reasons.setupFailed('npm ci', 'out', { refused: ['x.com', 'y.org'], requests: 2 });
+  const two = reasons.setupFailed('npm ci', 'out', { refused: [{ host: 'x.com', why: 'unlisted' }, { host: 'y.org', why: 'unlisted' }], requests: 2 });
   assert.match(two, /setup tried to reach `x.com` and `y.org`, which are not in `setupHosts`\./);
   assert.equal(stopLabel(stopped('implement', two, 'agent:needs-human')), 'setup failed');
+});
+test('a failed setup names hosts in setupHosts refused for another reason with that reason, not as unlisted', () => {
+  const r = reasons.setupFailed('npm ci', 'out', { requests: 4, refused: [{ host: 'x.com', why: 'unlisted' }, { host: 'a.test', why: 'private' },
+    { host: 'registry.npmjs.org:22', why: 'port' }, { host: 'registry.npmjs.org', why: 'plain' }] });
+  assert.equal(r, '`npm ci` failed in the worktree (setup):\n\n'
+    + 'setup tried to reach `x.com`, which is not in `setupHosts`.\n\n'
+    + 'setup tried to reach `a.test`, which resolves to an address on this machine or the local network: the proxy refuses those, even for hosts in `setupHosts`.\n\n'
+    + 'setup tried to reach `registry.npmjs.org:22`: the proxy allows only port 443.\n\n'
+    + 'setup sent plain HTTP to `registry.npmjs.org`: the proxy allows only HTTPS (`CONNECT` to port 443). Use an `https://` URL.\n\n'
+    + 'out');
+});
+test('a failed setup with more refusals than the proxy recorded says how many more', () => {
+  const refused = Array.from({ length: 10 }, (_, i) => ({ host: `h${i}.test`, why: 'unlisted' }));
+  const r = reasons.setupFailed('npm ci', 'out', { refused, moreRefused: 2990, requests: 3000 });
+  assert.match(r, /setup tried to reach `h0.test`, .* and `h9.test`, which are not in `setupHosts`\.\n\nThe proxy refused 2990 more requests to other hosts\.\n\nout$/);
+  assert.ok(r.length < 2000, String(r.length));
+  // Even a list longer than the proxy records prints only the first 10.
+  const long = reasons.setupFailed('npm ci', 'out', { refused: Array.from({ length: 3000 }, (_, i) => ({ host: `h${i}.test`, why: 'unlisted' })), requests: 3000 });
+  assert.match(long, /`h9.test`, which are not in `setupHosts`\.\n\nThe proxy refused 2990 more requests to other hosts\.\n\nout$/);
+  assert.ok(!long.includes('h10.test'));
 });
 test('a failed setup the proxy saw no request from says the tool may ignore HTTPS_PROXY', () => {
   const r = reasons.setupFailed('npm ci', 'out', { refused: [], requests: 0 });

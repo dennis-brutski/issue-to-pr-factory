@@ -251,7 +251,7 @@ test('setup with setupHosts: the proxy refuses an unlisted host, and the result 
   const dir = tempDir('confine-');
   const r = await runSetup(dir, { ...config, setupHosts: ['registry.npmjs.org'], setup: [['node', ['-e', ask('x.com')]], ['false', []]] }, 4201);
   assert.equal(r.ok, false);
-  assert.deepEqual(r.refused, ['x.com']);
+  assert.deepEqual(r.refused, [{ host: 'x.com', why: 'unlisted' }]);
   assert.equal(r.requests, 1);
 });
 test('setup with setupHosts: a listed host gets through the proxy', { skip: proxied.skip || (online ? false : 'no network on this machine') }, async () => {
@@ -268,11 +268,11 @@ test('setup with setupHosts null keeps the network and gets no proxy env', { ski
 });
 
 // runSetup's choice, without bwrap or Unix sockets: a fake proxy and a fake confined runner.
-function fakeSetup({ code = 0, refused = [], requests = 0 } = {}) {
+function fakeSetup({ code = 0, refused = [], moreRefused = 0, requests = 0 } = {}) {
   const calls = [], proxy = { started: null, closed: false };
   const start = async ({ dir, hosts }) => {
     proxy.started = { dir, hosts, existed: existsSync(dir) };
-    return { socket: join(dir, 'proxy.sock'), refused: () => refused, requests: () => requests, close: async () => { proxy.closed = true; } };
+    return { socket: join(dir, 'p.sock'), refused: () => refused, moreRefused: () => moreRefused, requests: () => requests, close: async () => { proxy.closed = true; } };
   };
   const confined = async (cmd, args, opts) => { calls.push({ cmd, network: opts.network, proxy: opts.proxy ?? null, closed: proxy.closed }); return { code, stdout: '', stderr: code ? 'E404' : '', timedOut: false }; };
   return { calls, proxy, deps: { start, confined } };
@@ -282,16 +282,16 @@ test('setup with setupHosts starts the proxy, runs without network through it, t
   const r = await runSetup('/w', { ...config, setupHosts: ['registry.npmjs.org'], setup: [['npm', ['ci']], ['npm', ['run', 'build']]] }, 4201, undefined, f.deps);
   assert.deepEqual(f.proxy.started.hosts, ['registry.npmjs.org']);
   assert.ok(f.proxy.started.existed, 'the socket folder exists before the proxy starts');
-  assert.deepEqual(f.calls.map((c) => [c.cmd, c.network, c.proxy, c.closed]), [['npm', false, f.proxy.started.dir, false], ['npm', false, f.proxy.started.dir, false]]);
+  assert.deepEqual(f.calls.map((c) => [c.cmd, c.network, c.proxy, c.closed]), [['npm', false, join(f.proxy.started.dir, 'p.sock'), false], ['npm', false, join(f.proxy.started.dir, 'p.sock'), false]]);
   assert.ok(f.proxy.closed, 'proxy stopped');
   assert.ok(!existsSync(f.proxy.started.dir), 'socket folder removed');
-  assert.deepEqual(r, { ok: true, failed: null, output: '', refused: [], requests: 2 });
+  assert.deepEqual(r, { ok: true, failed: null, output: '', refused: [], moreRefused: 0, requests: 2 });
 });
 test('a failed setup through the proxy reports the hosts it refused', async () => {
-  const f = fakeSetup({ code: 1, refused: ['x.com'], requests: 3 });
+  const f = fakeSetup({ code: 1, refused: [{ host: 'x.com', why: 'unlisted' }], moreRefused: 4, requests: 3 });
   const r = await runSetup('/w', { ...config, setupHosts: ['registry.npmjs.org'], setup: [['npm', ['ci']]] }, 4201, undefined, f.deps);
   assert.equal(r.ok, false);
-  assert.deepEqual([r.refused, r.requests], [['x.com'], 3]);
+  assert.deepEqual([r.refused, r.moreRefused, r.requests], [[{ host: 'x.com', why: 'unlisted' }], 4, 3]);
   assert.ok(f.proxy.closed);
 });
 test('the proxy stops even when a setup step throws', async () => {

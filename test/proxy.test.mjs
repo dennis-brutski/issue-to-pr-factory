@@ -63,7 +63,7 @@ test('an unlisted host, another port and plain HTTP are refused and recorded', a
       s.destroy();
     }
     assert.deepEqual(up.dialed, [], 'nothing was dialed');
-    assert.deepEqual(proxy.refused(), ['x.com', 'registry.npmjs.org:22', 'plain.test']);
+    assert.deepEqual(proxy.refused(), [{ host: 'x.com', why: 'unlisted' }, { host: 'registry.npmjs.org:22', why: 'port' }, { host: 'plain.test', why: 'plain' }]);
     assert.equal(proxy.requests(), 3);
   } finally { await proxy.close(); up.server.close(); }
 });
@@ -78,7 +78,7 @@ test('a listed host that resolves to loopback or a private address is refused an
       s.destroy();
     }
     assert.deepEqual(up.dialed, []);
-    assert.deepEqual(proxy.refused(), ['local.test', 'lan.test']);
+    assert.deepEqual(proxy.refused(), [{ host: 'local.test', why: 'private' }, { host: 'lan.test', why: 'private' }]);
   } finally { await proxy.close(); up.server.close(); }
 });
 
@@ -90,7 +90,7 @@ test('host names match without regard to case, and a refused host is recorded on
     assert.match(ok.reply, /^HTTP\/1.1 200/);
     ok.s.destroy();
     for (let i = 0; i < 2; i++) (await ask(proxy.port, 'CONNECT x.com:443 HTTP/1.1\r\n\r\n')).s.destroy();
-    assert.deepEqual(proxy.refused(), ['x.com']);
+    assert.deepEqual(proxy.refused(), [{ host: 'x.com', why: 'unlisted' }]);
   } finally { await proxy.close(); up.server.close(); }
 });
 
@@ -133,7 +133,7 @@ test('the bridge passes 127.0.0.1:<port> on to the proxy socket and exits with i
     const client = `const s = require('net').connect(${port}, '127.0.0.1', () => s.write('CONNECT x.com:443 HTTP/1.1\\r\\n\\r\\n')); s.on('data', (d) => process.exit(/ 403 /.test(String(d)) ? 7 : 1));`;
     const r = await run(process.execPath, [BRIDGE, proxy.socket, String(port), process.execPath, '-e', client]);
     assert.equal(r.code, 7, r.stderr);
-    assert.deepEqual(proxy.refused(), ['x.com']);
+    assert.deepEqual(proxy.refused(), [{ host: 'x.com', why: 'unlisted' }]);
     assert.equal((await run(process.execPath, [BRIDGE, proxy.socket, String(port), 'definitely-missing-cmd'])).code, 127);
   } finally { await proxy.close(); }
 });
@@ -163,7 +163,28 @@ test('a plain-HTTP request with an Upgrade header is refused, counted and record
     assert.match(reply, /^HTTP\/1.1 403/);
     s.destroy();
     assert.deepEqual(up.dialed, []);
-    assert.deepEqual(proxy.refused(), ['x.com']);
+    assert.deepEqual(proxy.refused(), [{ host: 'x.com', why: 'plain' }]);
     assert.equal(proxy.requests(), 1);
   } finally { await proxy.close(); up.server.close(); }
+});
+
+test('plain HTTP to a listed host is recorded as plain HTTP, not as unlisted', async () => {
+  const proxy = await listening({ hosts: ['registry.npmjs.org'], lookup });
+  try {
+    const { reply, s } = await ask(proxy.port, 'GET http://registry.npmjs.org/npm HTTP/1.1\r\nHost: registry.npmjs.org\r\n\r\n');
+    assert.match(reply, /^HTTP\/1.1 403/);
+    s.destroy();
+    assert.deepEqual(proxy.refused(), [{ host: 'registry.npmjs.org', why: 'plain' }]);
+  } finally { await proxy.close(); }
+});
+
+test('the proxy records the first 10 refused hosts and only counts the rest', async () => {
+  const proxy = await listening({ hosts: [], lookup });
+  try {
+    for (let i = 0; i < 25; i++) (await ask(proxy.port, `CONNECT made-up-${i}.test:443 HTTP/1.1\r\n\r\n`)).s.destroy();
+    (await ask(proxy.port, 'CONNECT made-up-0.test:443 HTTP/1.1\r\n\r\n')).s.destroy();
+    assert.deepEqual(proxy.refused().map((r) => r.host), Array.from({ length: 10 }, (_, i) => `made-up-${i}.test`));
+    assert.equal(proxy.moreRefused(), 15, 'refusals past the first 10 hosts; a recorded host again is not counted');
+    assert.equal(proxy.requests(), 26);
+  } finally { await proxy.close(); }
 });

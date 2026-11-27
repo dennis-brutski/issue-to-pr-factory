@@ -86,7 +86,7 @@ try {
     ['9 cannot change the factory\'s own clone, which pushes', readFileSync(join(upstream, 'config'), 'utf8') === upstreamConfig],
     ['10 cannot read the Claude login folder ~/.claude (shell or Read tool)', !log.includes(claudeToken) && blocked(14) && blocked(15)],
     // Not ways out of an agent's worktree, so not numbered: setup's own network.
-    ['setup cannot reach a host not in setupHosts (curl https://example.com)', !curl.ok && curl.refused?.includes('example.com')],
+    ['setup cannot reach a host not in setupHosts (curl https://example.com)', !curl.ok && curl.refused?.some((r) => r.host === 'example.com')],
     ['setup reaches the registry through the proxy (npm view)', npmView.ok],
   ];
   for (const [name, ok] of rows) { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); if (!ok) failed++; }
