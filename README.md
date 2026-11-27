@@ -56,7 +56,7 @@ What the factory does about it: see *Confinement and brakes* below. To report a 
 You need:
 - **Linux with `bwrap`** (bubblewrap), with unprivileged user namespaces allowed. `bwrap --ro-bind / / --dev /dev true` must succeed.
 - **`socat`**, which Claude Code's sandbox needs on Linux next to `bwrap` (see its docs). Without it every agent session fails; `npm run smoke` shows it.
-- **Node.js.** If Node lives in your home folder but not in `~/.nvm` (fnm, volta, `~/.local`), add that folder to `runtimeRead` in `local.mjs` (step 1).
+- **Node.js 26 or newer.** If Node lives in your home folder but not in `~/.nvm` (fnm, volta, `~/.local`), add that folder to `runtimeRead` in `local.mjs` (step 1).
 - **Claude Code** (`claude`), logged in with your Claude account, with access to the models in `config.mjs`.
 - **`gh`**, logged in as you (`gh auth login`). For a **private repo**, also run `gh auth setup-git`: the factory clones, fetches and pushes over https.
 - **A git identity** (`git config --global user.name` and `user.email`).
@@ -147,7 +147,7 @@ flowchart TD
 - **Worktree:** one per issue, `runs/<target>/worktrees/issue-<n>`, shared by its pull request; the base is merged in (never rebased) before `explore` and `implement`, and it is removed when the issue or pull request closes.
 - **Setup** runs confined, with network, before each run's first session, since agents have no network.
 - **Port:** each run gets one free port for setup, sessions and checks.
-- **Explore:** one read-only session writes up the cause or the shape of the change, the files it touches and its side effects. It needs no network: it reads the code and history, and can run the tests in its sandbox to reproduce a bug. If it judges the change easy to undo (one `git revert`) and small in reach, it swaps `agent:explore` for `agent:implement`; otherwise it stops for your decision.
+- **Explore:** one read-only session writes up the cause or the shape of the change, the files it touches and its side effects. It needs no network: it reads the code and history, and can run the tests in its sandbox to reproduce a bug. If it judges the change easy to undo (one `git revert`) and small in reach, it swaps `agent:explore` for `agent:implement`; otherwise it stops for your decision. The gate and implement sessions that follow get your newest write-up.
 - **The gate:** the first step of `implement`. A read-only session scores how clearly the issue can be built as written, from 0 to 100. Below `confidenceThreshold` (70), or when it finds statements in the issue that cannot all hold, it stops with its questions (and any contradictions, and files the issue names that do not exist). It also rates the difficulty (`simple`, `normal`, `hard`): a `simple` issue gets its first draft from `simpleModel`, unless it is likely to touch protected files or the last run stopped. Review and fixes always use `model`.
 - **Implement:** implement → review (read-only) → fix, if there were findings → the brakes and the factory's own checks → push of exactly the checked commit → pull request. The pull request is a **draft** only when the branch changes protected files; the run then stops so you read that part. Mark it ready yourself after reading; the factory never does. Removing `agent:needs-human` from the issue starts another implement run on the same branch.
 - **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request, and says so in a comment, only when all of these hold:
@@ -167,7 +167,7 @@ flowchart TD
 | The comment says | What to do |
 |---|---|
 | not clear enough to build without guessing | Answer the questions in a comment, remove the label. |
-| needs your decision: not clearly easy to undo and small in reach | Read the write-up. To go ahead, swap `agent:explore` for `agent:implement` and remove the label. |
+| needs your decision: not clearly easy to undo and small in reach | Read the write-up; the implement run gets it too. To go ahead, swap `agent:explore` for `agent:implement` and remove the label. |
 | the agent could not finish / produced no changes | Read what is missing; sharpen the issue or do it by hand. |
 | no new comments from you since the last push | `agent:review` found nothing to address. Write your comments, then remove the label. |
 | the worktree has uncommitted changes | A run was killed mid-session. Commit or discard the changes in `runs/<target>/worktrees/issue-<n>`, remove the label. |
@@ -278,7 +278,7 @@ The `factory-resolve-stops` Claude Code skill walks you through the stops. It sh
 - `local.mjs` — your own settings over those defaults (not in git).
 - `targets/` — one settings file per repo.
 - `prompts/` — what each agent step is told.
-- `skills/` — the skills agents may use, read-only.
+- `skills/` — the skills agents may use, read-only. `npm run sync-skills` copies them from your local superpowers plugin; read `git diff skills/` before you commit, since that changes what agents are told.
 - `factory-resolve-stops/` — the `factory-resolve-stops` skill for you, not for agents; `stops.mjs`, the list it reads; `factory-approve-issues/` and `ready.mjs`, the skill that approves issues and its list.
 - `runs/<target>/` — the agents' clone (`repo/`), the factory's own clone (`upstream.git/`), per-issue worktrees and logs, and its lock (not in git).
 
@@ -288,6 +288,7 @@ The `factory-resolve-stops` Claude Code skill walks you through the stops. It sh
 npm test                           # unit and behaviour tests; no network or logins needed
 npm run smoke                      # proves an agent cannot escape its worktree; runs one real agent session (uses your Claude plan)
 npm run smoke:checks -- <target>   # setup confined with network, as in a real run, then the checks twice without network: in an agent session's sandbox and confined by the factory; runs one real agent session (uses your Claude plan)
+npm run smoke:skills               # proves agents can use the factory's skills/ and cannot change them; two short real agent sessions (uses your Claude plan)
 ```
 
 ## License
@@ -297,4 +298,3 @@ MIT, see [`LICENSE`](LICENSE).
 ## History
 
 Design notes and plans are in [`docs/superpowers/`](docs/superpowers/); how releases work is in [`docs/releasing.md`](docs/releasing.md).
-
