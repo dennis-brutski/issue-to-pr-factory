@@ -149,6 +149,9 @@ describe('protected files the task lists', () => {
       assert.match(p, /Do not touch .*`config\.mjs`.*\. You may change `config\.mjs`, `lib\/agent\.mjs` because the task lists them under `## Protected files that change`; the pull request is then a draft\. Add new test cases/, name);
     }
   });
+  test('the rules name the built-in protected paths, as the brakes do', () => {
+    assert.match(renderPrompt('implement', vars, {}), /`AGENTS\.md`, `CLAUDE\.md`, `\.github\/`, `\.claude\/`/);
+  });
   test('without a list the rules allow no protected file', () => {
     assert.doesNotMatch(renderPrompt('implement', vars, { protectedFiles: ['config.mjs'] }), /Protected files that change/);
     assert.doesNotMatch(renderPrompt('implement', { ...vars, protectedThatChange: [] }, {}), /Protected files that change/);
