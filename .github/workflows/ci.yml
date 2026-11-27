@@ -23,7 +23,7 @@ jobs:
         shell: bash # pipefail: a failing test still fails the step
         run: |
           npm test 2>&1 | tee test-output.txt
-          echo "lines=$(awk -F'|' '/all files/ { gsub(/ /, "", $2); print $2 }' test-output.txt)" >> "$GITHUB_OUTPUT"
+          echo "lines=$(awk -F'|' '/^ℹ all files +\|/ { gsub(/ /, "", $2); print $2; exit }' test-output.txt)" >> "$GITHUB_OUTPUT"
   # Publishes the line coverage for the README badge as the only commit of the badges branch.
   badge:
     needs: check
