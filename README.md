@@ -143,7 +143,7 @@ flowchart TD
 - **Explore:** one read-only session writes up the cause or the shape of the change, the files it touches and its side effects. It needs no network: it reads the code and history, and can run the tests in its sandbox to reproduce a bug. If it judges the change easy to undo (one `git revert`) and small in reach, it swaps `agent:explore` for `agent:implement`; otherwise it stops for your decision. The gate and implement sessions that follow get your newest write-up.
 - **The gate:** the first step of `implement`. A read-only session scores how clearly the issue can be built as written, from 0 to 100. Below `confidenceThreshold` (70), or when it finds statements in the issue that cannot all hold, it stops with its questions (and any contradictions, and files the issue names that do not exist). It also rates the difficulty (`simple`, `normal`, `hard`): a `simple` issue gets its first draft from `simpleModel`, unless it is likely to touch protected files or the last run stopped. Review and fixes always use `model`.
 - **Implement:** implement → review (read-only) → fix, if there were findings → the brakes and the factory's own checks → push of exactly the checked commit → pull request. The pull request is a **draft** only when the branch changes protected files; the run then stops so you read that part. Mark it ready yourself after reading; the factory never does. Removing `agent:needs-human` from the issue starts another implement run on the same branch.
-- **Auto-merge:** with `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request, and says so in a comment, only when all of these hold:
+- **Auto-merge:** *experimental*: its rules may change in any release. With `autoMerge: true`, an `implement` run calls `gh pr merge --squash --auto` on its pull request, and says so in a comment, only when all of these hold:
   - the target has `heldOutChecks` (the agent can read and change the target's `checks`, so they alone could be bent until they pass);
   - the pull request is not a draft;
   - it lists no tests that pass without the change (see `testFiles`);
@@ -193,7 +193,7 @@ One file per repo in `targets/`, on top of the shared defaults in `config.mjs` a
 | `runtimeRead` — home folders everything may read: the Node install. Default `['~/.nvm']`; usually set in `local.mjs`, since it is about your machine | `['~/.local/share/fnm']` |
 | `sandboxRead` — extra home folders agents, setup and checks may read | `['~/.cache/ms-playwright']` |
 | `setupWrite` — caches setup may write; keep them in `{runDir}`, never your own (`~/.npm`) | `['{runDir}/npm-cache']` |
-| `autoMerge` — hand small, simple, cleanly reviewed pull requests to GitHub's auto-merge (see *How a run works*). Needs `heldOutChecks`; without them nothing is auto-merged. Off unless set; turn it on in `local.mjs` | `true` |
+| `autoMerge` — *experimental*. Hand small, simple, cleanly reviewed pull requests to GitHub's auto-merge (see *How a run works*). Needs `heldOutChecks`; without them nothing is auto-merged. Off unless set; turn it on in `local.mjs` | `true` |
 | `local` — used only with `npm run start:local <target>` (a bare `npm start <target> --local` runs on Claude: npm drops the flag): `baseUrl` of an Anthropic-compatible server and `model`; anything else in it (`gateModel`, `maxParallel`, …) goes over the target. Set it in `local.mjs`. Known to work: lemonade with `Qwen3-Coder-30B-A3B-Instruct-GGUF`; it sends no token counts while streaming, so its sessions show `local, no token counts`. Ollama, llama.cpp or LiteLLM may count. A local run shows `local`, never a `≈ $` cost | `{ baseUrl: 'http://localhost:11434', model: 'qwen3-coder' }` |
 
 Placeholders, and where each one works:
@@ -225,7 +225,7 @@ To add a repo, follow *Getting started*. Missing `agent:*` labels are created on
 | `gateModel` | `sonnet` | the gate (it only reads and scores); unset, the gate uses `model` |
 | `simpleModel` | `sonnet` | the first draft of `simple` issues; unset, `model` |
 | `pollSec` | 300 | seconds between polls |
-| `autoMerge` | off | see *How a run works* |
+| `autoMerge` | off | experimental; see *How a run works* |
 | `maxBudgetUsd` | `null` | what one agent session may spend, by Claude Code's own estimate; `null` means no cap |
 
 ## Confinement and brakes
