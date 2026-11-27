@@ -1,7 +1,7 @@
 // The factory's own GitHub comments: what one module writes, the same module reads back.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stopped, didNotStart, explore, rework, pullRequest, merged, isFactory, lastStop, lastPush, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel, isRework, setupApprovals } from '../lib/comments.mjs';
+import { stopped, didNotStart, explore, rework, pullRequest, merged, isFactory, lastStop, lastPush, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel, isRework, setupApprovals, isStop } from '../lib/comments.mjs';
 import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { verifyBranch } from '../lib/verify.mjs';
@@ -252,4 +252,11 @@ test('the reason texts stay as the owner knows them', () => {
 test('what rework() writes, isRework() recognises; other comments are not reworks', () => {
   assert.equal(isRework(rework('Renamed a')), true);
   for (const body of [stopped('review', 'x', LABEL), pullRequest('u'), 'Rework: please rename it', `say 🏭 **Rework**`]) assert.equal(isRework(body), false, body);
+});
+
+test('isStop: the stop and did-not-start comments, nothing else', () => {
+  assert.equal(isStop(stopped('implement', 'Something broke.', 'agent:needs-human')), true);
+  assert.equal(isStop(didNotStart('issue body changed', 'agent:needs-human')), true);
+  assert.equal(isStop(merged), false);
+  assert.equal(isStop('Factory stopped, I think'), false);
 });
