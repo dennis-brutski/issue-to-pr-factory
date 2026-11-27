@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { SKILLS, latestVersion, rewrite, sync } from '../sync-skills.mjs';
 
@@ -18,7 +17,7 @@ test('rewrite points vendored skills at the factory plugin only', () => {
 
 // A plugin cache with two versions; each has the four skills and one we do not take.
 function cache() {
-  const dir = mkdtempSync(join(tmpdir(), 'factory-skills-cache-'));
+  const dir = tempDir('factory-skills-cache-');
   for (const v of ['7.0.0', '7.0.2']) {
     for (const name of [...SKILLS, 'brainstorming']) {
       mkdirSync(join(dir, v, 'skills', name), { recursive: true });
@@ -31,7 +30,7 @@ function cache() {
 }
 
 test('sync copies the four skills with their extra files and records the version', () => {
-  const cacheDir = cache(), outDir = mkdtempSync(join(tmpdir(), 'factory-skills-out-'));
+  const cacheDir = cache(), outDir = tempDir('factory-skills-out-');
   const r = sync({ cacheDir, outDir });
   assert.equal(r.version, '7.0.2');
   assert.deepEqual(r.skills, SKILLS);
@@ -46,7 +45,7 @@ test('sync copies the four skills with their extra files and records the version
 });
 
 test('sync removes a skill file that upstream dropped', () => {
-  const cacheDir = cache(), outDir = mkdtempSync(join(tmpdir(), 'factory-skills-out-'));
+  const cacheDir = cache(), outDir = tempDir('factory-skills-out-');
   mkdirSync(join(outDir, 'skills', 'test-driven-development'), { recursive: true });
   writeFileSync(join(outDir, 'skills', 'test-driven-development', 'old.md'), 'gone upstream\n');
   sync({ cacheDir, outDir });
@@ -54,12 +53,12 @@ test('sync removes a skill file that upstream dropped', () => {
 });
 
 test('sync with no version in the cache says so', () => {
-  const cacheDir = mkdtempSync(join(tmpdir(), 'factory-skills-empty-'));
+  const cacheDir = tempDir('factory-skills-empty-');
   assert.throws(() => sync({ cacheDir, outDir: join(cacheDir, 'out') }), /no superpowers plugin in/);
 });
 
 test('sync copies upstream LICENSE, which the MIT licence asks to keep with the copies', () => {
-  const cacheDir = cache(), outDir = mkdtempSync(join(tmpdir(), 'factory-skills-out-'));
+  const cacheDir = cache(), outDir = tempDir('factory-skills-out-');
   sync({ cacheDir, outDir });
   assert.match(readFileSync(join(outDir, 'LICENSE'), 'utf8'), /Jesse Vincent/);
 });
@@ -68,20 +67,21 @@ test('sync copies upstream LICENSE, which the MIT licence asks to keep with the 
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, cpSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { tempDir } from './fakes/tmp.mjs';
 
 const script = fileURLToPath(new URL('../sync-skills.mjs', import.meta.url));
 const run = (path, home) => spawnSync(process.execPath, [path], { env: { ...process.env, HOME: home }, encoding: 'utf8' });
 
 test('sync-skills from the command line with no superpowers cache exits 1 and says why', () => {
-  const r = run(script, mkdtempSync(join(tmpdir(), 'factory-skills-home-')));
+  const r = run(script, tempDir('factory-skills-home-'));
   assert.equal(r.status, 1);
   assert.match(r.stderr, /^sync-skills cannot run: /);
 });
 
 test('sync-skills from the command line copies the skills next to the script and says how many', () => {
-  const home = mkdtempSync(join(tmpdir(), 'factory-skills-home-'));
+  const home = tempDir('factory-skills-home-');
   cpSync(cache(), join(home, '.claude/plugins/cache/claude-plugins-official/superpowers'), { recursive: true });
-  const dir = mkdtempSync(join(tmpdir(), 'factory-skills-script-')); // a copy, so the repo's skills/ stays as it is
+  const dir = tempDir('factory-skills-script-'); // a copy, so the repo's skills/ stays as it is
   copyFileSync(script, join(dir, 'sync-skills.mjs'));
   const r = run(join(dir, 'sync-skills.mjs'), home);
   assert.equal(r.status, 0, r.stderr);

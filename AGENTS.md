@@ -29,6 +29,7 @@ Needs Linux with `bwrap` and Node (tested on 26). Tests that need real bwrap or 
 | `prompts/` | What each agent session is told. `_rules.md` and `_commit.md` are shared. |
 | `test/*.test.mjs` | Unit tests, one file per `lib/` area. |
 | `test/fakes/workspace.mjs` | The in-memory workspace the stage and loop unit tests share; pass the methods a test cares about. |
+| `test/fakes/tmp.mjs` | `tempDir(prefix)`: the only way a test makes a temp folder; it is deleted when the test file ends. A test fails on a direct `mkdtempSync`. |
 | `test/behavior/` | The real `factory.mjs` against a fake `gh` and fake `claude` (`fakes/`), driven through `world.mjs`. |
 | `smoke/` | Live checks with real Claude. |
 | `docs/adr/` | Decisions already made, and why. |

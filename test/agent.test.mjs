@@ -5,6 +5,7 @@ import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { stopLabel } from '../stats.mjs';
 import { stopped } from '../lib/comments.mjs';
+import { tempDir } from './fakes/tmp.mjs';
 
 const base = { schema: { type: 'object' }, settings: { sandbox: { enabled: true } }, maxTurns: 150, model: null, readOnly: false, pluginDir: undefined, maxBudgetUsd: undefined };
 const result = (o = {}) => ({
@@ -102,11 +103,10 @@ test('agentSettings lets the session read its own run folder, not the factory fo
 
 // A session gets an allowlist of the factory's environment: no tokens, keys or agent sockets.
 test('runAgent passes on only allowlisted variables, plus the target env and git identity', async () => {
-  const { mkdtempSync, writeFileSync, readFileSync, chmodSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
+  const { writeFileSync, readFileSync, chmodSync } = await import('node:fs');
   const { join } = await import('node:path');
   const { runAgent } = await import('../lib/agent.mjs');
-  const bin = mkdtempSync(join(tmpdir(), 'env-claude-')), dump = join(bin, 'env.json');
+  const bin = tempDir('env-claude-'), dump = join(bin, 'env.json');
   writeFileSync(join(bin, 'claude'), `#!/usr/bin/env node
 require('fs').writeFileSync(${JSON.stringify(dump)}, JSON.stringify(process.env));
 process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify({ terminal_reason: 'completed', is_error: false, structured_output: {} })));
@@ -179,12 +179,11 @@ test('buildArgs disallows the tools no stage uses', () =>
   assert.match(buildArgs(base).at(-1), /,ListAgents,ReportFindings$/));
 
 test('runAgent turns off Claude Code\'s memory', async () => {
-  const { mkdtempSync, writeFileSync, readFileSync, chmodSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
+  const { writeFileSync, readFileSync, chmodSync } = await import('node:fs');
   const { join } = await import('node:path');
   const { runAgent } = await import('../lib/agent.mjs');
   const { config } = await import('../config.mjs');
-  const bin = mkdtempSync(join(tmpdir(), 'trim-claude-')), dump = join(bin, 'env.json');
+  const bin = tempDir('trim-claude-'), dump = join(bin, 'env.json');
   writeFileSync(join(bin, 'claude'), `#!/usr/bin/env node
 require('fs').writeFileSync(${JSON.stringify(dump)}, JSON.stringify(process.env));
 process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify({ terminal_reason: 'completed', is_error: false, structured_output: {} })));
@@ -202,11 +201,10 @@ process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify
 });
 
 async function maxTurnsOf(session, cfg) {
-  const { mkdtempSync, writeFileSync, readFileSync, chmodSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
+  const { writeFileSync, readFileSync, chmodSync } = await import('node:fs');
   const { join } = await import('node:path');
   const { runAgent } = await import('../lib/agent.mjs');
-  const bin = mkdtempSync(join(tmpdir(), 'turns-claude-')), dump = join(bin, 'args.json');
+  const bin = tempDir('turns-claude-'), dump = join(bin, 'args.json');
   writeFileSync(join(bin, 'claude'), `#!/usr/bin/env node
 require('fs').writeFileSync(${JSON.stringify(dump)}, JSON.stringify(process.argv.slice(2)));
 process.stdin.resume(); process.stdin.on('end', () => console.log(JSON.stringify({ terminal_reason: 'completed', is_error: false, structured_output: {} })));

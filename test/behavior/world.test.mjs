@@ -1,21 +1,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../../lib/exec.mjs';
 import { runAgent } from '../../lib/agent.mjs';
 import { config } from '../../config.mjs';
 import { world, FAKES_BIN, FAKE_BWRAP_BIN } from './world.mjs';
+import { tempDir } from '../fakes/tmp.mjs';
 
 const ok = (summary) => ({ status: 'complete', summary, detail: '' });
 const schema = { type: 'object' };
 
 async function scratchRepo() {
-  const dir = mkdtempSync(join(tmpdir(), 'fake-claude-'));
+  const dir = tempDir('fake-claude-');
   await run('git', ['init', '-q', '-b', 'master', dir]);
   await run('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-q', '--allow-empty', '-m', 'init']);
-  const script = join(dir, '..', `${Date.now()}-script.json`), log = join(dir, '..', `${Date.now()}-log.jsonl`);
+  const side = tempDir('fake-claude-files-'), script = join(side, 'script.json'), log = join(side, 'log.jsonl');
   return { dir, script, log };
 }
 function useFakeClaude({ script, log }, steps) {
@@ -58,7 +58,7 @@ test('the factory starts in a world and reports 0 eligible', async () => {
 });
 
 test('the stand-in bwrap runs the command in --chdir with only the --setenv variables', async () => {
-  const bwrap = join(FAKE_BWRAP_BIN, 'bwrap'), dir = mkdtempSync(join(tmpdir(), 'fake-bwrap-'));
+  const bwrap = join(FAKE_BWRAP_BIN, 'bwrap'), dir = tempDir('fake-bwrap-');
   process.env.FACTORY_SENTINEL_SECRET = 'leak';
   try {
     const r = await run(bwrap, ['--ro-bind', '/', '/', '--clearenv', '--setenv', 'A', 'x', '--setenv', 'PATH', process.env.PATH,

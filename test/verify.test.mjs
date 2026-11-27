@@ -1,13 +1,13 @@
 // verifyBranch judges a real branch in a real temporary git repository.
 import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { run } from '../lib/exec.mjs';
 import { workspace } from '../lib/workspace.mjs';
 import { verifyBranch } from '../lib/verify.mjs';
 import { FAKE_BWRAP_BIN } from './behavior/world.mjs';
+import { tempDir } from './fakes/tmp.mjs';
 
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid'];
 
@@ -30,7 +30,7 @@ describe('protected files and tests', () => {
   const cfg = { protectedFiles: ['lib/brakes.mjs'], protectedDirs: ['smoke/'], testDirs: ['test/'] };
   let ws, dir;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-verify-'));
+    const base = tempDir('factory-verify-');
     const origin = join(base, 'origin.git'), seed = join(base, 'seed'), root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
     await run('git', ['init', '-q', '-b', 'master', seed]);
@@ -223,7 +223,7 @@ describe('dotfiles', () => {
 
   let ws, dir;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-verify-dot-'));
+    const base = tempDir('factory-verify-dot-');
     const origin = join(base, 'origin.git'), seed = join(base, 'seed'), root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
     await run('git', ['init', '-q', '-b', 'master', seed]);
@@ -261,7 +261,7 @@ describe('test support files', () => {
   const cfg = { testDirs: ['test/'], testSupport: ['test/fakes/'] };
   let ws, dir;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-verify-support-'));
+    const base = tempDir('factory-verify-support-');
     const origin = join(base, 'origin.git'), seed = join(base, 'seed'), root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
     await run('git', ['init', '-q', '-b', 'master', seed]);

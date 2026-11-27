@@ -1,7 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config, config as defaults } from './fixtures/config.mjs';
 import { recover, tick, cleanup, acquireLock, preflight, freePort, shortTitle, pollLine } from '../lib/loop.mjs';
@@ -9,6 +8,7 @@ import { fakeWorkspace } from './fakes/workspace.mjs';
 import { createServer } from 'node:net';
 import scorePad from './fixtures/web-app-target.mjs';
 import { runItem } from '../lib/stages.mjs';
+import { tempDir } from './fakes/tmp.mjs';
 
 const T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
 const issue = (number, o = {}) => ({
@@ -142,7 +142,7 @@ test('cleanup removes worktrees of finished items only', async () => {
   assert.deepEqual(d.removed, [1]);
 });
 test('acquireLock refuses a second holder and takes over a dead pid', () => {
-  const file = join(mkdtempSync(join(tmpdir(), 'factory-lock-')), 'factory.lock');
+  const file = join(tempDir('factory-lock-'), 'factory.lock');
   const release = acquireLock(file);
   assert.equal(readFileSync(file, 'utf8').trim(), String(process.pid));
   assert.throws(() => acquireLock(file), /already running \(pid \d+\)/);
@@ -153,13 +153,13 @@ test('acquireLock refuses a second holder and takes over a dead pid', () => {
   assert.equal(existsSync(file), false);
 });
 test('a live lock names the file to delete if the pid is not the factory', () => {
-  const file = join(mkdtempSync(join(tmpdir(), 'factory-lock-')), 'factory.lock');
+  const file = join(tempDir('factory-lock-'), 'factory.lock');
   const release = acquireLock(file);
   assert.throws(() => acquireLock(file), (/** @type {Error} */ e) => /already running \(pid \d+\)/.test(e.message) && e.message.includes(file));
   release();
 });
 test('a lock file without a pid is stale', () => {
-  const file = join(mkdtempSync(join(tmpdir(), 'factory-lock-')), 'factory.lock');
+  const file = join(tempDir('factory-lock-'), 'factory.lock');
   for (const text of ['', 'abc']) { writeFileSync(file, text); acquireLock(file)(); }
 });
 test('preflight passes when everything is in place', async () =>
@@ -187,10 +187,9 @@ test('a park is logged once, with every line of its reason', async () => {
 });
 test('lockHolder names a live holder and ignores dead or missing locks', async () => {
   const { lockHolder } = await import('../lib/loop.mjs');
-  const { mkdtempSync, writeFileSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
+  const { writeFileSync } = await import('node:fs');
   const { join } = await import('node:path');
-  const dir = mkdtempSync(join(tmpdir(), 'lock-'));
+  const dir = tempDir('lock-');
   assert.equal(lockHolder(join(dir, 'none.lock')), null);
   writeFileSync(join(dir, 'live.lock'), String(process.pid));
   assert.equal(lockHolder(join(dir, 'live.lock')), process.pid);

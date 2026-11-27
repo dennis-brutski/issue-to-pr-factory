@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, existsSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
+import { writeFileSync, existsSync, rmSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -10,6 +10,7 @@ import { runChecks, runSetup } from '../lib/checks.mjs';
 import { runConfined } from '../lib/confine.mjs';
 import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
+import { tempDir } from './fakes/tmp.mjs';
 
 const pairs = (args, flag) => args.flatMap((a, i) => (a === flag ? [[args[i + 1], args[i + 2]]] : []));
 
@@ -28,14 +29,14 @@ test('checks get no network and write only to the worktree', () => {
   assert.deepEqual(a.slice(-2), ['--chdir', '/w']);
 });
 test('setup gets the network and its write caches, home-expanded', () => {
-  const home = mkdtempSync(join(tmpdir(), 'home-'));
+  const home = tempDir('home-');
   const a = bwrapArgs({ dir: '/w', home, network: true, read: [], write: ['~/.npm'] });
   assert.ok(!a.includes('--unshare-net'));
   assert.deepEqual(pairs(a, '--bind'), [['/w', '/w'], [join(home, '.npm'), join(home, '.npm')]]);
   assert.ok(existsSync(join(home, '.npm')), 'write folders are created first');
 });
 test('read folders are bound read-only, missing ones skipped', () => {
-  const home = mkdtempSync(join(tmpdir(), 'home-'));
+  const home = tempDir('home-');
   mkdirSync(join(home, '.nvm'));
   const a = bwrapArgs({ dir: '/w', home, network: false, read: ['~/.nvm', '~/.missing'], write: [] });
   assert.deepEqual(pairs(a, '--ro-bind').map(([src]) => src), ['/', join(home, '.nvm')]);
@@ -58,7 +59,7 @@ test('confined checks cannot read home, write outside the worktree or reach the 
   const canary = join(homedir(), '.cache', `factory-canary-${id}`), outside = join(homedir(), `factory-escape-${id}`);
   mkdirSync(join(homedir(), '.cache'), { recursive: true });
   writeFileSync(canary, 'canary');
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   const cfg = (checks) => ({ ...config, checks });
   try {
     assert.equal((await runChecks(dir, cfg([['cat', [canary]]]), 4201)).ok, false, 'read a file in home');
@@ -72,21 +73,21 @@ test('confined checks cannot read home, write outside the worktree or reach the 
   } finally { rmSync(canary, { force: true }); rmSync(outside, { force: true }); }
 });
 test('a missing check program reports which one', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   const r = await runChecks(dir, { ...config, checks: [['definitely-missing-cmd', ['x']]] }, 4201);
   assert.equal(r.ok, false);
   assert.equal(r.failed, 'definitely-missing-cmd x');
   assert.match(r.output, /No such file|not found|ENOENT/);
 });
 test('confined checks can commit with the git identity agents get', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   // A project's tests that make commits do so in repos of their own (the worktree's git data is read-only).
   const r = await runChecks(dir, { ...config, checks: [['sh', ['-c', 'git init -q sub && git -C sub commit -q --allow-empty -m x']]] }, 4201);
   assert.equal(r.ok, true, r.output);
 });
 
 test('confined runs reach no user session: no agent sockets, no /run/user, no stray environment', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   process.env.FACTORY_SENTINEL_SECRET = 'leak';
   try {
     const probe = 'test -z "$SSH_AUTH_SOCK" && test -z "$DBUS_SESSION_BUS_ADDRESS" && test -z "$FACTORY_SENTINEL_SECRET" && ! ls -A /run/user/$(id -u) 2>/dev/null | grep -q .';
@@ -98,25 +99,25 @@ test('confined runs reach no user session: no agent sockets, no /run/user, no st
   } finally { delete process.env.FACTORY_SENTINEL_SECRET; }
 });
 test('confined runs keep PATH, HOME, the target env and the git identity', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   const cfg = { ...config, env: { MY_VAR: 'x{port}' }, checks: [['sh', ['-c', 'test "$MY_VAR" = x4201 && test "$CI" = 1 && test -n "$HOME" && command -v node >/dev/null && test -n "$GIT_AUTHOR_NAME"']]] };
   const r = await runChecks(dir, cfg, 4201);
   assert.equal(r.ok, true, r.output);
 });
 test('setup can still resolve host names', { skip: real.skip || (online ? false : 'no network on this machine') }, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   const r = await runSetup(dir, { ...config, setup: [['node', ['-e', "require('dns').lookup('registry.npmjs.org', (e) => process.exit(e ? 3 : 0))"]]] }, 4201);
   assert.equal(r.ok, true, r.output);
 });
 test('no process outlives a confined run', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   const r = await runChecks(dir, { ...config, checks: [['sh', ['-c', 'setsid sh -c "sleep 2; touch late-write" > /dev/null 2>&1 &']]] }, 4201);
   assert.equal(r.ok, true, r.output);
   await new Promise((res) => setTimeout(res, 3000));
   assert.ok(!existsSync(join(dir, 'late-write')), 'a process kept running after the check');
 });
 test("the worktree's .git file is read-only for confined runs", real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   writeFileSync(join(dir, '.git'), 'gitdir: /somewhere\n');
   const r = await runChecks(dir, { ...config, checks: [['sh', ['-c', 'echo "gitdir: ./.x" > .git']]] }, 4201);
   assert.equal(r.ok, false);
@@ -126,7 +127,7 @@ test('targetEnv fills {runDir} too', () => {
   assert.equal(targetEnv({ runDir: '/r', env: { npm_config_cache: '{runDir}/npm-cache' } }, 1).npm_config_cache, '/r/npm-cache');
 });
 test("setup writes the run folder's cache, never the real home cache", real, async () => {
-  const runDir = mkdtempSync(join(tmpdir(), 'run-')), dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const runDir = tempDir('run-'), dir = tempDir('confine-');
   const id = randomBytes(4).toString('hex'), real = join(homedir(), '.npm', `factory-probe-${id}`);
   const cfg = { ...config, runDir, setupWrite: ['{runDir}/npm-cache'], setup: [['sh', ['-c', `touch {runDir}/npm-cache/ok; mkdir -p "$HOME/.npm" && touch "$HOME/.npm/factory-probe-${id}"`.replaceAll('{runDir}', runDir)]]] };
   try {
@@ -138,7 +139,7 @@ test("setup writes the run folder's cache, never the real home cache", real, asy
 });
 test('without a readable ~/.gitconfig the git identity comes from the environment', async () => {
   // Inside an agent's sandbox the home folder is hidden; the outer factory passed the identity in.
-  const home = mkdtempSync(join(tmpdir(), 'home-'));
+  const home = tempDir('home-');
   const code = "const { gitIdentityEnv } = await import(process.argv[1]); console.log(JSON.stringify(await gitIdentityEnv()));";
   const r = await run(process.execPath, ['--input-type=module', '-e', code, new URL('../lib/confine.mjs', import.meta.url).href], {
     env: { HOME: home, GIT_CONFIG_GLOBAL: join(home, 'missing'), GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Agent Name', GIT_AUTHOR_EMAIL: 'agent@example.invalid' },
@@ -152,7 +153,7 @@ const binds = (args) => args.flatMap((a, i) => (a === '--bind' || a === '--ro-bi
 const under = (p, dir) => p === dir || p.startsWith(dir + sep);
 
 test('no home path is bound at or under a worktree that lives in the home folder', () => {
-  const home = mkdtempSync(join(tmpdir(), 'home-'));
+  const home = tempDir('home-');
   for (const f of ['.bashrc', '.profile']) writeFileSync(join(home, f), '');
   for (const d of ['.claude', '.idea', '.cache/ms-playwright']) mkdirSync(join(home, d), { recursive: true });
   const runDir = join(home, 'git', 'factory', 'runs', 'demo');
@@ -173,7 +174,7 @@ test('no home path is bound at or under a worktree that lives in the home folder
 });
 
 test('without ~/.gitconfig or identity variables the git identity is empty', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'home-'));
+  const home = tempDir('home-');
   const code = "const { gitIdentityEnv } = await import(process.argv[1]); console.log(JSON.stringify(await gitIdentityEnv()));";
   const r = await run(process.execPath, ['--input-type=module', '-e', code, new URL('../lib/confine.mjs', import.meta.url).href], {
     env: { PATH: process.env.PATH, HOME: home, GIT_CONFIG_GLOBAL: join(home, 'missing'), GIT_CONFIG_NOSYSTEM: '1' }, inheritEnv: false,
@@ -184,7 +185,7 @@ test('targetEnv without env sets only CI', () => {
   assert.deepEqual(targetEnv({}, 4201), { CI: '1' });
 });
 test('a target without env, runtimeRead or sandboxRead still runs confined', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   const r = await runChecks(dir, { checkTimeoutMin: 1, checks: [['sh', ['-c', 'test "$CI" = 1 && test -n "$PATH" && echo ran']]] }, 4201);
   assert.deepEqual(r, { ok: true, failed: null, output: '' });
 });
@@ -196,7 +197,7 @@ test('a target without setup, checks or held-out checks runs no steps and succee
 });
 test('a target without runtimeRead or sandboxRead builds its read list without throwing', async () => {
   // Spreading a missing list throws before bwrap starts; whether bwrap itself works here does not matter.
-  const dir = mkdtempSync(join(tmpdir(), 'confine-'));
+  const dir = tempDir('confine-');
   const r = await runConfined('true', [], { dir, cfg: {}, port: 4201, network: false, timeoutMs: 10_000 });
   assert.deepEqual(Object.keys(r).sort(), ['code', 'stderr', 'stdout', 'timedOut']);
 });

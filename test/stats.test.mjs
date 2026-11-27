@@ -1,11 +1,11 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { countPullRequests, stopLabel, groupStops, formatStats, runStats, countAutoMerges, formatAutoMerges, groupAgentUse, formatAgentUse, agentUseSection, readSessions, countReviewLoad, formatReviewLoad, countGate, formatGate } from '../stats.mjs';
-import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { autoMerged, autoMergeFailed, stopped, reasons, rework } from '../lib/comments.mjs';
 import { count } from '../lib/usage.mjs';
+import { tempDir } from './fakes/tmp.mjs';
 
 describe('counts and stop reasons', () => {
   const cfg = { repo: 'dennis-brutski/demo', owner: 'dennis-brutski', states: { needsHuman: 'agent:needs-human' } };
@@ -95,7 +95,7 @@ describe('counts and stop reasons', () => {
 
 // stats.mjs with no target: every target in targets/, one after another.
 function root(targets) {
-  const r = mkdtempSync(join(tmpdir(), 'factory-stats-all-'));
+  const r = tempDir('factory-stats-all-');
   mkdirSync(join(r, 'targets'));
   for (const [name, repo] of Object.entries(targets)) {
     writeFileSync(join(r, 'targets', `${name}.mjs`), `export default ${JSON.stringify({ repo, owner: 'me', baseBranch: 'main' })};\n`);
@@ -202,11 +202,10 @@ test('formatAutoMerges prints one line', () => {
 });
 
 test('the stats of a target show the auto-merge line', async () => {
-  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
+  const { mkdirSync, writeFileSync } = await import('node:fs');
   const { join } = await import('node:path');
   const { runStats } = await import('../stats.mjs');
-  const root = mkdtempSync(join(tmpdir(), 'factory-stats-automerge-'));
+  const root = tempDir('factory-stats-automerge-');
   mkdirSync(join(root, 'targets'));
   writeFileSync(join(root, 'targets', 'demo.mjs'), `export default ${JSON.stringify({ ...cfg, baseBranch: 'main' })};\n`);
   const gh = {
@@ -219,11 +218,10 @@ test('the stats of a target show the auto-merge line', async () => {
 });
 
 test('the stats of a target read pull requests once and comments once, whatever was merged or closed', async () => {
-  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
+  const { mkdirSync, writeFileSync } = await import('node:fs');
   const { join } = await import('node:path');
   const { runStats } = await import('../stats.mjs');
-  const root = mkdtempSync(join(tmpdir(), 'factory-stats-once-'));
+  const root = tempDir('factory-stats-once-');
   mkdirSync(join(root, 'targets'));
   writeFileSync(join(root, 'targets', 'demo.mjs'), `export default ${JSON.stringify({ ...cfg, baseBranch: 'main' })};\n`);
   const at = '2026-11-10T10:00:00Z';
@@ -360,7 +358,7 @@ describe('session usage', () => {
   const result = (extra = {}) => JSON.stringify({ num_turns: 3, usage: { input_tokens: 100, cache_read_input_tokens: 900, output_tokens: 50 }, total_cost_usd: 0.25, permission_denials: [], terminal_reason: 'completed', ...extra });
 
   test('agentUseSection reads the log folders of a run', () => {
-    const root = mkdtempSync(join(tmpdir(), 'stats-usage-'));
+    const root = tempDir('stats-usage-');
     const logs = join(root, 'logs');
     mkdirSync(join(logs, 'issue-7'), { recursive: true });
     mkdirSync(join(logs, 'issue-8'), { recursive: true });
@@ -394,7 +392,7 @@ describe('session usage', () => {
   });
 
   test('a session log that cannot be read counts as an unreadable session, the others still count', () => {
-    const logs = join(mkdtempSync(join(tmpdir(), 'stats-unreadable-')), 'logs');
+    const logs = join(tempDir('stats-unreadable-'), 'logs');
     const at = Date.parse('2026-11-10T10:00:00Z');
     mkdirSync(join(logs, 'issue-7'), { recursive: true });
     writeFileSync(join(logs, 'issue-7', `${at}-1-gate.json`), result());

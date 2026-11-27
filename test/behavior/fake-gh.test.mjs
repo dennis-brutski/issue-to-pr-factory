@@ -1,13 +1,13 @@
 // The fake gh, checked against the real adapter in lib/github.mjs.
 import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../../config.mjs';
 import { run } from '../../lib/exec.mjs';
 import * as gh from '../../lib/github.mjs';
+import { tempDir } from '../fakes/tmp.mjs';
 
 const BIN = join(dirname(fileURLToPath(import.meta.url)), 'fakes', 'bin');
 const cfg = { ...config, repo: 'dennis-brutski/demo', baseBranch: 'master' };
@@ -21,7 +21,7 @@ describe('gh commands', () => {
   beforeEach(() => {
     // Never fall through to the real gh: these tests would then talk to GitHub.
     if (!existsSync(join(BIN, 'gh'))) throw new Error(`fake gh missing at ${BIN}/gh`);
-    stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
+    stateFile = join(tempDir('fake-gh-'), 'state.json');
     write({
       login: 'dennis-brutski', nextNumber: 2, calls: [],
       items: [{ number: 1, kind: 'issue', title: 'Fix a', body: 'Do it.', author: 'dennis-brutski', state: 'OPEN',
@@ -153,7 +153,7 @@ describe('pages', () => {
 
   beforeEach(() => {
     if (!existsSync(join(BIN, 'gh'))) throw new Error(`fake gh missing at ${BIN}/gh`);
-    const stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
+    const stateFile = join(tempDir('fake-gh-'), 'state.json');
     const items = [];
     for (let n = 1; n <= 120; n++) items.push(issue(n));
     for (let n = 121; n <= 175; n++) items.push(issue(n, 'pr'));
@@ -194,7 +194,7 @@ describe('all pull requests', () => {
 
   beforeEach(() => {
     if (!existsSync(join(BIN, 'gh'))) throw new Error(`fake gh missing at ${BIN}/gh`);
-    stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
+    stateFile = join(tempDir('fake-gh-'), 'state.json');
     writeFileSync(stateFile, JSON.stringify({ login: 'dennis-brutski', nextNumber: 5, calls: [], items: [
       { number: 1, kind: 'issue', title: 'a', body: '', author: 'dennis-brutski', state: 'CLOSED', labels: [], labelEvents: [],
         comments: [{ author: 'dennis-brutski', body: 'first\nline', at: T }, { author: 'mallory', body: 'hi', at: '2026-11-02T10:00:00Z' }] },
@@ -234,7 +234,7 @@ describe('all pull requests', () => {
 
 describe('open issues', () => {
   beforeEach(() => {
-    const stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
+    const stateFile = join(tempDir('fake-gh-'), 'state.json');
     const it = (number, kind, state) => ({ number, kind, title: 't', body: '', author: 'dennis-brutski', state, labels: [], labelEvents: [], comments: [] });
     writeFileSync(stateFile, JSON.stringify({ login: 'dennis-brutski', nextNumber: 6, calls: [],
       items: [it(1, 'issue', 'OPEN'), it(2, 'issue', 'CLOSED'), it(3, 'pr', 'OPEN'), it(4, 'issue', 'OPEN'), it(5, 'pr', 'MERGED')] }));
