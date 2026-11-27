@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { protectedPathViolations as check, attributionViolations, workflowChanges, additionsOnly, skippedTests, strayDotfiles } from '../lib/brakes.mjs';
+import { protectedPathViolations as check, attributionViolations, workflowChanges, additionsOnly, skippedTests, strayDotfiles, secretViolations, addedLines } from '../lib/brakes.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 
 // The web app target: its protections must stay exactly what they were.
@@ -119,4 +119,41 @@ test('changing an already-tracked dotfile is allowed', () => {
 test('dotfiles below the root and ordinary project dotfiles are allowed', () => {
   const changes = ['src/.bashrc', 'docs/.idea/x', '.gitignore', '.editorconfig', '.nvmrc'].map((path) => ({ status: 'A', path }));
   assert.deepEqual(strayDotfiles(changes), []);
+});
+
+// Test tokens are built from parts, so this file never holds a string the brake would stop.
+const TOKENS = {
+  'Anthropic key': 'sk-' + 'ant-' + 'api03-' + 'A'.repeat(30),
+  'GitHub token': 'gh' + 'p_' + 'a'.repeat(36),
+  'GitHub fine-grained token': 'github' + '_pat_' + 'B'.repeat(22),
+  'private key': '-----BEGIN ' + 'OPENSSH PRIVATE' + ' KEY-----',
+};
+const secretLine = (text, file = 'src/a.js', line = 3) => ({ file, line, text });
+
+test('each kind of secret is found in an added line, by file and line', () => {
+  for (const [kind, token] of Object.entries(TOKENS))
+    assert.deepEqual(secretViolations([secretLine(`const t = "${token}";`)], []), [`src/a.js line 3: looks like a ${kind}`], kind);
+});
+test('each kind of secret is found in a commit message, by its place in the list', () => {
+  for (const [kind, token] of Object.entries(TOKENS))
+    assert.deepEqual(secretViolations([], ['Fix a', `Add b\n\ntoken ${token}`]), [`commit message 2: looks like a ${kind}`], kind);
+});
+test('every gh token prefix counts', () => {
+  for (const p of 'pousr') assert.equal(secretViolations([secretLine('gh' + p + '_' + 'z'.repeat(36))], []).length, 1, p);
+});
+test('a too-short Anthropic key and a bare gh prefix are not secrets', () => {
+  assert.deepEqual(secretViolations([secretLine('sk-' + 'ant-x'), secretLine('gh' + 'p_ alone'), secretLine('gh' + 'p_' + 'a'.repeat(10))], ['gh' + 'p_']), []);
+});
+test('a finding never holds the secret', () => {
+  const found = secretViolations(Object.values(TOKENS).map((t) => secretLine(t)), Object.values(TOKENS)).join('\n');
+  for (const token of Object.values(TOKENS)) assert.ok(!found.includes(token), token);
+  assert.ok(!found.includes('sk-' + 'ant'));
+});
+test('addedLines gives each added line with its file and line number', () => {
+  const diff = ['diff --git a/x.js b/x.js', '--- a/x.js', '+++ b/x.js', '@@ -1,2 +1,3 @@', ' keep', '-gone', '+new one', '+new two',
+    '@@ -10 +11,2 @@', ' ctx', '+later', 'diff --git a/y.js b/y.js', 'new file mode 100644', '--- /dev/null', '+++ b/y.js', '@@ -0,0 +1 @@', '++plus'].join('\n');
+  assert.deepEqual(addedLines(diff), [
+    { file: 'x.js', line: 2, text: 'new one' }, { file: 'x.js', line: 3, text: 'new two' },
+    { file: 'x.js', line: 12, text: 'later' }, { file: 'y.js', line: 1, text: '+plus' },
+  ]);
 });
