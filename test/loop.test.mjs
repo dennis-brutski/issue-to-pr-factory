@@ -114,6 +114,28 @@ test('parked item is not picked up again on the next tick', async () => {
   assert.deepEqual(await tick(d.deps, new Map()), []);
   assert.deepEqual(d.comments, []);
 });
+test('a run that does not start is labelled before it is commented on', async () => {
+  const d = fakes({ candidates: [issue(3, { author: 'mallory', bodyEditedAt: T2 })] });
+  const calls = [];
+  d.deps.gh.addLabel = async (c, n, l) => { calls.push(`label ${l}`); };
+  d.deps.gh.comment = async () => { calls.push('comment'); };
+  await tick(d.deps, new Map());
+  assert.deepEqual(calls, ['label agent:needs-human', 'comment']);
+});
+test('a failed label posts no comment, so the next poll does not repeat it', async () => {
+  const d = fakes({ candidates: [issue(3, { author: 'mallory', bodyEditedAt: T2 })] });
+  d.deps.gh.addLabel = async () => { throw new Error('GitHub is down'); };
+  await tick(d.deps, new Map());
+  assert.deepEqual(d.comments, []);
+  assert.ok(d.logs.some((l) => l === '#3 could not be parked: GitHub is down'));
+});
+test('a failed comment after the label is logged', async () => {
+  const d = fakes({ candidates: [issue(3, { author: 'mallory', bodyEditedAt: T2 })] });
+  d.deps.gh.comment = async () => { throw new Error('GitHub is down'); };
+  await tick(d.deps, new Map());
+  assert.deepEqual(d.labelsAdded, ['3:agent:needs-human']);
+  assert.ok(d.logs.some((l) => l === '#3 could not be parked: GitHub is down'));
+});
 test('cleanup removes worktrees of finished items only', async () => {
   const d = fakes({ worktrees: [1, 2, 3], finished: [1, 3] });
   await cleanup(d.deps, new Map([[3, Promise.resolve()]]));
@@ -130,10 +152,26 @@ test('acquireLock refuses a second holder and takes over a dead pid', () => {
   acquireLock(file)();
   assert.equal(existsSync(file), false);
 });
+test('a live lock names the file to delete if the pid is not the factory', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'factory-lock-')), 'factory.lock');
+  const release = acquireLock(file);
+  assert.throws(() => acquireLock(file), (e) => /already running \(pid \d+\)/.test(e.message) && e.message.includes(file));
+  release();
+});
+test('a lock file without a pid is stale', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'factory-lock-')), 'factory.lock');
+  for (const text of ['', 'abc']) { writeFileSync(file, text); acquireLock(file)(); }
+});
 test('preflight passes when everything is in place', async () =>
   assert.equal(await preflight(fakes().deps), undefined));
 test('preflight fails closed when the sandbox probe fails', async () =>
   assert.rejects(preflight(fakes({ failing: ['bwrap'] }).deps), /sandbox/i));
+test('the sandbox error names the probe and points to the README, not a plan', async () => {
+  const e = await preflight(fakes({ failing: ['bwrap'] }).deps).catch((x) => x);
+  assert.match(e.message, /bwrap --ro-bind \/ \/ --dev \/dev --unshare-net true/);
+  assert.match(e.message, /Getting started.*README/);
+  assert.doesNotMatch(e.message, /plan/i);
+});
 test('preflight fails when claude is missing', async () =>
   assert.rejects(preflight(fakes({ failing: ['claude'] }).deps), /claude/i));
 test('preflight fails when gh is logged in as someone else', async () =>
