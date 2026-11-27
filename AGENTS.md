@@ -43,6 +43,7 @@ Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or 
 5. **Small, readable changes.** Match the style of the file you are in. No drive-by refactors.
 6. **Plain wording.** Comments, log lines and GitHub comments are read by one person in a hurry: short sentences, no jargon.
 7. **Read the decisions.** Before changing a module, read the records in `docs/adr/` that concern it. Do not undo a recorded decision; if your change needs to, stop and say which record and why.
+8. **JSDoc on exports you touch.** An exported function you add or change gets a JSDoc block: one summary line, then `@param` and `@returns` types. Describe only what the code can't show: what `null` or empty means, side effects (writes files, calls `gh`, pushes), what it throws. Don't repeat the name or the types.
 
 ## Commits
 
