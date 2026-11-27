@@ -1,4 +1,5 @@
 # issue-to-pr-factory
+[![CI](https://github.com/dennis-brutski/issue-to-pr-factory/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/dennis-brutski/issue-to-pr-factory/actions/workflows/ci.yml?query=branch%3Amain) [![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/dennis-brutski/issue-to-pr-factory/badges/coverage.json)](https://github.com/dennis-brutski/issue-to-pr-factory/actions/workflows/ci.yml?query=branch%3Amain) [![License](https://img.shields.io/github/license/dennis-brutski/issue-to-pr-factory)](LICENSE)
 
 A software factory for a single maintainer (for now). It turns labelled GitHub issues into checked pull requests, with Claude Code agents confined in a sandbox.
 
