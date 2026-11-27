@@ -24,7 +24,8 @@ jobs:
         run: |
           npm test 2>&1 | tee test-output.txt
           echo "branches=$(awk -F'|' '/^ℹ all files +\|/ { gsub(/ /, "", $3); print $3; exit }' test-output.txt)" >> "$GITHUB_OUTPUT"
-  # Publishes the branch coverage for the README badge as the only commit of the badges branch.
+  # Publishes the branch coverage badge as an SVG, the only commit of the badges branch. The README loads it from
+  # GitHub directly: through shields.io's endpoint badge GitHub's image proxy timed out.
   badge:
     needs: check
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -42,6 +43,7 @@ jobs:
           [[ "$BRANCHES" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "Branch coverage is not a number: '$BRANCHES'"; exit 1; }
           git init -q -b badges badges && cd badges
           git config user.name CI && git config user.email ci@example.invalid
-          printf '{"schemaVersion":1,"label":"branch coverage","message":"%s%%","color":"2ebc4e"}\n' "$BRANCHES" > coverage.json
-          git add coverage.json && git commit -q -m "Branch coverage $BRANCHES%"
+          curl -fsS --retry 3 -o coverage.svg "https://img.shields.io/badge/branch%20coverage-${BRANCHES}%25-2ebc4e"
+          grep -q '<svg' coverage.svg || { echo "shields.io did not return an SVG"; exit 1; }
+          git add coverage.svg && git commit -q -m "Branch coverage $BRANCHES%"
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
