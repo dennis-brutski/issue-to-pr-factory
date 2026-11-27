@@ -14,8 +14,8 @@ test('the check lines show plan usage, the session line does not', async () => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ five_hour: { utilization: 42 }, seven_day: { utilization: 18 } }));
   });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const w = await world({ settings: { planUsageUrl: `http://127.0.0.1:${server.address().port}/` } });
+  await /** @type {Promise<void>} */ (new Promise((r) => server.listen(0, '127.0.0.1', r)));
+  const w = await world({ settings: { planUsageUrl: `http://127.0.0.1:${/** @type {import('node:net').AddressInfo} */ (server.address()).port}/` } });
   try {
     writeFileSync(join(w.claudeConfig, '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken: 'dummy-token' } }));
     const n = w.issue({ labels: ['agent:implement'] });

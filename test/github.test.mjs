@@ -5,7 +5,7 @@ import { run } from '../lib/exec.mjs';
 import { toItems, listPullRequests, listCandidates } from '../lib/github.mjs';
 import { config } from '../config.mjs';
 
-const fixture = JSON.parse(readFileSync(new URL('./fixtures/graphql-items.json', import.meta.url)));
+const fixture = JSON.parse(readFileSync(new URL('./fixtures/graphql-items.json', import.meta.url), 'utf8'));
 
 test('toItems maps issues and pull requests to the Item shape', () => {
   const items = toItems(fixture);

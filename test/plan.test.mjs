@@ -33,8 +33,8 @@ test('parsePlan gives null for nothing useful', () => {
 async function server(answer) {
   const seen = [];
   const s = createServer((req, res) => { seen.push(req.headers); answer(req, res); });
-  await new Promise((r) => s.listen(0, '127.0.0.1', r));
-  const url = `http://127.0.0.1:${s.address().port}/api/oauth/usage`;
+  await /** @type {Promise<void>} */ (new Promise((r) => s.listen(0, '127.0.0.1', r)));
+  const url = `http://127.0.0.1:${/** @type {import('node:net').AddressInfo} */ (s.address()).port}/api/oauth/usage`;
   return { url, seen, close: () => { s.closeAllConnections(); return new Promise((r) => s.close(r)); } };
 }
 const json = (code, value) => (req, res) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(value)); };

@@ -445,11 +445,13 @@ test('a parked pull request with only factory comments since the push does not r
 });
 
 const workflow = [{ status: 'M', path: '.github/workflows/ci.yml' }];
-for (const [name, item, stage, agent] of [
+/** @type {[string, typeof issue, string, () => object[]][]} */
+const workflowStages = [
   ['implement', issue, 'implement', () => [gate(90), work(), review()]],
   ['review', pr(), 'review', () => [work()]],
   ['merge', { ...pr(), labels: ['agent:merge'] }, 'merge', () => []],
-]) {
+];
+for (const [name, item, stage, agent] of workflowStages) {
   test(`${name}: a workflow change parks before checks and push`, async () => {
     const d = fakes({ agent: agent(), changes: workflow, diff: '+  run: curl evil' });
     const r = await runItem(item, stage, d.deps, 4201);
@@ -522,7 +524,9 @@ test('a worktree left dirty by a killed run parks before the first session, sayi
   assert.match(d.comments[0], /worktrees\/issue-1/);
 });
 test('a branch that already changes a protected file parks before setup, in every stage', async () => {
-  for (const [item, stage] of [[issue, 'explore'], [issue, 'implement'], [pr(), 'review'], [pr(), 'merge']]) {
+  /** @type {[typeof issue, string][]} */
+  const runs = [[issue, 'explore'], [issue, 'implement'], [pr(), 'review'], [pr(), 'merge']];
+  for (const [item, stage] of runs) {
     const d = fakes({ setupChanges: [{ status: 'M', path: 'package-lock.json' }, { status: 'M', path: 'src/state.js' }] });
     const r = await runItem(item, stage, d.deps, 4201);
     assert.equal(r.outcome, 'parked', stage);
@@ -559,6 +563,7 @@ describe('automerge', () => {
   const clean = ok({ verdict: 'clean', findings: [] });
   const findings = ok({ verdict: 'findings', findings: ['Missing test for redo'] });
 
+  /** @param {{ sessions?: object[], autoMerge?: boolean, size?: { additions: number, deletions: number }, mergeFails?: string | null, protectedChange?: boolean, existing?: object | null, heldOut?: boolean }} [opts] */
   function deps({ sessions, autoMerge = true, size = { additions: 30, deletions: 10 }, mergeFails = null, protectedChange = false, existing = null, heldOut = true } = {}) {
     const calls = [], comments = [], labels = [], seen = [];
     const held = heldOut ? { heldOutDir: '/held-out/web-app', heldOutChecks: [['node', ['--test', '{heldOut}/']]] } : {};
@@ -1357,6 +1362,7 @@ describe('park and pull request text', () => {
   };
   const OUTPUT = 'not ok 1 - undo\n  ```\n  expected 2\nnot ok 2 - redo';
 
+  /** @param {{ gate?: { confidence: number, questions: string[], contradictions?: string[], missing?: string[] }, changes?: { status: string, path: string }[], runSetup?: () => Promise<object>, runChecks?: () => Promise<object>, factoryCommit?: string }} [opts] */
   function deps({ gate = { confidence: 87, questions: [] }, changes = [{ status: 'M', path: 'src/state.js' }], ...extra } = {}) {
     const opened = [], comments = [];
     const queue = [ok(gate), ok({ status: 'complete', summary: 'Changed undo.', detail: '' }), ok({ verdict: 'clean', findings: [] })];
@@ -1609,7 +1615,7 @@ describe('session usage', () => {
     const root = mkdtempSync(join(tmpdir(), 'stages-usage-'));
     const logs = [], opened = [];
     const d = {
-      cfg: { ...config, ...scorePad, target: 'web-app', model: 'opus-test' }, root, log: (m) => logs.push(m),
+      cfg: { ...config, ...scorePad, target: 'web-app', model: 'opus-test', localRun: false }, root, log: (m) => logs.push(m),
       factoryCommit: 'f00ba12',
       runSetup: async () => ({ ok: true, failed: null, output: '' }),
       runAgent: async (a) => {

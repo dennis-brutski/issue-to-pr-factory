@@ -504,9 +504,11 @@ describe('handle guard', () => {
     const h = handle();
     const { dir } = await h.ensureWorktree(7);
     await plant();
-    for (const [name, call] of [['ensureWorktree', () => h.ensureWorktree(8)], ['headInfo', () => h.headInfo(dir)], ['isClean', () => h.isClean(dir)],
+    /** @type {[string, () => Promise<unknown>][]} */
+    const calls = [['ensureWorktree', () => h.ensureWorktree(8)], ['headInfo', () => h.headInfo(dir)], ['isClean', () => h.isClean(dir)],
       ['againstBase', () => h.againstBase(dir)], ['mergeBase', () => h.mergeBase(dir)], ['push', () => h.push(dir, 'factory/issue-7', 'abc')], ['preparePush', () => h.preparePush(dir, 'factory/issue-7')],
-      ['removeWorktree', () => h.removeWorktree(7)], ['ensureClone', () => h.ensureClone()], ['checkClone', () => h.checkClone()]])
+      ['removeWorktree', () => h.removeWorktree(7)], ['ensureClone', () => h.ensureClone()], ['checkClone', () => h.checkClone()]];
+    for (const [name, call] of calls)
       await assert.rejects(call, /credential\.helper/, name);
   });
 
@@ -515,7 +517,9 @@ describe('handle guard', () => {
     const { dir } = await h.ensureWorktree(7);
     const view = await h.againstBase(dir);
     await plant();
-    for (const [name, call] of [['changes', () => view.changes()], ['diff', () => view.diff('a.txt')], ['messages', () => view.messages()]])
+    /** @type {[string, () => Promise<unknown>][]} */
+    const reads = [['changes', () => view.changes()], ['diff', () => view.diff('a.txt')], ['messages', () => view.messages()]];
+    for (const [name, call] of reads)
       await assert.rejects(call, /credential\.helper/, name);
   });
 
@@ -630,7 +634,7 @@ describe('parallel runs', () => {
 
   test('git errors carry no grafts deprecation hint', async () => {
     const { dir } = await ws.ensureWorktree(root, 7, 'master');
-    await assert.rejects(() => ws.push(dir, 'factory/issue-7', 'dead'.repeat(10)), (e) => !/grafts is deprecated/.test(e.message));
+    await assert.rejects(() => ws.push(dir, 'factory/issue-7', 'dead'.repeat(10)), (/** @type {Error} */ e) => !/grafts is deprecated/.test(e.message));
   });
 });
 
@@ -648,7 +652,7 @@ describe('git error messages', () => {
     const path = process.env.PATH;
     process.env.PATH = `${bin}:${path}`;
     try {
-      await assert.rejects(() => ws.ensureClone(root, 'unused'), (e) => e.message.includes('fatal: real reason') && !e.message.includes('hint:'));
+      await assert.rejects(() => ws.ensureClone(root, 'unused'), (/** @type {Error} */ e) => e.message.includes('fatal: real reason') && !e.message.includes('hint:'));
     } finally { process.env.PATH = path; }
   });
 });
