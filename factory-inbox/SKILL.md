@@ -47,7 +47,7 @@ gh issue view <n> -R <repo> --json title,body,labels,comments    # also works fo
 ## 3. Show it
 
 ```
-#13 gin-rummy-score-pad · implement · not clear enough (45/100)
+#179 issue-to-pr-factory · implement · not clear enough (45/100)
 What it wants: <one line>
 Why it stopped: <one line>
 
