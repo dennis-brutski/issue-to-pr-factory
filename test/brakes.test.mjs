@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { protectedPathViolations as check, attributionViolations, workflowChanges, additionsOnly, skippedTests, strayDotfiles } from '../lib/brakes.mjs';
+import { protectedPathViolations as check, attributionViolations, workflowChanges, additionsOnly, skippedTests, strayDotfiles, secretViolations, addedLines, binaryFiles } from '../lib/brakes.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 
 // The web app target: its protections must stay exactly what they were.
@@ -119,4 +119,70 @@ test('changing an already-tracked dotfile is allowed', () => {
 test('dotfiles below the root and ordinary project dotfiles are allowed', () => {
   const changes = ['src/.bashrc', 'docs/.idea/x', '.gitignore', '.editorconfig', '.nvmrc'].map((path) => ({ status: 'A', path }));
   assert.deepEqual(strayDotfiles(changes), []);
+});
+
+// Test tokens are built from parts, so this file never holds a string the brake would stop.
+const TOKENS = {
+  'Anthropic key': 'sk-' + 'ant-' + 'api03-' + 'A'.repeat(30),
+  'GitHub token': 'gh' + 'p_' + 'a'.repeat(36),
+  'GitHub fine-grained token': 'github' + '_pat_' + 'B'.repeat(22),
+  'private key': '-----BEGIN ' + 'OPENSSH PRIVATE' + ' KEY-----',
+};
+const secretLine = (text, file = 'src/a.js', line = 3) => ({ file, line, text });
+
+test('each kind of secret is found in an added line, by file and line', () => {
+  for (const [kind, token] of Object.entries(TOKENS))
+    assert.deepEqual(secretViolations([secretLine(`const t = "${token}";`)], []), [`src/a.js line 3: looks like a ${kind}`], kind);
+});
+test('each kind of secret is found in a commit message, by its place in the list', () => {
+  for (const [kind, token] of Object.entries(TOKENS))
+    assert.deepEqual(secretViolations([], ['Fix a', `Add b\n\ntoken ${token}`]), [`commit message 2: looks like a ${kind}`], kind);
+});
+test('every gh token prefix counts', () => {
+  for (const p of 'pousr') assert.equal(secretViolations([secretLine('gh' + p + '_' + 'z'.repeat(36))], []).length, 1, p);
+});
+test('a too-short Anthropic key and a bare gh prefix are not secrets', () => {
+  assert.deepEqual(secretViolations([secretLine('sk-' + 'ant-x'), secretLine('gh' + 'p_ alone'), secretLine('gh' + 'p_' + 'a'.repeat(10))], ['gh' + 'p_']), []);
+});
+test('a finding never holds the secret', () => {
+  const found = secretViolations(Object.values(TOKENS).map((t) => secretLine(t)), Object.values(TOKENS)).join('\n');
+  for (const token of Object.values(TOKENS)) assert.ok(!found.includes(token), token);
+  assert.ok(!found.includes('sk-' + 'ant'));
+});
+test('addedLines gives each added line with its file and line number', () => {
+  const diff = ['diff --git a/x.js b/x.js', '--- a/x.js', '+++ b/x.js', '@@ -1,2 +1,3 @@', ' keep', '-gone', '+new one', '+new two',
+    '@@ -10 +11,2 @@', ' ctx', '+later', 'diff --git a/y.js b/y.js', 'new file mode 100644', '--- /dev/null', '+++ b/y.js', '@@ -0,0 +1 @@', '++plus'].join('\n');
+  assert.deepEqual(addedLines(diff), [
+    { file: 'x.js', line: 2, text: 'new one' }, { file: 'x.js', line: 3, text: 'new two' },
+    { file: 'x.js', line: 12, text: 'later' }, { file: 'y.js', line: 1, text: '+plus' },
+  ]);
+});
+test('a file whose name looks like a secret is a finding, and its name is never shown', () => {
+  for (const [kind, token] of Object.entries(TOKENS)) {
+    const file = `${token}.txt`;
+    const found = secretViolations([secretLine('harmless', file, 1)], [], []);
+    assert.deepEqual(found, [`(a file whose name looks like a secret): its name looks like a ${kind}`], kind);
+  }
+});
+test('a changed path whose name looks like a secret is a finding, even with no added lines', () => {
+  const token = TOKENS['GitHub token'];
+  assert.deepEqual(secretViolations([], [], [`docs/${token}`, 'src/a.js']), ['(a file whose name looks like a secret): its name looks like a GitHub token']);
+});
+test('a line finding in a file whose name looks like a secret does not show the name', () => {
+  const token = TOKENS['GitHub token'];
+  const found = secretViolations([secretLine(token, `${token}.txt`, 2)], [], [`${token}.txt`]);
+  assert.deepEqual(found, [
+    '(a file whose name looks like a secret) line 2: looks like a GitHub token',
+    '(a file whose name looks like a secret): its name looks like a GitHub token',
+  ]);
+  assert.ok(!found.join('\n').includes(token));
+});
+test('binaryFiles lists the files a diff shows only as binary, added or changed, not deleted', () => {
+  const token = TOKENS['GitHub token'];
+  const diff = ['diff --git a/bin.dat b/bin.dat', 'new file mode 100644', 'index 0000000..1111111', 'Binary files /dev/null and b/bin.dat differ',
+    'diff --git a/my img.png b/my img.png', 'Binary files a/my img.png and b/my img.png differ',
+    'diff --git a/old.bin b/old.bin', 'deleted file mode 100644', 'Binary files a/old.bin and /dev/null differ',
+    `diff --git a/${token} b/${token}`, `Binary files /dev/null and b/${token} differ`,
+    'diff --git a/x.js b/x.js', '--- a/x.js', '+++ b/x.js', '@@ -1 +1 @@', '+Binary files a/q and b/q differ'].join('\n');
+  assert.deepEqual(binaryFiles(diff), ['bin.dat', 'my img.png', '(a file whose name looks like a secret)']);
 });
