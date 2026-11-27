@@ -140,8 +140,8 @@ describe('worktrees and branches', () => {
     assert.equal(await git(join(root, 'repo'), 'branch', '--list', 'factory/issue-7'), '');
     assert.deepEqual(await ws.listWorktrees(root), []);
   });
-  test('listWorktrees returns issue numbers on disk', async () => {
-    await ws.ensureWorktree(root, 7, 'master'); await ws.ensureWorktree(root, 12, 'master');
+  test('listWorktrees returns issue numbers on disk, without the smoke issue-0', async () => {
+    await ws.ensureWorktree(root, 7, 'master'); await ws.ensureWorktree(root, 12, 'master'); await ws.ensureWorktree(root, 0, 'master');
     assert.deepEqual((await ws.listWorktrees(root)).sort((a, b) => a - b), [7, 12]);
   });
   test('ensureWorktree removes sandbox placeholders a killed session left, and nothing else', async () => {
