@@ -337,6 +337,7 @@ describe('pull request tags', () => {
       ws: fakeWorkspace({}),
       runSetup: async () => ({ ok: true, failed: null, output: '' }),
       runAgent: async () => ({ ok: false, reason: 'boom' }),
+      runChecks: async () => ({ ok: true, failed: null, output: '' }),
     };
     const r = await runItem(item, 'review', deps, 1);
     logs.push(`outcome: ${r.outcome} ${r.detail ?? ''}`);
