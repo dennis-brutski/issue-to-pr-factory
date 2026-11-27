@@ -1841,7 +1841,6 @@ describe('warning lines', () => {
   });
 });
 
-// Why the last run stopped: the newest 🏭 park comment since the last push, shown to the next code-changing session.
 // The newest explore write-up by the owner goes to gate and implement, without its heading.
 describe('explore write-up', () => {
   const HEADING = "### The factory's explore write-up";
@@ -1875,6 +1874,7 @@ describe('explore write-up', () => {
   });
 });
 
+// Why the last run stopped: the newest 🏭 park comment since the last push, shown to the next code-changing session.
 describe('last stop reason', () => {
   const T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
   const gate = (confidence, questions = []) => ok({ confidence, questions });
