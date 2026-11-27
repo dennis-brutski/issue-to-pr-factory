@@ -9,6 +9,8 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    outputs:
+      lines: ${{ steps.test.outputs.lines }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,4 +19,29 @@ jobs:
           cache: npm
       - run: git config --global user.name CI && git config --global user.email ci@example.invalid # the factory needs a git identity
       - run: npm ci --ignore-scripts
-      - run: npm test
+      - id: test
+        shell: bash # pipefail: a failing test still fails the step
+        run: |
+          npm test 2>&1 | tee test-output.txt
+          echo "lines=$(awk -F'|' '/all files/ { gsub(/ /, "", $2); print $2 }' test-output.txt)" >> "$GITHUB_OUTPUT"
+  # Publishes the line coverage for the README badge as the only commit of the badges branch.
+  badge:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: badge
+    steps:
+      - shell: bash
+        env:
+          LINES: ${{ needs.check.outputs.lines }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$LINES" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "Line coverage is not a number: '$LINES'"; exit 1; }
+          git init -q -b badges badges && cd badges
+          git config user.name CI && git config user.email ci@example.invalid
+          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"brightgreen"}\n' "$LINES" > coverage.json
+          git add coverage.json && git commit -q -m "Coverage $LINES%"
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
