@@ -1,10 +1,10 @@
 // A throwaway world for running the real factory: a local bare repo as origin,
 // a fake GitHub (fakes/gh.mjs) and a fake Claude (fakes/claude.mjs) first on PATH.
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, openSync, closeSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, openSync, closeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, execFileSync } from 'node:child_process';
+import { tempDir } from '../fakes/tmp.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 export const FAKES_BIN = join(HERE, 'fakes', 'bin');
@@ -30,7 +30,7 @@ const SEED = {
 
 /** @param {{ seed?: Record<string, string>, settings?: Record<string, unknown>, name?: string }} [opts] */
 export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) {
-  const dir = mkdtempSync(join(tmpdir(), 'factory-world-'));
+  const dir = tempDir('factory-world-');
   const origin = join(dir, 'origin.git'), work = join(dir, 'seed');
   const ghState = join(dir, 'gh.json'), script = join(dir, 'claude-script.json'), log = join(dir, 'claude-log.jsonl');
   const git = (cwd, ...args) => execFileSync('git', ['-C', cwd, ...ID, ...args], { encoding: 'utf8' }).trim();

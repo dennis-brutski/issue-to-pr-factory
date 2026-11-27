@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { parsePlan, planUsage } from '../lib/plan.mjs';
+import { tempDir } from './fakes/tmp.mjs';
 
 const body = { five_hour: { utilization: 41.6, resets_at: '2026-11-24T14:30:00Z' }, seven_day: { utilization: 18, resets_at: '2026-11-28T09:00:00Z' } };
 
@@ -39,7 +39,7 @@ async function server(answer) {
 }
 const json = (code, value) => (req, res) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(value)); };
 function configDir(token) {
-  const dir = mkdtempSync(join(tmpdir(), 'plan-'));
+  const dir = tempDir('plan-');
   if (token) writeFileSync(join(dir, '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken: token } }));
   return dir;
 }
@@ -82,7 +82,7 @@ test('planUsage gives null when the access token is not a non-empty string', asy
   const s = await server(json(200, body));
   try {
     for (const accessToken of ['', 42, null]) {
-      const dir = mkdtempSync(join(tmpdir(), 'plan-'));
+      const dir = tempDir('plan-');
       try {
         writeFileSync(join(dir, '.credentials.json'), JSON.stringify({ claudeAiOauth: { accessToken } }));
         assert.equal(await planUsage({ configDir: dir, url: s.url }), null);

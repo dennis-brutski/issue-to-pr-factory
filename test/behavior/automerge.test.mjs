@@ -1,17 +1,17 @@
 // A target with autoMerge on: a simple, cleanly reviewed issue ends handed to GitHub's auto-merge.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { world } from './world.mjs';
 import { clean, implement, factoryComments, settled } from './steps.mjs';
+import { tempDir } from '../fakes/tmp.mjs';
 
 const simpleGate = { session: 'gate', output: { confidence: 90, questions: [], difficulty: 'simple', files: ['src/a.js'] } };
 
 // Auto-merge needs held-out checks; these pass, kept outside the world's run folder.
 function heldOut() {
-  const dir = mkdtempSync(join(tmpdir(), 'factory-held-out-'));
+  const dir = tempDir('factory-held-out-');
   writeFileSync(join(dir, 'ok.test.mjs'), "import { test } from 'node:test';\ntest('held out', () => {});\n");
   return { dir, settings: { heldOutDir: dir, heldOutChecks: [['node', ['--test', '{heldOut}/ok.test.mjs']]] } };
 }

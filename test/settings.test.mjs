@@ -1,12 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
 import { loadSettings, cloneUrl, parseFactoryArgs, targetNames } from '../lib/settings.mjs';
+import { tempDir } from './fakes/tmp.mjs';
 
-const tmp = () => mkdtempSync(join(tmpdir(), 'factory-settings-'));
+const tmp = () => tempDir('factory-settings-');
 const target = (fields = {}) => `export default ${JSON.stringify({ repo: 'a/b', baseBranch: 'main', ...fields })};\n`;
 function root(targets = {}, local = "export default { owner: 'alex' };\n") {
   const r = tmp();
@@ -150,11 +150,11 @@ test('--local marks the settings as a local run; without it they are not', async
 });
 
 test('targetNames lists targets/*.mjs by name, in name order', () => {
-  const dir = join(mkdtempSync(join(tmpdir(), 'factory-names-')), 'targets');
+  const dir = join(tempDir('factory-names-'), 'targets');
   mkdirSync(dir);
   for (const f of ['two.mjs', 'one.mjs', 'notes.txt']) writeFileSync(join(dir, f), '');
   assert.deepEqual(targetNames(dir), ['one', 'two']);
 });
 test('targetNames of a missing folder is empty', () => {
-  assert.deepEqual(targetNames(join(mkdtempSync(join(tmpdir(), 'factory-names-')), 'targets')), []);
+  assert.deepEqual(targetNames(join(tempDir('factory-names-'), 'targets')), []);
 });

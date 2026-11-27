@@ -1,7 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
@@ -15,6 +14,7 @@ import { stopLabel } from '../stats.mjs';
 import factory from './fixtures/factory-target.mjs';
 import { agentSettings } from '../lib/agent.mjs';
 import { parse } from '../lib/pr-body.mjs';
+import { tempDir } from './fakes/tmp.mjs';
 
 // Wraps the fake's worktree commands: when broken() is true they throw message(), as the real checks do.
 const guarded = (broken, methods, message) => Object.fromEntries(Object.entries(methods).map(([k, fn]) =>
@@ -328,34 +328,34 @@ test('schemas require every field', () => {
 const bwrapWorks = (() => { try { execFileSync('bwrap', ['--ro-bind', '/', '/', '--dev', '/dev', '--unshare-net', 'true'], { stdio: 'ignore' }); return true; } catch { return false; } })();
 const real = { skip: bwrapWorks ? false : 'bwrap probe failed on this machine' };
 test('runChecks reports the first failing step with its output', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
+  const dir = tempDir('factory-checks-');
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'echo BOOM-OUTPUT && exit 1', e2e: 'exit 0' } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
   const r = await runChecks(dir, { ...config, ...scorePad }, 4321);
   assert.equal(r.ok, false); assert.equal(r.failed, 'npm test'); assert.match(r.output, /BOOM-OUTPUT/);
 });
 test('runChecks passes the port to the e2e run', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'factory-checks-'));
+  const dir = tempDir('factory-checks-');
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'c', version: '1.0.0', scripts: { test: 'exit 0', e2e: 'test "$E2E_PORT" = 4321' } }));
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({ name: 'c', version: '1.0.0', lockfileVersion: 3, requires: true, packages: { '': { name: 'c', version: '1.0.0' } } }));
   assert.deepEqual(await runChecks(dir, { ...config, ...scorePad }, 4321), { ok: true, failed: null, output: '' });
 });
 test('runTestFiles runs the command once per file and names the files whose run passed', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'factory-testfiles-'));
+  const dir = tempDir('factory-testfiles-');
   writeFileSync(join(dir, 'pass.test.mjs'), "import { test } from 'node:test';\ntest('p', () => {});\n");
   writeFileSync(join(dir, 'fail.test.mjs'), "import { test } from 'node:test';\ntest('f', () => { throw new Error('no'); });\n");
   const cfg = { ...config, ...scorePad, testFiles: [['node', ['--test', '{files}']]] };
   assert.deepEqual(await runTestFiles(dir, cfg, 4321, undefined, ['pass.test.mjs', 'fail.test.mjs']), { passed: ['pass.test.mjs'], timedOut: null });
 });
 test('runTestFiles runs without network', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'factory-testfiles-'));
+  const dir = tempDir('factory-testfiles-');
   // Only the loopback device is there without network.
   writeFileSync(join(dir, 'net.test.mjs'), "import { test } from 'node:test';\nimport { networkInterfaces } from 'node:os';\ntest('n', () => { if (Object.keys(networkInterfaces()).some((k) => k !== 'lo')) throw new Error('network'); });\n");
   const cfg = { ...config, ...scorePad, testFiles: [['node', ['--test', '{files}']]] };
   assert.deepEqual((await runTestFiles(dir, cfg, 4321, undefined, ['net.test.mjs'])).passed, ['net.test.mjs']);
 });
 test('runTestFiles stops on a timeout and names the command', real, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'factory-testfiles-'));
+  const dir = tempDir('factory-testfiles-');
   const cfg = { ...config, ...scorePad, checkTimeoutMin: 0.01, testFiles: [['sleep', ['{files}']]] };
   const r = await runTestFiles(dir, cfg, 4321, undefined, ['5', '0']);
   assert.deepEqual(r.passed, []);
@@ -1620,7 +1620,7 @@ describe('session usage', () => {
   });
 
   function setup(sessions) {
-    const root = mkdtempSync(join(tmpdir(), 'stages-usage-'));
+    const root = tempDir('stages-usage-');
     const logs = [], opened = [];
     const d = {
       cfg: { ...config, ...scorePad, target: 'web-app', model: 'opus-test', localRun: false }, root, log: (m) => logs.push(m),
@@ -1830,7 +1830,7 @@ describe('last stop reason', () => {
 
   // A factory with a real run folder; o.agent and o.checks can be changed between runs.
   function factory(o = {}) {
-    const root = mkdtempSync(join(tmpdir(), 'factory-stop-'));
+    const root = tempDir('factory-stop-');
     const d = { root, agentCalls: [], comments: [], posted: [], o };
     let commits = 0;
     d.deps = {
@@ -2018,7 +2018,7 @@ describe('last stop after a base merge', () => {
   };
 
   test('a base merge after the park does not hide the stop reason from implement', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'factory-stop-merge-'));
+    const root = tempDir('factory-stop-merge-');
     const calls = [], posted = [];
     let agent = [ok({ confidence: 90, questions: [] }), ok({ status: 'complete', summary: 's', detail: '' }), ok({ verdict: 'clean', findings: [] })];
     let checks = { ok: false, failed: 'npm test', output: 'AssertionError: RED-OUTPUT 1 !== 2' };
@@ -2093,7 +2093,7 @@ describe('held-out checks', () => {
   const config = factoryConfig;
 
   function setupDirs(script) {
-    const base = mkdtempSync(join(tmpdir(), 'factory-held-'));
+    const base = tempDir('factory-held-');
     const runDir = join(base, 'run'), dir = join(runDir, 'worktrees', 'issue-1'), held = join(base, 'held');
     mkdirSync(dir, { recursive: true }); mkdirSync(held);
     writeFileSync(join(held, 'check.sh'), script);

@@ -2,8 +2,7 @@
 // by its worktree folder, so rewording a prompt heading does not break the behaviour tests.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../../lib/exec.mjs';
 import { runAgent } from '../../lib/agent.mjs';
@@ -11,6 +10,7 @@ import { renderPrompt } from '../../lib/stages.mjs';
 import { config } from '../../config.mjs';
 import { FAKES_BIN } from './world.mjs';
 import { sessionOf } from './fakes/session.mjs';
+import { tempDir } from '../fakes/tmp.mjs';
 
 const SESSIONS = ['gate', 'implement', 'review', 'fix', 'rework', 'merge', 'explore'];
 const vars = { number: 7, branch: 'factory/issue-7', base: 'main', title: 'T', body: 'B', comments: 'C', findings: 'F', baseSha: 'b'.repeat(40) };
@@ -35,7 +35,7 @@ test('a prompt without a marker or known heading is unknown', () =>
   assert.equal(sessionOf('# Do something\n', '/runs/t/worktrees/issue-1').session, null));
 
 test('a reworded prompt runs through the fake claude', async () => {
-  const root = mkdtempSync(join(tmpdir(), 'fake-claude-marker-')), dir = join(root, 'worktrees', 'issue-9');
+  const root = tempDir('fake-claude-marker-'), dir = join(root, 'worktrees', 'issue-9');
   mkdirSync(dir, { recursive: true });
   await run('git', ['init', '-q', dir]);
   const script = join(root, 'script.json'), log = join(root, 'log.jsonl');

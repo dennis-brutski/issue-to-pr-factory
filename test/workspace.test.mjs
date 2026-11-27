@@ -1,13 +1,13 @@
 import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, existsSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, readFileSync, existsSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../lib/exec.mjs';
 import { workspace } from '../lib/workspace.mjs';
 import * as ws from '../lib/workspace.mjs';
 import { fakeWorkspace } from './fakes/workspace.mjs';
 import { FAKE_BWRAP_BIN } from './behavior/world.mjs';
+import { tempDir } from './fakes/tmp.mjs';
 
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@example.invalid'];
 
@@ -30,7 +30,7 @@ describe('worktrees and branches', () => {
 
   let root, origin, seed;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-ws-'));
+    const base = tempDir('factory-ws-');
     origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
     await run('git', ['init', '-q', '-b', 'master', seed]);
@@ -247,7 +247,7 @@ describe('worktrees and branches', () => {
     await assert.rejects(ws.checkCloneConfig(root, origin), { message: `the clone's git config at ${file} cannot be read: fatal: unable to read config file '${file}': No such file or directory` });
   });
   test('ensureClone fails on a URL that does not exist', async () => {
-    const fresh = mkdtempSync(join(tmpdir(), 'factory-ws-'));
+    const fresh = tempDir('factory-ws-');
     const missing = join(fresh, 'missing.git');
     await assert.rejects(ws.ensureClone(join(fresh, 'factory'), missing), { message: `git clone failed: fatal: repository '${missing}' does not exist` });
   });
@@ -285,7 +285,7 @@ describe('preparing the push', () => {
 
   let root;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-attach-'));
+    const base = tempDir('factory-attach-');
     const origin = join(base, 'origin.git'), seed = join(base, 'seed');
     root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
@@ -352,7 +352,7 @@ describe('moved base ref', () => {
 
   let root, origin, seed;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-wsb-'));
+    const base = tempDir('factory-wsb-');
     origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
     await run('git', ['init', '-q', '-b', 'master', seed]);
@@ -441,7 +441,7 @@ describe('diff', () => {
 
   let root, origin, seed;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-wsd-'));
+    const base = tempDir('factory-wsd-');
     origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
     await run('git', ['init', '-q', '-b', 'master', seed]);
@@ -479,7 +479,7 @@ describe('handle guard', () => {
 
   let root, origin, seed;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-wsg-'));
+    const base = tempDir('factory-wsg-');
     origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
     await run('git', ['init', '-q', '-b', 'master', seed]);
@@ -557,7 +557,7 @@ describe('sandbox leftovers', () => {
 
   let root;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-leftovers-'));
+    const base = tempDir('factory-leftovers-');
     const origin = join(base, 'origin.git'), seed = join(base, 'seed');
     root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
@@ -620,7 +620,7 @@ describe('parallel runs', () => {
 
   let root, origin, seed;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-wsp-'));
+    const base = tempDir('factory-wsp-');
     origin = join(base, 'origin.git'); seed = join(base, 'seed'); root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
     await run('git', ['init', '-q', '-b', 'master', seed]);
@@ -647,7 +647,7 @@ describe('parallel runs', () => {
 // Whatever hints a git version prints, an error keeps only the lines that say what went wrong.
 describe('git error messages', () => {
   test('git errors leave out hint lines', async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-hint-'));
+    const base = tempDir('factory-hint-');
     const bin = join(base, 'bin'), root = join(base, 'factory');
     mkdirSync(bin);
     writeFileSync(join(bin, 'git'), "#!/bin/sh\nprintf 'hint: a\\nhint: b\\nfatal: real reason\\n' >&2\nexit 1\n");
@@ -673,7 +673,7 @@ describe('replace refs and grafts', () => {
 
   let root, dir;
   beforeEach(async () => {
-    const base = mkdtempSync(join(tmpdir(), 'factory-replace-'));
+    const base = tempDir('factory-replace-');
     const origin = join(base, 'origin.git'), seed = join(base, 'seed');
     root = join(base, 'factory');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
@@ -719,7 +719,7 @@ describe('git config changed during a run', () => {
 
   let base, root, origin, dir;
   beforeEach(async () => {
-    base = mkdtempSync(join(tmpdir(), 'factory-race-'));
+    base = tempDir('factory-race-');
     origin = join(base, 'origin.git'); root = join(base, 'factory');
     const seed = join(base, 'seed');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
@@ -783,7 +783,7 @@ describe('tests on the base', () => {
 
   let base, root, origin, dir, sha;
   beforeEach(async () => {
-    base = mkdtempSync(join(tmpdir(), 'factory-onbase-'));
+    base = tempDir('factory-onbase-');
     origin = join(base, 'origin.git'); root = join(base, 'factory');
     const seed = join(base, 'seed');
     await run('git', ['init', '-q', '--bare', '-b', 'master', origin]);
