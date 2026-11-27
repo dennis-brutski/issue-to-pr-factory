@@ -4,7 +4,8 @@ import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from './fixtures/config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
-import { runItem, renderPrompt, schemas, lastStopReason, testsThatChange, protectedThatChangeOf, implementModel } from '../lib/stages.mjs';
+import { runItem, lastStopReason, testsThatChange, protectedThatChangeOf, implementModel, autoMergeRefusal } from '../lib/stages.mjs';
+import { renderPrompt, schemas } from '../lib/prompts.mjs';
 import { fakeWorkspace, fakeView } from './fakes/workspace.mjs';
 import { runChecks, runTestFiles } from '../lib/checks.mjs';
 import { execFileSync } from 'node:child_process';
@@ -767,6 +768,36 @@ describe('automerge', () => {
     const r = await runItem({ ...pullRequestItem, labels: ['agent:merge'] }, 'merge', x.d, 4201);
     assert.equal(r.outcome, 'done', r.detail);
     assert.deepEqual(x.calls, []);
+  });
+});
+
+// The auto-merge rules on their own, without GitHub.
+describe('autoMergeRefusal', () => {
+  const ready = { heldOutChecks: [['node', ['--test', '{heldOut}/']]], isDraft: false, passWithout: [], difficulty: 'simple', reviewed: 'clean', lines: 99 };
+
+  test('a simple, clean, 99-line pull request is not refused', () => {
+    assert.equal(autoMergeRefusal(ready), null);
+  });
+  test('no held-out checks', () => {
+    assert.equal(autoMergeRefusal({ ...ready, heldOutChecks: [] }), 'no held-out checks');
+  });
+  test('a draft', () => {
+    assert.equal(autoMergeRefusal({ ...ready, isDraft: true }), 'draft');
+  });
+  test('tests that pass without the change', () => {
+    assert.equal(autoMergeRefusal({ ...ready, passWithout: ['test/a.test.js'] }), 'tests pass without the change');
+  });
+  test('not simple', () => {
+    assert.equal(autoMergeRefusal({ ...ready, difficulty: 'normal' }), 'not simple (normal)');
+  });
+  test('review not clean', () => {
+    assert.equal(autoMergeRefusal({ ...ready, reviewed: null }), 'review not clean');
+  });
+  test('review not clean after the fix', () => {
+    assert.equal(autoMergeRefusal({ ...ready, reviewed: 'findings after fix' }), 'review not clean after the fix');
+  });
+  test('100 lines or more', () => {
+    assert.equal(autoMergeRefusal({ ...ready, lines: 100 }), '100 lines changed, needs fewer than 100');
   });
 });
 
