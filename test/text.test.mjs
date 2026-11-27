@@ -43,6 +43,14 @@ test('agentText breaks a closing keyword before its issue number, in any case', 
 test('agentText breaks a closing keyword before an issue link', () =>
   assert.equal(agentText('closes https://github.com/o/r/issues/7'), `closes ${ZW}https://github.com/o/r/issues/7`));
 
+test('agentText breaks a closing keyword wrapped in emphasis or followed by a bare colon', () =>
+  assert.equal(agentText('**Fixes** #9, _Fixes_ #9, Fixes:#9'), `**Fixes** ${ZW}#9, _Fixes_ ${ZW}#9, Fixes:${ZW}#9`));
+
+test('agentText breaks a closing keyword with empty inline HTML before its issue number', () =>
+  assert.equal(agentText('Fixes <b></b>#9'), `Fixes <b></b>${ZW}#9`));
+
+test('agentText leaves a word that only ends in a closing keyword', () => assert.equal(agentText('prefix #3'), 'prefix #3'));
+
 test('agentText leaves an issue number without a closing keyword', () => assert.equal(agentText('see #3'), 'see #3'));
 
 test('agentText turns a lone carriage return into a line break', () => assert.equal(agentText('a\rb\r\nc'), 'a\nb\r\nc'));
