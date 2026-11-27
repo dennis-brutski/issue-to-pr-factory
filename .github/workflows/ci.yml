@@ -42,6 +42,6 @@ jobs:
           [[ "$BRANCHES" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "Branch coverage is not a number: '$BRANCHES'"; exit 1; }
           git init -q -b badges badges && cd badges
           git config user.name CI && git config user.email ci@example.invalid
-          printf '{"schemaVersion":1,"label":"branch coverage","message":"%s%%","color":"brightgreen"}\n' "$BRANCHES" > coverage.json
+          printf '{"schemaVersion":1,"label":"branch coverage","message":"%s%%","color":"2ebc4e"}\n' "$BRANCHES" > coverage.json
           git add coverage.json && git commit -q -m "Branch coverage $BRANCHES%"
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
