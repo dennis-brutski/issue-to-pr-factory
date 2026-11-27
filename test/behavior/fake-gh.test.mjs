@@ -37,6 +37,14 @@ describe('gh commands', () => {
     assert.equal(items[0].number, 1);
     assert.equal(items[0].labelEvents[0].actor, 'dennis-brutski');
   });
+  test('listCandidates returns the blocked-by links', async () => {
+    const s = state();
+    s.items[0].blockedBy = [2];
+    s.items.push({ number: 2, kind: 'issue', title: 'First', body: '', author: 'dennis-brutski', state: 'OPEN', labels: [], labelEvents: [], comments: [] });
+    write(s);
+    const [item] = await gh.listCandidates(cfg);
+    assert.deepEqual(item.blockedBy, [{ number: 2, repo: cfg.repo, open: true }]);
+  });
   test('addLabel, removeLabel and comment change the state', async () => {
     await gh.addLabel(cfg, 1, 'agent:in-progress');
     assert.ok(state().items[0].labels.includes('agent:in-progress'));
