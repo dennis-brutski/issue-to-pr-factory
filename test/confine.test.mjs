@@ -5,7 +5,7 @@ import { tmpdir, homedir } from 'node:os';
 import { join, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { run } from '../lib/exec.mjs';
-import { bwrapArgs, targetEnv, expandHome } from '../lib/confine.mjs';
+import { bwrapArgs, targetEnv, expandHome, BRIDGE, PROXY_PORT } from '../lib/confine.mjs';
 import { runChecks, runSetup } from '../lib/checks.mjs';
 import { runConfined } from '../lib/confine.mjs';
 import { config } from '../config.mjs';
@@ -201,4 +201,113 @@ test('a target without runtimeRead or sandboxRead builds its read list without t
   const dir = tempDir('confine-');
   const r = await runConfined('true', [], { dir, cfg: /** @type {Config} */ ({}), port: 4201, network: false, timeoutMs: 10_000 });
   assert.deepEqual(Object.keys(r).sort(), ['code', 'stderr', 'stdout', 'timedOut']);
+});
+
+// Setup with setupHosts: no network of its own, only the factory's proxy through a bridge (ADR 0008).
+const setenv = (args) => Object.fromEntries(pairs(args, '--setenv'));
+const PROXY_KEYS = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'npm_config_proxy', 'NODE_USE_ENV_PROXY'];
+test('setup through the proxy gets no network, the socket folder and the bridge read-only, and the proxy env', () => {
+  const proxy = tempDir('proxy-');
+  const a = bwrapArgs({ dir: '/w', home: '/h', network: false, proxy, env: { CI: '1' } });
+  assert.ok(a.includes('--unshare-net'));
+  assert.ok(pairs(a, '--ro-bind').some(([s, d]) => s === proxy && d === proxy), 'socket folder bound');
+  assert.ok(pairs(a, '--ro-bind').some(([s]) => s === BRIDGE), 'bridge bound');
+  const env = setenv(a);
+  assert.equal(env.HTTPS_PROXY, `http://127.0.0.1:${PROXY_PORT}`);
+  for (const k of PROXY_KEYS.slice(0, 5)) assert.equal(env[k], env.HTTPS_PROXY, k);
+  assert.equal(env.NODE_USE_ENV_PROXY, '1');
+  assert.equal(env.CI, '1');
+});
+test("the proxy env is the factory's: a target's env cannot point it elsewhere", () => {
+  const a = bwrapArgs({ dir: '/w', home: '/h', network: false, proxy: tempDir('proxy-'), env: { HTTPS_PROXY: 'http://evil.test:1', NODE_USE_ENV_PROXY: '0' } });
+  assert.equal(setenv(a).HTTPS_PROXY, `http://127.0.0.1:${PROXY_PORT}`);
+  assert.equal(setenv(a).NODE_USE_ENV_PROXY, '1');
+});
+test('setup with full network and checks get no proxy env and no bridge', () => {
+  for (const network of [true, false]) {
+    const a = bwrapArgs({ dir: '/w', home: '/h', network, env: {} });
+    assert.deepEqual(PROXY_KEYS.filter((k) => k in setenv(a)), []);
+    assert.ok(!pairs(a, '--ro-bind').some(([s]) => s === BRIDGE));
+  }
+});
+test('the bridge is the factory file next to confine.mjs', () => {
+  assert.equal(BRIDGE, join(import.meta.dirname, '..', 'lib', 'proxy-bridge.mjs'));
+  assert.ok(existsSync(BRIDGE));
+});
+
+// Real bwrap and a real proxy: what setup with setupHosts can and cannot reach.
+const unix = await new Promise((r) => {
+  import('node:net').then(({ createServer }) => { const s = createServer().once('error', () => r(false)); s.listen(join(tempDir('sock-'), 'probe.sock'), () => s.close(() => r(true))); });
+});
+const proxied = { skip: real.skip || (unix ? false : 'this sandbox forbids Unix sockets') };
+const ask = (host, port = 443) => `const s = require('net').connect(${PROXY_PORT}, '127.0.0.1', () => s.write('CONNECT ${host}:${port} HTTP/1.1\\r\\nHost: ${host}\\r\\n\\r\\n')); s.on('data', (d) => { console.log(String(d).split('\\r\\n')[0]); process.exit(0); }); s.on('error', (e) => { console.log(e.message); process.exit(4); });`;
+test('setup with setupHosts gets the proxy env and no network of its own', proxied, async () => {
+  const dir = tempDir('confine-');
+  const probe = `test "$HTTPS_PROXY" = http://127.0.0.1:${PROXY_PORT} && test "$https_proxy" = "$HTTPS_PROXY" && test "$HTTP_PROXY" = "$HTTPS_PROXY" && test "$npm_config_proxy" = "$HTTPS_PROXY" && test "$NODE_USE_ENV_PROXY" = 1`;
+  const r = await runSetup(dir, { ...config, setupHosts: ['registry.npmjs.org'], setup: [['sh', ['-c', probe]], ['node', ['-e', net.replace('process.exit(0)', 'process.exit(5)').replace('process.exit(3)', 'process.exit(0)')]]] }, 4201);
+  assert.equal(r.ok, true, r.output);
+});
+test('setup with setupHosts: the proxy refuses an unlisted host, and the result names it', proxied, async () => {
+  const dir = tempDir('confine-');
+  const r = await runSetup(dir, { ...config, setupHosts: ['registry.npmjs.org'], setup: [['node', ['-e', ask('x.com')]], ['false', []]] }, 4201);
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.refused, ['x.com']);
+  assert.equal(r.requests, 1);
+});
+test('setup with setupHosts: a listed host gets through the proxy', { skip: proxied.skip || (online ? false : 'no network on this machine') }, async () => {
+  const dir = tempDir('confine-');
+  const r = await runSetup(dir, { ...config, setupHosts: ['registry.npmjs.org'], setup: [['sh', ['-c', `node -e "${ask('registry.npmjs.org').replaceAll('"', '\\"')}" | grep -q " 200 "`]]] }, 4201);
+  assert.equal(r.ok, true, r.output);
+  assert.deepEqual(r.refused, []);
+});
+test('setup with setupHosts null keeps the network and gets no proxy env', { skip: real.skip || (online ? false : 'no network on this machine') }, async () => {
+  const dir = tempDir('confine-');
+  const r = await runSetup(dir, { ...config, setupHosts: null, setup: [['sh', ['-c', 'test -z "$HTTPS_PROXY" && test -z "$NODE_USE_ENV_PROXY"']], ['node', ['-e', net]]] }, 4201);
+  assert.equal(r.ok, true, r.output);
+  assert.equal(r.refused, undefined);
+});
+
+// runSetup's choice, without bwrap or Unix sockets: a fake proxy and a fake confined runner.
+function fakeSetup({ code = 0, refused = [], requests = 0 } = {}) {
+  const calls = [], proxy = { started: null, closed: false };
+  const start = async ({ dir, hosts }) => {
+    proxy.started = { dir, hosts, existed: existsSync(dir) };
+    return { socket: join(dir, 'proxy.sock'), refused: () => refused, requests: () => requests, close: async () => { proxy.closed = true; } };
+  };
+  const confined = async (cmd, args, opts) => { calls.push({ cmd, network: opts.network, proxy: opts.proxy ?? null, closed: proxy.closed }); return { code, stdout: '', stderr: code ? 'E404' : '', timedOut: false }; };
+  return { calls, proxy, deps: { start, confined } };
+}
+test('setup with setupHosts starts the proxy, runs without network through it, then stops the proxy', async () => {
+  const f = fakeSetup({ requests: 2 });
+  const r = await runSetup('/w', { ...config, setupHosts: ['registry.npmjs.org'], setup: [['npm', ['ci']], ['npm', ['run', 'build']]] }, 4201, undefined, f.deps);
+  assert.deepEqual(f.proxy.started.hosts, ['registry.npmjs.org']);
+  assert.ok(f.proxy.started.existed, 'the socket folder exists before the proxy starts');
+  assert.deepEqual(f.calls.map((c) => [c.cmd, c.network, c.proxy, c.closed]), [['npm', false, f.proxy.started.dir, false], ['npm', false, f.proxy.started.dir, false]]);
+  assert.ok(f.proxy.closed, 'proxy stopped');
+  assert.ok(!existsSync(f.proxy.started.dir), 'socket folder removed');
+  assert.deepEqual(r, { ok: true, failed: null, output: '', refused: [], requests: 2 });
+});
+test('a failed setup through the proxy reports the hosts it refused', async () => {
+  const f = fakeSetup({ code: 1, refused: ['x.com'], requests: 3 });
+  const r = await runSetup('/w', { ...config, setupHosts: ['registry.npmjs.org'], setup: [['npm', ['ci']]] }, 4201, undefined, f.deps);
+  assert.equal(r.ok, false);
+  assert.deepEqual([r.refused, r.requests], [['x.com'], 3]);
+  assert.ok(f.proxy.closed);
+});
+test('the proxy stops even when a setup step throws', async () => {
+  const f = fakeSetup();
+  f.deps.confined = async () => { throw new Error('boom'); };
+  await assert.rejects(runSetup('/w', { ...config, setupHosts: [], setup: [['npm', ['ci']]] }, 4201, undefined, f.deps), /boom/);
+  assert.ok(f.proxy.closed);
+  assert.ok(!existsSync(f.proxy.started.dir));
+});
+test('setup with setupHosts null keeps full network and starts no proxy', async () => {
+  const f = fakeSetup();
+  const r = await runSetup('/w', { ...config, setupHosts: null, setup: [['npm', ['ci']]] }, 4201, undefined, f.deps);
+  assert.equal(f.proxy.started, null);
+  assert.deepEqual(f.calls.map((c) => [c.network, c.proxy]), [[true, null]]);
+  assert.deepEqual(r, { ok: true, failed: null, output: '' });
+});
+test('setupHosts is null by default', () => {
+  assert.equal(config.setupHosts, null);
 });

@@ -5,6 +5,7 @@ export const config = {
   remoteUrl: null, // null = https://github.com/<repo>.git
   runDir: null, // null = runs/<target>
   setup: [], // [cmd, [args]] run before the first agent session, confined, with network
+  setupHosts: null, // hosts setup may reach on port 443, through the factory's proxy (['registry.npmjs.org']); null = the full network, with a warning
   checks: [], // [cmd, [args]] run before every push, confined, without network
   heldOutChecks: [], // [cmd, [args]] run after checks; '{heldOut}' becomes heldOutDir. Agents never see these tests
   heldOutDir: null, // folder with the held-out tests, outside runs/ (agents can read the run folder)
