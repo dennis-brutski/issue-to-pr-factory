@@ -28,7 +28,7 @@ const SEED = {
   'test/a.test.js': "import { test } from 'node:test';\ntest('a', () => {});\n",
 };
 
-/** @param {{ seed?: Record<string, string>, settings?: Record<string, any>, name?: string }} [opts] */
+/** @param {{ seed?: Record<string, string>, settings?: Record<string, unknown>, name?: string }} [opts] */
 export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'factory-world-'));
   const origin = join(dir, 'origin.git'), work = join(dir, 'seed');
