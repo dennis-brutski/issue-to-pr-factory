@@ -1,9 +1,9 @@
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
-import { loadSettings, cloneUrl, parseFactoryArgs, targetNames, repoOfRemote } from '../lib/settings.mjs';
+import { loadSettings, cloneUrl, parseFactoryArgs, targetNames, repoOfRemote, chooseTargets } from '../lib/settings.mjs';
 import { tempDir } from './fakes/tmp.mjs';
 
 const tmp = () => tempDir('factory-settings-');
@@ -164,4 +164,28 @@ test('repoOfRemote reads owner/name from the usual GitHub remotes', () => {
 });
 test('repoOfRemote of anything else is null', () => {
   for (const url of ['/tmp/x', '', 'https://gitlab.com/me/repo.git']) assert.equal(repoOfRemote(url), null, url);
+});
+
+describe('chooseTargets', () => {
+  const two = () => root({ one: target({ repo: 'me/one' }), two: target({ repo: 'me/two' }) });
+  const remote = (url) => async () => url;
+  test('no argument: every target, in name order', async () => {
+    const cfgs = await chooseTargets([], { factoryRoot: two(), remote: remote('') });
+    assert.deepEqual(cfgs.map((c) => c.target), ['one', 'two']);
+  });
+  test('a name: only that target', async () => {
+    const cfgs = await chooseTargets(['two'], { factoryRoot: two(), remote: remote('') });
+    assert.deepEqual(cfgs.map((c) => c.target), ['two']);
+  });
+  test('an unknown name is refused', async () => {
+    await assert.rejects(chooseTargets(['three'], { factoryRoot: two(), remote: remote('') }), /unknown target "three"/);
+  });
+  test('--current: the target of the remote, whatever its case', async () => {
+    const cfgs = await chooseTargets(['--current'], { factoryRoot: two(), remote: remote('git@github.com:Me/Two.git') });
+    assert.deepEqual(cfgs.map((c) => c.target), ['two']);
+  });
+  test('--current outside a target says so', async () => {
+    await assert.rejects(chooseTargets(['--current'], { factoryRoot: two(), remote: remote('') }),
+      /this folder is not a target: \(no origin remote\)/);
+  });
 });

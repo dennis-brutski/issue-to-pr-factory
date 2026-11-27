@@ -146,12 +146,18 @@ describe('factory inbox', () => {
       assert.ok(front[1].includes(words), words);
   });
 
-  test('the shipped skill finds stops with gh search and acts only on approve', () => {
-    assert.ok(SKILL.includes('gh search issues "label:agent:needs-human" --state open --owner <owner>'));
+  test('the shipped skill finds stops with inbox.mjs and acts only on approve', () => {
+    assert.ok(SKILL.includes('node <factoryDir>/inbox.mjs'));
     assert.match(SKILL, /oldest first/);
     assert.match(SKILL, /approve \/ edit \/ skip/);
     assert.match(SKILL, /never starts? with 🏭/);
-    assert.doesNotMatch(SKILL, /inbox\.mjs|npm run inbox/);
+  });
+
+  test('the shipped skill lists only the current target when currentTargetOnly is true', () => {
+    assert.ok(SKILL.includes('node <factoryDir>/inbox.mjs --current'));
+    assert.match(SKILL, /`currentTargetOnly`/);
+    assert.match(SKILL, /Missing means `false`/);
+    assert.doesNotMatch(SKILL, /gh search|gh issue view/);
   });
 
   test('the skill ships an example config and keeps the real one out of git', () => {
@@ -168,8 +174,7 @@ describe('factory inbox', () => {
   });
 
   test('Factory inbox says how it finds the stops', () => {
-    assert.match(section('Factory inbox'),
-      /gh search issues "label:agent:needs-human" --state open --owner <owner>/);
+    assert.match(section('Factory inbox'), /`node inbox\.mjs \[<target> \| --current\]`/);
     assert.match(section('Factory inbox'), /oldest first/);
   });
 
@@ -186,9 +191,8 @@ describe('factory inbox', () => {
       assert.ok(inbox.includes(`"${words}"`), words);
   });
 
-  test('Factory inbox mentions no inbox.mjs or npm run inbox', () => {
-    assert.doesNotMatch(README, /inbox\.mjs/);
-    assert.doesNotMatch(README, /npm run inbox/);
+  test('Factory inbox says currentTargetOnly works for both skills', () => {
+    assert.match(section('Factory inbox'), /`currentTargetOnly: true` makes `\/factory-inbox` and `\/factory-approve-issues` work only on the target/);
   });
 });
 
