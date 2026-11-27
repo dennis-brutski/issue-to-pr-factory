@@ -4,7 +4,7 @@ import { countPullRequests, stopLabel, groupStops, formatStats, runStats, countA
 import { mkdtempSync, writeFileSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { autoMerged, autoMergeFailed, stopped, reasons } from '../lib/comments.mjs';
+import { autoMerged, autoMergeFailed, stopped, reasons, rework } from '../lib/comments.mjs';
 import { count } from '../lib/usage.mjs';
 
 describe('counts and stop reasons', () => {
@@ -210,13 +210,46 @@ test('the stats of a target show the auto-merge line', async () => {
   mkdirSync(join(root, 'targets'));
   writeFileSync(join(root, 'targets', 'demo.mjs'), `export default ${JSON.stringify({ ...cfg, baseBranch: 'main' })};\n`);
   const gh = {
-    listAllPullRequests: async () => [],
-    listAllPullRequestTitles: async () => [pr(10, 'Fix undo', true), pr(11, 'Add redo', true), pr(20, 'Revert "Fix undo"', true)],
+    listAllPullRequests: async () => [pr(10, 'Fix undo', true), pr(11, 'Add redo', true), pr(20, 'Revert "Fix undo"', true)],
     listAllIssueComments: async () => [handed(10), handed(11)],
   };
   const lines = [];
   assert.equal(await runStats(['demo'], { factoryRoot: root, gh, log: (s) => lines.push(s) }), true);
   assert.match(lines.join('\n'), /^auto-merged: 2 · reverted: 1$/m);
+});
+
+test('the stats of a target read pull requests once and comments once, whatever was merged or closed', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { runStats } = await import('../stats.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'factory-stats-once-'));
+  mkdirSync(join(root, 'targets'));
+  writeFileSync(join(root, 'targets', 'demo.mjs'), `export default ${JSON.stringify({ ...cfg, baseBranch: 'main' })};\n`);
+  const at = '2026-11-10T10:00:00Z';
+  const footer = '---\n🏭 Built by issue-to-pr-factory abc · gate confidence 85 · checks: x';
+  const calls = [];
+  const gh = {
+    listAllPullRequests: async () => {
+      calls.push('pulls');
+      return [
+        pr(10, 'Fix undo', true, { ref: 'factory/issue-1', state: 'closed', at, mergedAt: '2026-11-10T12:00:00Z', body: footer }),
+        pr(11, 'Add redo', false, { ref: 'factory/issue-2', state: 'closed', at, mergedAt: null, body: '' }),
+      ];
+    },
+    listAllIssueComments: async () => {
+      calls.push('comments');
+      return [{ ...handed(10), on: 10 }, { ...c(rework('please fix')), on: 1 }];
+    },
+  };
+  const lines = [];
+  assert.equal(await runStats(['demo'], { factoryRoot: root, gh, log: (s) => lines.push(s) }), true);
+  assert.deepEqual(calls.sort(), ['comments', 'pulls']);
+  const out = lines.join('\n');
+  assert.match(out, /^auto-merged: 1 · reverted: 0$/m);
+  assert.match(out, /^review load: 1\.0 reworks or stops per merged PR · median 2h to merge$/m);
+  assert.match(out, /^ {3}80–89 {2}0 · 1 · 0$/m);
+  assert.match(out, /^ {3}other {2}0 · 0 · 1$/m);
 });
 
 // Stats counts draft stops by their new wording as well as the old.

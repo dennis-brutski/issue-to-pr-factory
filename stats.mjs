@@ -192,20 +192,16 @@ export function agentUseSection(logs, since = null) {
 
 // One target's stats as text, under the repo as its heading.
 async function statsOf(cfg, gh, since) {
+  // One read of each list; the counts below filter them in memory.
   const [prs, comments] = await Promise.all([gh.listAllPullRequests(cfg), gh.listAllIssueComments(cfg)]);
-  // The titles are only needed to find reverts, so they are fetched only when something was auto-merged.
-  const titled = handedOver(comments, cfg, since).length ? await gh.listAllPullRequestTitles(cfg) : [];
-  // Merge times and which issue a comment is on are only needed when something was merged.
+  const merged = prs.filter((p) => p.merged === true);
   const pulls = countPullRequests(prs, cfg, since);
-  const [merged, commentsOn] = pulls.merged ? await Promise.all([gh.listAllMergedPullRequests(cfg), gh.listAllIssueCommentsOn(cfg)]) : [[], []];
-  // The footers are only needed when a pull request was closed, merged or not.
-  const bodies = pulls.merged + pulls.closedUnmerged ? await gh.listAllPullRequestBodies(cfg) : [];
   return [
     `${cfg.repo}${since ? ` since ${since}` : ''}`,
     agentUseSection(join(cfg.runDir, 'logs'), since),
-    formatAutoMerges(countAutoMerges(comments, titled, cfg, since)),
-    formatReviewLoad(countReviewLoad(merged, commentsOn, cfg, since)),
-    formatGate(countGate(prs, bodies, commentsOn, comments, cfg, since)),
+    formatAutoMerges(countAutoMerges(comments, prs, cfg, since)),
+    formatReviewLoad(countReviewLoad(merged, comments, cfg, since)),
+    formatGate(countGate(prs, prs, comments, comments, cfg, since)),
     formatStats(pulls, groupStops(comments, cfg, since)),
   ].join('\n');
 }

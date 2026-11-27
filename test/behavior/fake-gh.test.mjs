@@ -198,115 +198,34 @@ describe('all pull requests', () => {
     writeFileSync(stateFile, JSON.stringify({ login: 'dennis-brutski', nextNumber: 5, calls: [], items: [
       { number: 1, kind: 'issue', title: 'a', body: '', author: 'dennis-brutski', state: 'CLOSED', labels: [], labelEvents: [],
         comments: [{ author: 'dennis-brutski', body: 'first\nline', at: T }, { author: 'mallory', body: 'hi', at: '2026-11-02T10:00:00Z' }] },
-      pr(2, 'MERGED', { comments: [{ author: 'dennis-brutski', body: 'on the pr', at: T }, { author: 'dennis-brutski', body: 'review note', at: T, path: 'a.js' }] }),
+      pr(2, 'MERGED', { body: 'Closes #1', mergedAt: '2026-11-02T10:00:00Z', comments: [{ author: 'dennis-brutski', body: 'on the pr', at: T }, { author: 'dennis-brutski', body: 'review note', at: T, path: 'a.js' }] }),
       pr(3, 'CLOSED', { headRepo: 'mallory/demo' }),
-      pr(4, 'OPEN', { headRepo: null }),
+      pr(4, 'OPEN', { headRepo: null, body: null }),
     ] }));
     process.env.FAKE_GH_STATE = stateFile;
     if (!process.env.PATH.startsWith(BIN)) process.env.PATH = `${BIN}:${process.env.PATH}`;
   });
 
-  test('listAllPullRequests returns every pull request, open or closed, with its head and outcome', async () => {
+  test('listAllPullRequests returns every pull request, open or closed, with its head, outcome, merge time, title and body', async () => {
     assert.deepEqual(await gh.listAllPullRequests(cfg), [
-      { number: 2, ref: 'factory/issue-2', repo: 'dennis-brutski/demo', state: 'closed', merged: true, at: T },
-      { number: 3, ref: 'factory/issue-3', repo: 'mallory/demo', state: 'closed', merged: false, at: T },
-      { number: 4, ref: 'factory/issue-4', repo: null, state: 'open', merged: false, at: T },
+      { number: 2, ref: 'factory/issue-2', repo: 'dennis-brutski/demo', state: 'closed', merged: true, at: T, mergedAt: '2026-11-02T10:00:00Z', title: '#2', body: 'Closes #1' },
+      { number: 3, ref: 'factory/issue-3', repo: 'mallory/demo', state: 'closed', merged: false, at: T, mergedAt: null, title: '#3', body: '' },
+      { number: 4, ref: 'factory/issue-4', repo: null, state: 'open', merged: false, at: T, mergedAt: null, title: '#4', body: null },
     ]);
   });
 
-  test('listAllIssueComments returns the comments of every issue and pull request, not review comments', async () => {
+  test('listAllIssueComments returns the comments of every issue and pull request with the number they are on, not review comments', async () => {
     assert.deepEqual(await gh.listAllIssueComments(cfg), [
-      { author: 'dennis-brutski', body: 'first\nline', at: T },
-      { author: 'mallory', body: 'hi', at: '2026-11-02T10:00:00Z' },
-      { author: 'dennis-brutski', body: 'on the pr', at: T },
+      { author: 'dennis-brutski', body: 'first\nline', at: T, on: 1 },
+      { author: 'mallory', body: 'hi', at: '2026-11-02T10:00:00Z', on: 1 },
+      { author: 'dennis-brutski', body: 'on the pr', at: T, on: 2 },
     ]);
   });
 
-  test('the stats calls only read', async () => {
+  test('the stats calls only read, all pages', async () => {
     const before = JSON.parse(readFileSync(stateFile, 'utf8')).items;
     await gh.listAllPullRequests(cfg);
     await gh.listAllIssueComments(cfg);
-    const s = JSON.parse(readFileSync(stateFile, 'utf8'));
-    assert.deepEqual(s.items, before);
-    assert.ok(s.calls.every((c) => c[0] === 'api' && !c.includes('-X')));
-  });
-});
-
-// The fake gh lists every pull request with its title, as the auto-merge stats need; checked against the real adapter.
-describe('pull request titles', () => {
-  let stateFile;
-  const pr = (number, state, title, extra = {}) => ({ number, kind: 'pr', title, body: '', author: 'dennis-brutski', state,
-    labels: [], labelEvents: [], comments: [], headRefName: `factory/issue-${number}`, headRepo: 'dennis-brutski/demo', createdAt: T, ...extra });
-
-  beforeEach(() => {
-    if (!existsSync(join(BIN, 'gh'))) throw new Error(`fake gh missing at ${BIN}/gh`);
-    stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
-    writeFileSync(stateFile, JSON.stringify({ login: 'dennis-brutski', nextNumber: 5, calls: [], items: [
-      { number: 1, kind: 'issue', title: 'an issue', body: '', author: 'dennis-brutski', state: 'OPEN', labels: [], labelEvents: [], comments: [] },
-      pr(2, 'MERGED', 'Fix undo'),
-      pr(3, 'MERGED', 'Revert "Fix undo"', { headRefName: 'revert-2-factory/issue-2' }),
-      pr(4, 'OPEN', 'From a fork', { headRepo: 'mallory/demo' }),
-    ] }));
-    process.env.FAKE_GH_STATE = stateFile;
-    if (!process.env.PATH.startsWith(BIN)) process.env.PATH = `${BIN}:${process.env.PATH}`;
-  });
-
-  test('listAllPullRequestTitles returns every pull request with its title, head repo and whether it was merged', async () => {
-    assert.deepEqual(await gh.listAllPullRequestTitles(cfg), [
-      { number: 2, title: 'Fix undo', repo: 'dennis-brutski/demo', merged: true },
-      { number: 3, title: 'Revert "Fix undo"', repo: 'dennis-brutski/demo', merged: true },
-      { number: 4, title: 'From a fork', repo: 'mallory/demo', merged: false },
-    ]);
-  });
-
-  test('listAllPullRequestTitles only reads, all pages', async () => {
-    const before = JSON.parse(readFileSync(stateFile, 'utf8')).items;
-    await gh.listAllPullRequestTitles(cfg);
-    const s = JSON.parse(readFileSync(stateFile, 'utf8'));
-    assert.deepEqual(s.items, before);
-    assert.ok(s.calls.every((c) => c[0] === 'api' && !c.includes('-X') && c.includes('--paginate')));
-  });
-});
-
-// The fake gh lists merged pull requests with their merge times, and comments with the issue or pull request they are on,
-// as the review-load stats need; checked against the real adapter.
-describe('review load', () => {
-  let stateFile;
-  const pr = (number, state, extra = {}) => ({ number, kind: 'pr', title: `#${number}`, body: '', author: 'dennis-brutski', state,
-    labels: [], labelEvents: [], comments: [], headRefName: `factory/issue-${number}`, headRepo: 'dennis-brutski/demo', createdAt: T, ...extra });
-
-  beforeEach(() => {
-    if (!existsSync(join(BIN, 'gh'))) throw new Error(`fake gh missing at ${BIN}/gh`);
-    stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
-    writeFileSync(stateFile, JSON.stringify({ login: 'dennis-brutski', nextNumber: 5, calls: [], items: [
-      { number: 1, kind: 'issue', title: 'a', body: '', author: 'dennis-brutski', state: 'CLOSED', labels: [], labelEvents: [],
-        comments: [{ author: 'dennis-brutski', body: 'on the issue', at: T }] },
-      pr(2, 'MERGED', { mergedAt: '2026-11-02T10:00:00Z', comments: [{ author: 'mallory', body: 'on the pr', at: T }, { author: 'dennis-brutski', body: 'review note', at: T, path: 'a.js' }] }),
-      pr(3, 'CLOSED'),
-      pr(4, 'MERGED', { headRepo: 'mallory/demo', mergedAt: '2026-11-03T10:00:00Z' }),
-    ] }));
-    process.env.FAKE_GH_STATE = stateFile;
-    if (!process.env.PATH.startsWith(BIN)) process.env.PATH = `${BIN}:${process.env.PATH}`;
-  });
-
-  test('listAllMergedPullRequests returns only merged pull requests, with when they were opened and merged', async () => {
-    assert.deepEqual(await gh.listAllMergedPullRequests(cfg), [
-      { number: 2, ref: 'factory/issue-2', repo: 'dennis-brutski/demo', at: T, mergedAt: '2026-11-02T10:00:00Z' },
-      { number: 4, ref: 'factory/issue-4', repo: 'mallory/demo', at: T, mergedAt: '2026-11-03T10:00:00Z' },
-    ]);
-  });
-
-  test('listAllIssueCommentsOn returns every comment with the number it is on, not review comments', async () => {
-    assert.deepEqual(await gh.listAllIssueCommentsOn(cfg), [
-      { author: 'dennis-brutski', body: 'on the issue', at: T, on: 1 },
-      { author: 'mallory', body: 'on the pr', at: T, on: 2 },
-    ]);
-  });
-
-  test('the review-load calls only read, all pages', async () => {
-    const before = JSON.parse(readFileSync(stateFile, 'utf8')).items;
-    await gh.listAllMergedPullRequests(cfg);
-    await gh.listAllIssueCommentsOn(cfg);
     const s = JSON.parse(readFileSync(stateFile, 'utf8'));
     assert.deepEqual(s.items, before);
     assert.ok(s.calls.every((c) => c[0] === 'api' && !c.includes('-X') && c.includes('--paginate')));
@@ -331,37 +250,3 @@ describe('open issues', () => {
   });
 });
 
-// The fake gh lists every pull request with its body, as the gate stats need (the footer holds the gate confidence);
-// checked against the real adapter.
-describe('pull request bodies', () => {
-  let stateFile;
-  const pr = (number, state, body) => ({ number, kind: 'pr', title: `#${number}`, body, author: 'dennis-brutski', state,
-    labels: [], labelEvents: [], comments: [], headRefName: `factory/issue-${number}`, headRepo: 'dennis-brutski/demo', createdAt: T });
-
-  beforeEach(() => {
-    if (!existsSync(join(BIN, 'gh'))) throw new Error(`fake gh missing at ${BIN}/gh`);
-    stateFile = join(mkdtempSync(join(tmpdir(), 'fake-gh-')), 'state.json');
-    writeFileSync(stateFile, JSON.stringify({ login: 'dennis-brutski', nextNumber: 5, calls: [], items: [
-      { number: 1, kind: 'issue', title: 'an issue', body: 'not a pull request', author: 'dennis-brutski', state: 'OPEN', labels: [], labelEvents: [], comments: [] },
-      pr(2, 'MERGED', 'Closes #1\n\n---\n🏭 Built by issue-to-pr-factory abc · gate confidence 85 · checks: x'),
-      pr(3, 'OPEN', ''),
-    ] }));
-    process.env.FAKE_GH_STATE = stateFile;
-    if (!process.env.PATH.startsWith(BIN)) process.env.PATH = `${BIN}:${process.env.PATH}`;
-  });
-
-  test('listAllPullRequestBodies returns the number and body of every pull request', async () => {
-    assert.deepEqual(await gh.listAllPullRequestBodies(cfg), [
-      { number: 2, body: 'Closes #1\n\n---\n🏭 Built by issue-to-pr-factory abc · gate confidence 85 · checks: x' },
-      { number: 3, body: '' },
-    ]);
-  });
-
-  test('listAllPullRequestBodies only reads, all pages', async () => {
-    const before = JSON.parse(readFileSync(stateFile, 'utf8')).items;
-    await gh.listAllPullRequestBodies(cfg);
-    const s = JSON.parse(readFileSync(stateFile, 'utf8'));
-    assert.deepEqual(s.items, before);
-    assert.ok(s.calls.every((c) => c[0] === 'api' && !c.includes('-X') && c.includes('--paginate')));
-  });
-});
