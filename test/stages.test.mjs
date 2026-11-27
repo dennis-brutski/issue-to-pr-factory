@@ -1347,6 +1347,14 @@ describe('provenance', () => {
     assert.match(body, /Closes #7/);
   });
 
+  test('a target without checks says (none) in the footer', async () => {
+    const { d, opened } = deps();
+    d.cfg = { ...d.cfg, checks: [] };
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.outcome, 'done', r.detail);
+    assert.match(opened[0].body, / · checks: \(none\) · session logs: /);
+  });
+
   test('an unknown factory commit says unknown', async () => {
     const { d, opened } = deps();
     await runItem(issue, 'implement', d, 4201);
@@ -1685,6 +1693,17 @@ describe('session usage', () => {
       const r = await runItem(issue, 'implement', d, 4201);
       assert.equal(r.outcome, 'done', r.detail);
       assert.ok(!logs.some((m) => m.includes('session ended')), logs.join('\n'));
+      assert.doesNotMatch(opened[0].body, /agent use so far/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a log folder with no readable log adds no agent use', async () => {
+    const gate = { confidence: 87, questions: [] }, work = { status: 'complete', summary: 'Changed undo.', detail: '' }, review = { verdict: 'clean', findings: [] };
+    const { d, opened, root } = setup([{ r: ok(gate) }, { r: ok(work) }, { r: ok(review) }]);
+    try {
+      mkdirSync(join(d.ws.paths(7).logs, 'odd.json'), { recursive: true }); // named like a log, but a folder
+      const r = await runItem(issue, 'implement', d, 4201);
+      assert.equal(r.outcome, 'done', r.detail);
       assert.doesNotMatch(opened[0].body, /agent use so far/);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
