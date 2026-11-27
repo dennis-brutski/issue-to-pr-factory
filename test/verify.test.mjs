@@ -61,6 +61,15 @@ describe('protected files and tests', () => {
       + `Remove it from the files and commits in \`${dir}\`, then remove the label.`);
   });
 
+  test('a secret added in one commit and removed in a later one still parks: every commit is pushed', async () => {
+    const token = 'gh' + 'p_' + 'a'.repeat(36);
+    await commit(dir, { 'b.txt': token + '\n' }, 'Add b');
+    await commit(dir, { 'b.txt': 'clean\n' }, 'Clean b');
+    const r = await verifyBranch(ws, cfg, dir);
+    assert.match(r.park ?? '', /^The branch adds what looks like a secret.*\n- b\.txt line 1: looks like a GitHub token\n/);
+    assert.ok(!r.park.includes(token));
+  });
+
   test('a file whose name looks like a secret parks without showing the name', async () => {
     const token = 'gh' + 'p_' + 'a'.repeat(36);
     await commit(dir, { [`${token}.txt`]: 'harmless\n' });
@@ -92,6 +101,19 @@ describe('protected files and tests', () => {
     const r = await verifyBranch(ws, cfg, dir);
     assert.match(r.park, /files git shows as binary.*:\n- b\.txt\n/s);
     assert.ok(!r.park.includes(token));
+  });
+
+  test('a new workflow whose name git would quote still parks', async () => {
+    await commit(dir, { '.github/workflows/cié.yml': 'on: push\n' });
+    const r = await verifyBranch(ws, cfg, dir);
+    assert.match(r.park ?? '', /^The branch changes CI workflow files, so the factory did not push it\. .*\n- \.github\/workflows\/cié\.yml\n/);
+  });
+
+  test('a file with a tab in its name in a protected folder is flagged', async () => {
+    await commit(dir, { 'smoke/a\tb.mjs': 'x\n' });
+    const r = await verifyBranch(ws, cfg, dir);
+    assert.equal(r.park, null);
+    assert.ok(r.flags.some((f) => f.includes('smoke/a\tb.mjs')), JSON.stringify(r.flags));
   });
 
   test('a workflow change parks and shows the diff', async () => {
@@ -241,13 +263,14 @@ describe('protected files and tests', () => {
           sha: view.sha,
           changes: (since) => { reads.push(['changes', since ?? null, view.sha]); return view.changes(since); },
           diff: (p, since) => { reads.push(['diff', since ?? null, view.sha]); return view.diff(p, since); },
+          patches: () => { reads.push(['patches', null, view.sha]); return view.patches(); },
           messages: () => { reads.push(['log', null, view.sha]); return view.messages(); },
         };
       },
     };
     assert.deepEqual(await verifyBranch(spy, cfg, dir), { park: null, flags: [], notes: ['test cases added: test/a.test.mjs'] });
     assert.equal(asked.length, 1);
-    assert.deepEqual(reads.map(([what]) => what), ['log', 'diff', 'changes', 'diff', 'diff']);
+    assert.deepEqual(reads.map(([what]) => what), ['log', 'diff', 'changes', 'patches', 'diff', 'diff']);
     for (const [what, , at] of reads) assert.equal(at, asked[0], `${what} reads against the base asked once`);
     asked.length = 0; reads.length = 0;
     assert.deepEqual(await verifyBranch(spy, cfg, dir, { before: 'setup', approvals: [] }), { park: null, flags: [] });
