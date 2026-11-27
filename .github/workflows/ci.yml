@@ -19,6 +19,7 @@ jobs:
           cache: npm
       - run: git config --global user.name CI && git config --global user.email ci@example.invalid # the factory needs a git identity
       - run: npm ci --ignore-scripts
+      - run: npm run lint
       - id: test
         shell: bash # pipefail: a failing test still fails the step
         run: |
