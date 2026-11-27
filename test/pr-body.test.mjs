@@ -31,6 +31,15 @@ describe('render', () => {
     assert.match(body, /## Tests changed\n\n- `test\/a\.test\.js` · a — renamed\n\n## Review findings after the fix\n\n- src\/a\.js: off by one\n- src\/b\.js: unused\n {2}## Checks\n\n## Checks\n/);
   });
 
+  test('a lone carriage return in a warning starts a quoted line too', () => {
+    const body = render({ ...parts, warnings: ['a\r## b'] });
+    assert.match(body, /> - a\n> {3}## b\n/);
+  });
+
+  test('a lone carriage return in a review finding stays inside its bullet', () => {
+    assert.match(render({ ...parts, reviewFindingsAfterFix: ['a\r## b'] }), /- a\n {2}## b\n/);
+  });
+
   test('no review findings after the fix, no section', () => {
     assert.doesNotMatch(render({ ...parts, reviewFindingsAfterFix: [] }), /Review findings after the fix/);
   });
@@ -82,6 +91,11 @@ describe('parse', () => {
     assert.deepEqual(parse('## Tests that change\n\n- `test/a.test.js`\n').testsThatChange, []);
     assert.deepEqual(parse('').testsThatChange, []);
     assert.deepEqual(parse(undefined), { issueNumber: null, testsThatChange: [] });
+  });
+
+  test('a body with lone carriage returns is read by lines too', () => {
+    assert.deepEqual(parse('Closes #7\r\r## Tests that change\r\r- `test/a.test.js`\r\r## What changed\r\rx'),
+      { issueNumber: 7, testsThatChange: ['test/a.test.js'] });
   });
 
   test('a pull request body with "Closes" but no "What changed" gives an empty list', () => {
