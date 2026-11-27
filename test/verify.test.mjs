@@ -61,6 +61,39 @@ describe('protected files and tests', () => {
       + `Remove it from the files and commits in \`${dir}\`, then remove the label.`);
   });
 
+  test('a file whose name looks like a secret parks without showing the name', async () => {
+    const token = 'gh' + 'p_' + 'a'.repeat(36);
+    await commit(dir, { [`${token}.txt`]: 'harmless\n' });
+    const r = await verifyBranch(ws, cfg, dir);
+    assert.equal(r.park, 'The branch adds what looks like a secret, so the factory did not push it:\n- (a file whose name looks like a secret): its name looks like a GitHub token\n'
+      + `Remove it from the files and commits in \`${dir}\`, then remove the label.`);
+  });
+
+  test('renaming a file to a name that looks like a secret parks without showing the name', async () => {
+    const token = 'gh' + 'p_' + 'a'.repeat(36);
+    await git(dir, 'mv', 'a.txt', `${token}.txt`); await git(dir, 'commit', '-q', '-m', 'Rename a');
+    const r = await verifyBranch(ws, cfg, dir);
+    assert.match(r.park, /^The branch adds what looks like a secret.*\n- \(a file whose name looks like a secret\): its name looks like a GitHub token\n/);
+    assert.ok(!r.park.includes(token));
+  });
+
+  test('a binary file holding a token parks without showing the token', async () => {
+    const token = 'gh' + 'p_' + 'a'.repeat(36);
+    await commit(dir, { 'bin.dat': `\0${token}\n` });
+    const r = await verifyBranch(ws, cfg, dir);
+    assert.equal(r.park, 'The branch adds or changes files git shows as binary, so the factory could not check them for what looks like a secret and did not push it:\n- bin.dat\n'
+      + `Check them in \`${dir}\`; remove them from the branch, or push it yourself if they are right, then remove the label.`);
+    assert.ok(!r.park.includes(token));
+  });
+
+  test('a text file that .gitattributes hides from the diff parks as binary', async () => {
+    const token = 'gh' + 'p_' + 'a'.repeat(36);
+    await commit(dir, { '.gitattributes': 'b.txt -diff\n', 'b.txt': `${token}\n` });
+    const r = await verifyBranch(ws, cfg, dir);
+    assert.match(r.park, /files git shows as binary.*:\n- b\.txt\n/s);
+    assert.ok(!r.park.includes(token));
+  });
+
   test('a workflow change parks and shows the diff', async () => {
     await commit(dir, { '.github/workflows/ci.yml': 'on: pull_request\n' });
     const r = await verifyBranch(ws, cfg, dir);
