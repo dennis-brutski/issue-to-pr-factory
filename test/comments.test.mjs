@@ -8,6 +8,8 @@ import { verifyBranch } from '../lib/verify.mjs';
 import { interpret } from '../lib/agent.mjs';
 import { classify } from '../lib/eligibility.mjs';
 import { fakeWorkspace, fakeView } from './fakes/workspace.mjs';
+import { proxyServer } from '../lib/proxy.mjs';
+import { connect } from 'node:net';
 
 const OWNER = 'dennis-brutski', T = '2026-11-01T10:00:00Z', T2 = '2026-11-01T11:00:00Z';
 const LABEL = 'agent:needs-human';
@@ -301,6 +303,24 @@ test('a failed setup with more refusals than the proxy recorded says how many mo
   const long = reasons.setupFailed('npm ci', 'out', { refused: Array.from({ length: 3000 }, (_, i) => ({ host: `h${i}.test`, why: 'unlisted' })), requests: 3000 });
   assert.match(long, /`h9.test`, which are not in `setupHosts`\.\n\nThe proxy refused 2990 more requests to other hosts\.\n\nout$/);
   assert.ok(!long.includes('h10.test'));
+});
+test('a failed setup after ten refused 8,000-character hosts gives a comment well under GitHub\'s limit', async () => {
+  const proxy = proxyServer({ hosts: [] });
+  await new Promise((r) => proxy.server.listen(0, '127.0.0.1', () => r(undefined)));
+  const port = /** @type {import('node:net').AddressInfo} */ (proxy.server.address()).port;
+  try {
+    for (let i = 0; i < 10; i++) {
+      await new Promise((resolve, reject) => {
+        const s = connect(port, '127.0.0.1', () => s.write(`CONNECT ${String(i).repeat(8000)}.test:443 HTTP/1.1\r\n\r\n`));
+        s.once('data', () => { s.destroy(); resolve(undefined); });
+        s.once('error', reject);
+      });
+    }
+    assert.equal(proxy.refused().length, 10);
+    const r = reasons.setupFailed('npm ci', 'out', { refused: proxy.refused(), moreRefused: proxy.moreRefused(), requests: proxy.requests() });
+    assert.ok(r.length < 5000, String(r.length));
+    assert.ok(stopped('implement', r, LABEL).length < 65_536);
+  } finally { await proxy.close(); }
 });
 test('a failed setup the proxy saw no request from says the tool may ignore HTTPS_PROXY', () => {
   const r = reasons.setupFailed('npm ci', 'out', { refused: [], requests: 0 });
