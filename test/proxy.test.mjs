@@ -125,11 +125,12 @@ test('a listed host that does not resolve gets a 502 and is not recorded as refu
 const unix = await new Promise((r) => { const s = createServer().once('error', () => r(false)); s.listen(`${tempDir('sock-')}/probe.sock`, () => s.close(() => r(true))); });
 test('startProxy listens on proxy.sock in its folder, and close removes it', { timeout: LIMIT, skip: unix ? false : 'this sandbox forbids Unix sockets' }, async (t) => {
   const proxy = await startProxy({ dir: tempDir('proxy-'), hosts: [] });
-  assert.ok(existsSync(proxy.socket));
-  const { reply, s } = await ask(t.signal, proxy.socket, 'CONNECT x.com:443 HTTP/1.1\r\n\r\n');
-  assert.match(reply, /^HTTP\/1.1 403/);
-  s.destroy();
-  await proxy.close();
+  try {
+    assert.ok(existsSync(proxy.socket));
+    const { reply, s } = await ask(t.signal, proxy.socket, 'CONNECT x.com:443 HTTP/1.1\r\n\r\n');
+    assert.match(reply, /^HTTP\/1.1 403/);
+    s.destroy();
+  } finally { await proxy.close(); }
   assert.ok(!existsSync(proxy.socket));
 });
 
