@@ -45,6 +45,18 @@ describe('gh commands', () => {
     const [item] = await gh.listCandidates(cfg);
     assert.deepEqual(item.blockedBy, [{ number: 2, repo: cfg.repo, open: true }]);
   });
+  test('listOpenIssues lists every open issue, labelled or not', async () => {
+    const s = state();
+    const plain = { kind: 'issue', body: '', author: 'dennis-brutski', labels: [], labelEvents: [], comments: [] };
+    s.items.push({ ...plain, number: 2, title: 'Plain', state: 'OPEN', subIssues: { total: 2, completed: 1 }, pullRequests: [{ number: 9, state: 'OPEN' }] },
+      { ...plain, number: 3, title: 'Closed', state: 'CLOSED' });
+    write(s);
+    const issues = await gh.listOpenIssues(cfg);
+    assert.deepEqual(issues.map((i) => i.number), [1, 2]);
+    assert.deepEqual(issues[0].labels, ['agent:implement']);
+    assert.deepEqual(issues[1], { number: 2, title: 'Plain', url: `https://github.com/${cfg.repo}/issues/2`, body: '', labels: [], blockedBy: [],
+      subIssues: { total: 2, completed: 1 }, pullRequests: [{ number: 9, open: true }] });
+  });
   test('addLabel, removeLabel and comment change the state', async () => {
     await gh.addLabel(cfg, 1, 'agent:in-progress');
     assert.ok(state().items[0].labels.includes('agent:in-progress'));

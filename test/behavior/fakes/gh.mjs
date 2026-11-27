@@ -55,6 +55,8 @@ try {
       timelineItems: { nodes: i.labelEvents.map((e) => ({ createdAt: e.at, actor: actor(e.actor), label: { name: e.label } })) },
       renames: { nodes: (i.renames ?? []).map((e) => ({ createdAt: e.at, actor: actor(e.actor) })) },
       comments: { nodes: i.comments.filter((c) => !c.path).map((c) => ({ author: actor(c.author), body: c.body, createdAt: c.at })) },
+      ...(/\bsubIssuesSummary\b/.test(query) ? { url: `https://github.com/${field('owner')[0]}/${field('name')[0]}/issues/${i.number}`, subIssuesSummary: i.subIssues ?? { total: 0, completed: 0 },
+        closedByPullRequestsReferences: { nodes: i.pullRequests ?? [] } } : {}),
       ...(/\bblockedBy\(/.test(query) ? { blockedBy: { nodes: (i.blockedBy ?? []).map((n) => ({ number: n, state: s.items.find((x) => x.number === n)?.state ?? 'OPEN', repository: { nameWithOwner: `${field('owner')[0]}/${field('name')[0]}` } })) } } : {}),
       ...(i.kind === 'pr' ? {
         headRefName: i.headRefName, headRepository: i.headRepo ? { nameWithOwner: i.headRepo } : null,
