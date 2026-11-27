@@ -388,3 +388,22 @@ describe('easy to scan', () => {
     for (const n of [1, 2, 3]) assert.match(inbox, new RegExp(`^${n}\\. `, 'm'), `${n}.`);
   });
 });
+
+describe('containment smoke', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const smoke = readFileSync(join(here, '..', 'smoke', 'containment.mjs'), 'utf8');
+  const agents = readFileSync(join(here, '..', 'AGENTS.md'), 'utf8');
+  const rows = [...smoke.matchAll(/^\s*\['(\d+) /gm)].map((m) => Number(m[1]));
+
+  test('AGENTS.md counts as many ways out as the smoke has rows', () => {
+    const ways = Number(agents.match(/npm run smoke .*checks (\d+) ways/)?.[1]);
+    assert.equal(ways, rows.length);
+    assert.deepEqual(rows, rows.map((_, i) => i + 1));
+  });
+
+  test('the smoke checks ~/.claude with its own canary and never reads the real login', () => {
+    assert.match(smoke, /\['10 cannot read the Claude login folder ~\/\.claude \(shell or Read tool\)'/);
+    assert.match(smoke, /join\(homedir\(\), '\.claude', `factory-smoke-canary-\$\{tag\}\.txt`\)/);
+    assert.doesNotMatch(smoke, /\.credentials\.json|\.claude\.json/);
+  });
+});
