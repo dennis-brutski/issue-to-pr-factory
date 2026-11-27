@@ -6,3 +6,5 @@ It reads back only the issue number and that list, from its own part between `Cl
 **last stop / last push**: the last stop is the newest factory comment saying why a run stopped; the next code-changing session is told it. It counts only if it is not older than the last push: the time of the factory's newest comment that is not a stop (the pull request, rework or merge comment). GitHub sets that time; a commit date can be set to anything, so it is never used.
 
 **pinned base**: the base branch's commit, asked from GitHub once at the start of one verify and used for every judgement in it, so a base that moves meanwhile cannot mix two answers.
+
+**setupHosts**: the hosts a target's setup may reach, on port 443, through the factory's proxy (`lib/proxy.mjs`); setup has no other network. `null`, the default, means the full network, with a warning at startup.
