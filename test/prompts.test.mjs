@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderPrompt, schemas } from '../lib/stages.mjs';
+import { renderPrompt, schemas } from '../lib/prompts.mjs';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 

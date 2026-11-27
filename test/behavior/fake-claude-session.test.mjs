@@ -6,7 +6,7 @@ import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { run } from '../../lib/exec.mjs';
 import { runAgent } from '../../lib/agent.mjs';
-import { renderPrompt } from '../../lib/stages.mjs';
+import { renderPrompt } from '../../lib/prompts.mjs';
 import { config } from '../../config.mjs';
 import { FAKES_BIN } from './world.mjs';
 import { sessionOf } from './fakes/session.mjs';
