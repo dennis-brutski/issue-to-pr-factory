@@ -25,7 +25,7 @@ gh search issues "label:agent:needs-human" --state open --owner <owner> --includ
   --json repository,number,title,url,isPullRequest,updatedAt
 ```
 
-Oldest `updatedAt` first. Say how many there are and in which repos, then take them one at a time.
+Go through them oldest first, by `updatedAt`. Say how many there are and in which repos, then take them one at a time.
 
 ## 2. Read one stop
 
