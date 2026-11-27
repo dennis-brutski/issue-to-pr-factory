@@ -137,3 +137,33 @@ test('the bridge passes 127.0.0.1:<port> on to the proxy socket and exits with i
     assert.equal((await run(process.execPath, [BRIDGE, proxy.socket, String(port), 'definitely-missing-cmd'])).code, 127);
   } finally { await proxy.close(); }
 });
+
+test('bytes sent right after the CONNECT headers reach the upstream', async () => {
+  const up = await echo();
+  const proxy = await listening({ hosts: ['registry.npmjs.org'], lookup, connect: up.fakeConnect.bind(up) });
+  try {
+    const s = connect(proxy.port, '127.0.0.1', () => s.write('CONNECT registry.npmjs.org:443 HTTP/1.1\r\nHost: registry.npmjs.org:443\r\n\r\nping'));
+    let got = '';
+    await new Promise((resolve, reject) => {
+      s.on('data', (d) => { got += String(d); if (got.includes('\r\n\r\n') && got.split('\r\n\r\n')[1] === 'ping') resolve(undefined); });
+      s.once('error', reject);
+      s.once('close', () => reject(new Error(`closed after ${JSON.stringify(got)}`)));
+    });
+    assert.match(got, /^HTTP\/1.1 200/);
+    assert.equal(got.split('\r\n\r\n')[1], 'ping');
+    s.destroy();
+  } finally { await proxy.close(); up.server.close(); }
+});
+
+test('a plain-HTTP request with an Upgrade header is refused, counted and recorded', async () => {
+  const up = await echo();
+  const proxy = await listening({ hosts: ['registry.npmjs.org'], lookup, connect: up.fakeConnect.bind(up) });
+  try {
+    const { reply, s } = await ask(proxy.port, 'GET http://x.com/ HTTP/1.1\r\nHost: x.com\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n');
+    assert.match(reply, /^HTTP\/1.1 403/);
+    s.destroy();
+    assert.deepEqual(up.dialed, []);
+    assert.deepEqual(proxy.refused(), ['x.com']);
+    assert.equal(proxy.requests(), 1);
+  } finally { await proxy.close(); up.server.close(); }
+});
