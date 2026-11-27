@@ -410,7 +410,6 @@ describe('containment smoke', () => {
 });
 
 describe('startup warnings', () => {
-  const README = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'README.md'), 'utf8');
   const start = README.indexOf('\n## Startup warnings\n');
   const warnings = README.slice(start, README.indexOf('\n## ', start + 1));
 
