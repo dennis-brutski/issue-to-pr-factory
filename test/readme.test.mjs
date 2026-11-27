@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.mjs';
+import { driftWarnings, setupNetworkWarning } from '../lib/startup.mjs';
 import { execFileSync } from 'node:child_process';
 
 const README = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'README.md'), 'utf8');
@@ -405,5 +406,18 @@ describe('containment smoke', () => {
     assert.match(smoke, /\['10 cannot read the Claude login folder ~\/\.claude \(shell or Read tool\)'/);
     assert.match(smoke, /join\(homedir\(\), '\.claude', `factory-smoke-canary-\$\{tag\}\.txt`\)/);
     assert.doesNotMatch(smoke, /\.credentials\.json|\.claude\.json/);
+  });
+});
+
+describe('startup warnings', () => {
+  const README = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'README.md'), 'utf8');
+  const start = README.indexOf('\n## Startup warnings\n');
+  const warnings = README.slice(start, README.indexOf('\n## ', start + 1));
+
+  test('Startup warnings lists the target-drift and the setup network warning', () => {
+    const setup = setupNetworkWarning({ target: '<name>', setup: [['npm', ['ci']]] });
+    assert.ok(warnings.includes(`- \`\` warning: ${setup} \`\` — `), 'setup network warning');
+    const [drift] = driftWarnings({ target: '<name>', baseBranch: 'main', testDirs: ['spec/'] }, () => false);
+    assert.ok(warnings.includes(`- \`\` warning: ${drift} \`\` — `), 'drift warning');
   });
 });
