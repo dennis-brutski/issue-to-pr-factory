@@ -11,7 +11,7 @@ import { runAgent } from './lib/agent.mjs';
 import { planUsage } from './lib/plan.mjs';
 import { runChecks, runSetup, runTestFiles } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
-import { recover, tick, cleanup, acquireLock, lockHolder, preflight, pollLine } from './lib/loop.mjs';
+import { recover, tick, cleanup, acquireLock, preflight, pollLine } from './lib/loop.mjs';
 import { driftWarnings, configuredPaths, pollText } from './lib/startup.mjs';
 import { look, paint } from './lib/look.mjs';
 import { screen } from './lib/screen.mjs';
@@ -32,9 +32,6 @@ const deps = { cfg, root, log, gh, ws, run, runAgent, runSetup, runChecks, runTe
   planUsage: () => planUsage({ url: cfg.planUsageUrl }) };
 
 let release;
-// A factory from before targets locks the folder itself; it would poll the same repo.
-const oldFactory = lockHolder(join(factoryRoot, 'factory.lock'));
-if (oldFactory) { cannotRun(`an older factory is still running from this folder (pid ${oldFactory}). Stop it first.`); process.exit(1); }
 try { mkdirSync(root, { recursive: true }); release = acquireLock(join(root, 'factory.lock')); } catch (e) { console.error(e.message); process.exit(1); }
 
 const running = new Map();

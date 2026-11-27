@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 25
+          node-version: 26
           cache: npm
       - run: git config --global user.name CI && git config --global user.email ci@example.invalid # the factory needs a git identity
       - run: npm ci --ignore-scripts

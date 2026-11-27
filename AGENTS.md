@@ -13,7 +13,7 @@ npm run typecheck # tsc on the .mjs files (checkJs, not strict)
 npm run smoke     # for the human, not agents: one real Claude session checks 9 ways out of the worktree are closed (uses Claude usage)
 ```
 
-Needs Linux with `bwrap` and Node (tested on 25). Tests that need real bwrap or network skip themselves where those are missing.
+Needs Linux with `bwrap` and Node (tested on 26). Tests that need real bwrap or network skip themselves where those are missing.
 
 `npm test`, `npm run lint` and `npm run typecheck` must pass before any change is done, once each is a check of this repo (see `.github/workflows/ci.yml`).
 

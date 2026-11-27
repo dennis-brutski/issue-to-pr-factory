@@ -1,8 +1,4 @@
 node_modules/
-repo/
-worktrees/
-logs/
-factory.lock
 runs/
 local.mjs
 # Targets are your own and stay local.
