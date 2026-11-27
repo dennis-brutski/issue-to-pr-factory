@@ -53,6 +53,14 @@ describe('protected files and tests', () => {
     assert.equal(r.park, 'Commits must not carry attribution lines:\n- commit message carries an attribution line: "Add b"');
   });
 
+  test('a secret in an added line or a commit message parks without showing it', async () => {
+    const token = 'gh' + 'p_' + 'a'.repeat(36);
+    await commit(dir, { 'a.txt': 'one\n' + token + '\n' }, 'Add b\n\n' + token);
+    const r = await verifyBranch(ws, cfg, dir);
+    assert.equal(r.park, 'The branch adds what looks like a secret, so the factory did not push it:\n- a.txt line 2: looks like a GitHub token\n- commit message 1: looks like a GitHub token\n'
+      + `Remove it from the files and commits in \`${dir}\`, then remove the label.`);
+  });
+
   test('a workflow change parks and shows the diff', async () => {
     await commit(dir, { '.github/workflows/ci.yml': 'on: pull_request\n' });
     const r = await verifyBranch(ws, cfg, dir);
@@ -206,7 +214,7 @@ describe('protected files and tests', () => {
     };
     assert.deepEqual(await verifyBranch(spy, cfg, dir), { park: null, flags: [], notes: ['test cases added: test/a.test.mjs'] });
     assert.equal(asked.length, 1);
-    assert.deepEqual(reads.map(([what]) => what), ['log', 'changes', 'diff', 'diff']);
+    assert.deepEqual(reads.map(([what]) => what), ['log', 'diff', 'changes', 'diff', 'diff']);
     for (const [what, , at] of reads) assert.equal(at, asked[0], `${what} reads against the base asked once`);
     asked.length = 0; reads.length = 0;
     assert.deepEqual(await verifyBranch(spy, cfg, dir, { before: 'setup', approvals: [] }), { park: null, flags: [] });

@@ -129,6 +129,13 @@ describe('stop labels', () => {
     assert.equal(label(park), 'attribution lines');
   });
 
+  test('a secret gets its own label', async () => {
+    const diff = 'diff --git a/a.js b/a.js\n--- a/a.js\n+++ b/a.js\n@@ -1 +1 @@\n+' + 'sk-' + 'ant-' + 'x'.repeat(24);
+    const ws = fakeWorkspace({ againstBase: async () => fakeView({ diff: async () => diff }) });
+    const { park } = await verifyBranch(ws, cfg, dir);
+    assert.equal(label(park), 'secret');
+  });
+
   test('CI workflow files are labelled workflow files', async () => {
     const ws = fakeWorkspace({ againstBase: async () => fakeView({ changes: async () => [{ status: 'M', path: '.github/workflows/ci.yml' }] }) });
     const { park } = await verifyBranch(ws, cfg, dir);
