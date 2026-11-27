@@ -88,3 +88,21 @@ test('an issue that contradicts itself parks even with high confidence, listing 
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
 });
+
+test('agent text in the summary cannot close, notify or fetch, and the pull request still closes its own issue', async () => {
+  const w = await world();
+  try {
+    const n = w.issue({ labels: ['agent:implement'] });
+    const summary = 'Changed a. Fixes #9, thanks @someone ![](https://e.example/x)';
+    w.script(n, [gate(90), implement({ 'src/a.js': 'export const a = 2;\n' }, 'Change a', summary), clean]);
+    const f = w.start();
+    await w.until(settled(w, n, 'agent:done'), 20000, 'a pull request');
+    const body = w.pr().body;
+    assert.match(body, new RegExp(`^Closes #${n}$`, 'm'));
+    assert.match(body, /Changed a\./);
+    assert.doesNotMatch(body, /Fixes #9/);
+    assert.doesNotMatch(body, /@someone/);
+    assert.doesNotMatch(body, /!\[\]\(/);
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});

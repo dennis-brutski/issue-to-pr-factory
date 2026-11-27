@@ -1429,6 +1429,39 @@ describe('park and pull request text', () => {
     };
     return { d, opened, comments };
   }
+  const BAD = 'Fixes #3 @someone ![](https://e.example/x)';
+  const UNSAFE = /Fixes #3|@someone|!\[\]/;
+
+  test('the gate\'s questions, contradictions and missing files are made safe before they are posted', async () => {
+    const { d, comments } = deps({ gate: { confidence: 90, questions: [BAD], contradictions: [BAD], missing: [BAD] } });
+    await runItem(issue, 'implement', d, 4201);
+    assert.match(comments.at(-1), /Contradictions:/);
+    assert.doesNotMatch(comments.at(-1), UNSAFE);
+  });
+
+  test('test concerns, findings after the fix and test changes are made safe in the pull request body', async () => {
+    const queue = [ok({ confidence: 87, questions: [] }), ok({ status: 'complete', summary: 'Changed undo.', detail: '', test_changes: [{ file: 'test/a.test.js', test: BAD, reason: BAD }] }),
+      ok({ verdict: 'findings', findings: ['x'], test_concerns: [BAD] }), ok({ status: 'complete', summary: 'Fixed.', detail: '' }),
+      ok({ verdict: 'findings', findings: [BAD] })];
+    const { d, opened, comments } = deps();
+    d.runAgent = async () => queue.shift();
+    await runItem(issue, 'implement', d, 4201);
+    const body = opened[0].body;
+    assert.match(body, /## Review findings after the fix/);
+    assert.match(body, /## Tests changed/);
+    assert.match(body, /test concern from the review/);
+    assert.doesNotMatch(body, UNSAFE);
+    assert.doesNotMatch(comments.at(-1), UNSAFE);
+  });
+
+  test('a failed step\'s reason is made safe before it is posted', async () => {
+    const { d, comments } = deps();
+    d.runAgent = async () => ({ ok: false, output: null, reason: BAD, sessionId: '' });
+    await runItem(issue, 'implement', d, 4201);
+    assert.match(comments.at(-1), /step failed/);
+    assert.doesNotMatch(comments.at(-1), UNSAFE);
+  });
+
   const folded = (output, n) => `<details><summary>Output (${n})</summary>\n\n\`\`\`\n${output.replaceAll('```', "'''")}\n\`\`\`\n\n</details>`;
   const asComment = (body) => ({ author: 'dennis-brutski', body, at: '2026-11-02T10:00:00Z' });
 

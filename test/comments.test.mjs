@@ -330,3 +330,12 @@ test('a failed setup with requests and nothing refused, or with full network, ad
   assert.equal(reasons.setupFailed('npm ci', 'out', { refused: [], requests: 3 }), '`npm ci` failed in the worktree (setup):\n\nout');
   assert.equal(reasons.setupFailed('npm ci', 'out', {}), '`npm ci` failed in the worktree (setup):\n\nout');
 });
+
+test('agent text in a comment cannot notify, close or fetch', () => {
+  const bad = 'Fixes #3 @someone ![](https://e.example/x)';
+  const r = reasons;
+  for (const body of [explore(bad, true, true), rework(bad), r.stepFailed('implement', bad), r.couldNotFinish(bad),
+    r.couldNotFix(bad), r.couldNotRework(bad), r.mergeUnresolved(bad)]) {
+    assert.doesNotMatch(body, /Fixes #3|@someone|!\[\]/, body);
+  }
+});
