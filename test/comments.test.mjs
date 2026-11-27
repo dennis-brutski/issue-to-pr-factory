@@ -274,3 +274,19 @@ test('isStop: the stop and did-not-start comments, nothing else', () => {
   assert.equal(isStop(merged), false);
   assert.equal(isStop('Factory stopped, I think'), false);
 });
+
+test('a failed setup through the proxy names the hosts it refused, before the output', () => {
+  const one = reasons.setupFailed('npm ci', '<details>out</details>', { refused: ['x.com'], requests: 2 });
+  assert.equal(one, '`npm ci` failed in the worktree (setup):\n\nsetup tried to reach `x.com`, which is not in `setupHosts`.\n\n<details>out</details>');
+  const two = reasons.setupFailed('npm ci', 'out', { refused: ['x.com', 'y.org'], requests: 2 });
+  assert.match(two, /setup tried to reach `x.com` and `y.org`, which are not in `setupHosts`\./);
+  assert.equal(stopLabel(stopped('implement', two, 'agent:needs-human')), 'setup failed');
+});
+test('a failed setup the proxy saw no request from says the tool may ignore HTTPS_PROXY', () => {
+  const r = reasons.setupFailed('npm ci', 'out', { refused: [], requests: 0 });
+  assert.match(r, /The proxy saw no requests at all: the tool may ignore `HTTPS_PROXY`\./);
+});
+test('a failed setup with requests and nothing refused, or with full network, adds nothing', () => {
+  assert.equal(reasons.setupFailed('npm ci', 'out', { refused: [], requests: 3 }), '`npm ci` failed in the worktree (setup):\n\nout');
+  assert.equal(reasons.setupFailed('npm ci', 'out', {}), '`npm ci` failed in the worktree (setup):\n\nout');
+});

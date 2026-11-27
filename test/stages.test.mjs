@@ -1449,6 +1449,13 @@ describe('park and pull request text', () => {
     assert.ok(lastStopReason({ comments: [asComment(comments.at(-1))] }, d.cfg).includes('npm ERR! missing lock'));
   });
 
+  test('a failing setup through the proxy names the hosts the proxy refused', async () => {
+    const { d, comments } = deps({ runSetup: async () => ({ ok: false, failed: 'npm ci', output: 'E403', refused: ['x.com'], requests: 1 }) });
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.detail, `\`npm ci\` failed in the worktree (setup):\n\nsetup tried to reach \`x.com\`, which is not in \`setupHosts\`.\n\n${folded('E403', '1 line')}`);
+    assert.equal(stopLabel(comments.at(-1)), 'setup failed');
+  });
+
   test('a trailing newline in the output does not count as another line', async () => {
     const { d } = deps({ runSetup: async () => ({ ok: false, failed: 'npm ci', output: 'npm ERR! missing lock\n' }) });
     const r = await runItem(issue, 'implement', d, 4201);
