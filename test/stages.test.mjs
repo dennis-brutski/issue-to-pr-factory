@@ -390,7 +390,7 @@ test('each check asks for the base once and reads only against that base', async
     const sha = String(++n).repeat(40), v = await view(dir, opts);
     events.push(['ask', sha, opts?.local ?? false]);
     const read = (k) => async (...a) => { events.push(['read', sha]); return v[k](...a); };
-    return { sha, changes: read('changes'), diff: read('diff'), messages: read('messages') };
+    return { sha, changes: read('changes'), diff: read('diff'), patches: read('patches'), messages: read('messages') };
   };
   assert.equal((await runItem(issue, 'implement', d.deps, 4201)).outcome, 'done');
   // Before setup, the "no changes" check after implement, before the push: never the clone's ref.

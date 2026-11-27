@@ -76,6 +76,20 @@ describe('worktrees and branches', () => {
     await git(dir, 'mv', 'test/unit/stats.test.js', 'moved.js'); await git(dir, 'commit', '-q', '-m', 'mv');
     assert.deepEqual(await (await ws.againstBase(dir, 'master')).changes(), [{ status: 'R', oldPath: 'test/unit/stats.test.js', path: 'moved.js' }]);
   });
+  test('againstBase changes gives file names as they are, not quoted as git prints them', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    await commitFile(dir, 'cié.txt'); await git(dir, 'mv', 'cié.txt', 'a"b.txt'); await git(dir, 'commit', '-q', '-m', 'mv');
+    await commitFile(dir, 'tab\there.txt');
+    assert.deepEqual(await (await ws.againstBase(dir, 'master')).changes(), [{ status: 'A', path: 'a"b.txt' }, { status: 'A', path: 'tab\there.txt' }]);
+  });
+  test('againstBase patches holds every commit, also what a later commit removed', async () => {
+    const { dir } = await ws.ensureWorktree(root, 7, 'master');
+    writeFileSync(join(dir, 'p.txt'), 'gone later\n'); await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', 'add');
+    writeFileSync(join(dir, 'p.txt'), 'kept\n'); await git(dir, 'add', '-A'); await git(dir, 'commit', '-q', '-m', 'change');
+    const view = await ws.againstBase(dir, 'master');
+    assert.doesNotMatch(await view.diff([]), /gone later/);
+    assert.match(await view.patches(), /\+gone later/);
+  });
   test('againstBase messages are the full messages of new commits only', async () => {
     const { dir } = await ws.ensureWorktree(root, 7, 'master');
     writeFileSync(join(dir, 'y.txt'), 'y'); await git(dir, 'add', '-A');

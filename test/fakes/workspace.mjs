@@ -8,12 +8,13 @@ import { paths } from '../../lib/workspace.mjs';
 export const BASE = 'b'.repeat(40);
 
 // What againstBase gives: the branch judged against one base commit. `over` replaces
-// changes(since), diff(paths, since) or messages(); `sha` is the base it was made with.
+// changes(since), diff(paths, since), patches() or messages(); `sha` is the base it was made with.
 export function fakeView(over = {}, sha = BASE) {
   return {
     sha,
     changes: async () => [{ status: 'M', path: 'src/state.js' }],
     diff: async () => '',
+    patches: async () => '',
     messages: async () => ['Fix undo'],
     ...over,
   };
