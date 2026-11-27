@@ -46,6 +46,18 @@ test('startup does not warn about a configured path the base branch ignores', as
   } finally { w.close(); }
 });
 
+test('startup warns when setup runs with the full network, and not with setupHosts', async () => {
+  for (const { settings, warns } of [{ settings: {}, warns: true }, { settings: { setupHosts: ['registry.npmjs.org'] }, warns: false }]) {
+    const w = await world({ settings });
+    try {
+      const f = w.start();
+      await w.until(() => polls(f) >= 1, 10000, 'a poll');
+      assert.equal(/warning: setup runs with the full network/.test(f.output()), warns, JSON.stringify(settings));
+      f.signal('SIGINT'); await f.exited;
+    } finally { w.close(); }
+  }
+});
+
 test('a missing base branch stops the factory', async () => {
   const w = await world({ settings: { baseBranch: 'nope' } });
   try {

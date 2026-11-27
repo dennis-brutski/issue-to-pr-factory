@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { driftWarnings, pollText } from '../lib/startup.mjs';
+import { driftWarnings, pollText, setupNetworkWarning } from '../lib/startup.mjs';
 
 const cfg = { target: 'demo', baseBranch: 'main', testDirs: ['test/', 'spec/'], protectedFiles: ['package.json', 'Makefile'], protectedDirs: ['gradle/'] };
 
@@ -29,4 +29,15 @@ test('under a minute is shown in seconds', () => {
 
 test('minutes and seconds are written like the session lines', () => {
   assert.equal(pollText(90), '1m 30s');
+});
+test('setupNetworkWarning warns when setup runs with the full network', () => {
+  assert.equal(setupNetworkWarning({ target: 'demo', setup: [['npm', ['ci']]], setupHosts: null }),
+    'setup runs with the full network: set `setupHosts` in targets/demo.mjs to the hosts it needs (ADR 0008)');
+  assert.match(setupNetworkWarning({ target: 'demo', setup: [['npm', ['ci']]] }), /full network/);
+});
+test('setupNetworkWarning says nothing with setupHosts or without setup', () => {
+  assert.equal(setupNetworkWarning({ target: 'demo', setup: [['npm', ['ci']]], setupHosts: ['registry.npmjs.org'] }), null);
+  assert.equal(setupNetworkWarning({ target: 'demo', setup: [['npm', ['ci']]], setupHosts: [] }), null);
+  assert.equal(setupNetworkWarning({ target: 'demo', setup: [], setupHosts: null }), null);
+  assert.equal(setupNetworkWarning({ target: 'demo' }), null);
 });
