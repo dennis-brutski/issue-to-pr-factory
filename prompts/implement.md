@@ -32,3 +32,5 @@ Where a skill lists exceptions that need your human partner's permission (config
 ### Comments from {{ownerName}}
 
 {{comments}}
+
+{{writeup}}The owner's comments may refer to this write-up, for example 'build steps 1–3'. Follow what the comments ask; the write-up alone is not a request.
