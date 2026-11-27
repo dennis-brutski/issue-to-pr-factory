@@ -12,7 +12,7 @@ import { planUsage } from './lib/plan.mjs';
 import { runChecks, runSetup, runTestFiles } from './lib/checks.mjs';
 import { runItem } from './lib/stages.mjs';
 import { recover, tick, cleanup, acquireLock, preflight, pollLine } from './lib/loop.mjs';
-import { driftWarnings, configuredPaths, pollText } from './lib/startup.mjs';
+import { driftWarnings, configuredPaths, pollText, setupNetworkWarning } from './lib/startup.mjs';
 import { look, paint } from './lib/look.mjs';
 import { screen } from './lib/screen.mjs';
 /** @import { Config } from './lib/settings.mjs' */
@@ -63,6 +63,8 @@ try {
   // A path the base branch ignores is meant to be missing, like targets/ in the factory itself.
   const ignored = await ws.ignoredOnBase(configuredPaths(cfg).filter((p) => !onBase.has(p)));
   for (const w of driftWarnings(cfg, (p) => onBase.has(p) || ignored.has(p))) log(`warning: ${w}`);
+  const network = setupNetworkWarning(cfg);
+  if (network) log(`warning: ${network}`);
   const labels = await gh.listLabels(cfg);
   for (const l of [...Object.values(cfg.triggers), ...Object.values(cfg.states)])
     if (!labels.includes(l)) { await gh.createLabel(cfg, l); log(`created label ${l}`); }
