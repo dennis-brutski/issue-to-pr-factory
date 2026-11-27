@@ -260,15 +260,15 @@ What stays outside: see *⚠ Risks you accept* above.
 
 ![The output of npm run stats for one target: pull requests opened and merged, and stops by reason](docs/img/stats.png)
 
-## Factory inbox
+## Resolve stops
 
-The `factory-inbox` Claude Code skill walks you through the stops. It ships with this repo in `factory-inbox/`. Start it in any Claude Code session with `/factory-inbox`, or ask in words: "factory inbox", "answer the factory", "what is the factory waiting for". Install it once:
+The `factory-resolve-stops` Claude Code skill walks you through the stops. It ships with this repo in `factory-resolve-stops/`. Start it in any Claude Code session with `/factory-resolve-stops`, or ask in words: "resolve stops", "factory inbox", "answer the factory", "what is the factory waiting for". Install it once:
 
-1. From this folder, `ln -s "$PWD/factory-inbox" ~/.claude/skills/factory-inbox`, so it lives at `~/.claude/skills/factory-inbox/SKILL.md`. Link `factory-approve-issues` the same way; it shares these settings.
-2. Copy `factory-inbox/config.example.json` to `config.json` next to it, so its settings are in `~/.claude/skills/factory-inbox/config.json` (not in git).
-3. Set `owner` (your GitHub login), `factoryDir` (the path to this folder) and optionally `notebookId` (a NotebookLM notebook it asks for background; `null` skips it). `currentTargetOnly: true` makes `/factory-inbox` and `/factory-approve-issues` work only on the target of the folder you start Claude in.
+1. From this folder, `ln -s "$PWD/factory-resolve-stops" ~/.claude/skills/factory-resolve-stops`, so it lives at `~/.claude/skills/factory-resolve-stops/SKILL.md`. Link `factory-approve-issues` the same way; it shares these settings.
+2. Copy `factory-resolve-stops/config.example.json` to `config.json` next to it, so its settings are in `~/.claude/skills/factory-resolve-stops/config.json` (not in git).
+3. Set `owner` (your GitHub login), `factoryDir` (the path to this folder) and optionally `notebookId` (a NotebookLM notebook it asks for background; `null` skips it). `currentTargetOnly: true` makes `/factory-resolve-stops` and `/factory-approve-issues` work only on the target of the folder you start Claude in.
 
-- It lists the stops with `node inbox.mjs [<target> | --current]`, per target, oldest first, with the stop, your answers since and the worktree.
+- It lists the stops with `node stops.mjs [<target> | --current]`, per target, oldest first, with the stop, your answers since and the worktree.
 - For each stop it shows what the issue wants, why the factory stopped, and a proposed reply, hand fix or relabel.
 - Nothing is posted, labelled or committed until you approve that one item (approve / edit / skip). `/factory-approve-issues` ("what can the factory build next") works the same way on the open issues nothing holds back, as `node ready.mjs [<target> | --current]` lists them, and recommends implement, explore, sharpen first, leave or close for each.
 
@@ -279,7 +279,7 @@ The `factory-inbox` Claude Code skill walks you through the stops. It ships with
 - `targets/` — one settings file per repo.
 - `prompts/` — what each agent step is told.
 - `skills/` — the skills agents may use, read-only.
-- `factory-inbox/` — the `factory-inbox` skill for you, not for agents; `inbox.mjs`, the list it reads; `factory-approve-issues/` and `ready.mjs`, the skill that approves issues and its list.
+- `factory-resolve-stops/` — the `factory-resolve-stops` skill for you, not for agents; `stops.mjs`, the list it reads; `factory-approve-issues/` and `ready.mjs`, the skill that approves issues and its list.
 - `runs/<target>/` — the agents' clone (`repo/`), the factory's own clone (`upstream.git/`), per-issue worktrees and logs, and its lock (not in git).
 
 ## Testing the factory

@@ -106,10 +106,10 @@ describe('diagram direction', () => {
   });
 });
 
-describe('factory inbox', () => {
+describe('factory resolve stops', () => {
   const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
   const README = readFileSync(join(ROOT, 'README.md'), 'utf8');
-  const SKILL = readFileSync(join(ROOT, 'factory-inbox', 'SKILL.md'), 'utf8');
+  const SKILL = readFileSync(join(ROOT, 'factory-resolve-stops', 'SKILL.md'), 'utf8');
   const headings = [...README.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
   const section = (heading) => {
     const start = README.indexOf(`\n## ${heading}\n`);
@@ -118,81 +118,81 @@ describe('factory inbox', () => {
     return README.slice(start, end < 0 ? undefined : end);
   };
 
-  test('the Factory inbox section comes right after Statistics', () => {
-    assert.equal(headings[headings.indexOf('Statistics') + 1], 'Factory inbox');
+  test('the Resolve stops section comes right after Statistics', () => {
+    assert.equal(headings[headings.indexOf('Statistics') + 1], 'Resolve stops');
   });
 
-  test('Factory inbox says where the skill and its settings live', () => {
-    const inbox = section('Factory inbox');
-    assert.match(inbox, /~\/\.claude\/skills\/factory-inbox\/SKILL\.md/);
-    assert.match(inbox, /~\/\.claude\/skills\/factory-inbox\/config\.json/);
+  test('Resolve stops says where the skill and its settings live', () => {
+    const inbox = section('Resolve stops');
+    assert.match(inbox, /~\/\.claude\/skills\/factory-resolve-stops\/SKILL\.md/);
+    assert.match(inbox, /~\/\.claude\/skills\/factory-resolve-stops\/config\.json/);
     for (const key of ['owner', 'factoryDir', 'notebookId']) assert.match(inbox, new RegExp(`\`${key}\``), key);
     assert.match(inbox, /`null` skips it/);
-    assert.match(inbox, /ships with this repo in `factory-inbox\/`/);
+    assert.match(inbox, /ships with this repo in `factory-resolve-stops\/`/);
     assert.doesNotMatch(inbox, /not shipped/);
   });
 
-  test('Factory inbox says how to install the shipped skill', () => {
-    const inbox = section('Factory inbox');
-    assert.match(inbox, /ln -s "\$PWD\/factory-inbox" ~\/\.claude\/skills\/factory-inbox/);
-    assert.match(inbox, /`factory-inbox\/config\.example\.json`/);
+  test('Resolve stops says how to install the shipped skill', () => {
+    const inbox = section('Resolve stops');
+    assert.match(inbox, /ln -s "\$PWD\/factory-resolve-stops" ~\/\.claude\/skills\/factory-resolve-stops/);
+    assert.match(inbox, /`factory-resolve-stops\/config\.example\.json`/);
   });
 
   test('the repo ships the skill with its frontmatter and start phrases', () => {
     const front = SKILL.match(/^---\n([\s\S]*?)\n---\n/);
     assert.ok(front, 'frontmatter');
-    assert.match(front[1], /^name: factory-inbox$/m);
-    for (const words of ['factory inbox', 'answer the factory', 'what is the factory waiting for', '/factory-inbox'])
+    assert.match(front[1], /^name: factory-resolve-stops$/m);
+    for (const words of ['factory inbox', 'answer the factory', 'what is the factory waiting for', 'resolve stops', '/factory-resolve-stops'])
       assert.ok(front[1].includes(words), words);
   });
 
-  test('the shipped skill finds stops with inbox.mjs and acts only on approve', () => {
-    assert.ok(SKILL.includes('node <factoryDir>/inbox.mjs'));
+  test('the shipped skill finds stops with stops.mjs and acts only on approve', () => {
+    assert.ok(SKILL.includes('node <factoryDir>/stops.mjs'));
     assert.match(SKILL, /oldest first/);
     assert.match(SKILL, /approve \/ edit \/ skip/);
     assert.match(SKILL, /never starts? with 🏭/);
   });
 
   test('the shipped skill lists only the current target when currentTargetOnly is true', () => {
-    assert.ok(SKILL.includes('node <factoryDir>/inbox.mjs --current'));
+    assert.ok(SKILL.includes('node <factoryDir>/stops.mjs --current'));
     assert.match(SKILL, /`currentTargetOnly`/);
     assert.match(SKILL, /Missing means `false`/);
     assert.doesNotMatch(SKILL, /gh search|gh issue view/);
   });
 
   test('the skill ships an example config and keeps the real one out of git', () => {
-    const example = JSON.parse(readFileSync(join(ROOT, 'factory-inbox', 'config.example.json'), 'utf8'));
+    const example = JSON.parse(readFileSync(join(ROOT, 'factory-resolve-stops', 'config.example.json'), 'utf8'));
     assert.deepEqual(Object.keys(example).sort(), ['currentTargetOnly', 'factoryDir', 'notebookId', 'owner']);
     assert.equal(example.notebookId, null);
     assert.equal(example.currentTargetOnly, false);
-    const ignored = execFileSync('git', ['check-ignore', 'factory-inbox/config.json'], { cwd: ROOT, encoding: 'utf8' });
-    assert.equal(ignored.trim(), 'factory-inbox/config.json');
+    const ignored = execFileSync('git', ['check-ignore', 'factory-resolve-stops/config.json'], { cwd: ROOT, encoding: 'utf8' });
+    assert.equal(ignored.trim(), 'factory-resolve-stops/config.json');
   });
 
-  test('Files lists the factory-inbox folder', () => {
-    assert.match(section('Files'), /^- `factory-inbox\/` — /m);
+  test('Files lists the factory-resolve-stops folder', () => {
+    assert.match(section('Files'), /^- `factory-resolve-stops\/` — /m);
   });
 
-  test('Factory inbox says how it finds the stops', () => {
-    assert.match(section('Factory inbox'), /`node inbox\.mjs \[<target> \| --current\]`/);
-    assert.match(section('Factory inbox'), /oldest first/);
+  test('Resolve stops says how it finds the stops', () => {
+    assert.match(section('Resolve stops'), /`node stops\.mjs \[<target> \| --current\]`/);
+    assert.match(section('Resolve stops'), /oldest first/);
   });
 
-  test('Factory inbox says nothing happens until you approve an item', () => {
-    const inbox = section('Factory inbox');
+  test('Resolve stops says nothing happens until you approve an item', () => {
+    const inbox = section('Resolve stops');
     assert.match(inbox, /proposed reply, hand fix or relabel/);
     assert.match(inbox, /approve \/ edit \/ skip/);
   });
 
-  test('Factory inbox shows how to start it', () => {
-    const inbox = section('Factory inbox');
-    assert.match(inbox, /`\/factory-inbox`/);
-    for (const words of ['factory inbox', 'answer the factory', 'what is the factory waiting for'])
+  test('Resolve stops shows how to start it', () => {
+    const inbox = section('Resolve stops');
+    assert.match(inbox, /`\/factory-resolve-stops`/);
+    for (const words of ['factory inbox', 'answer the factory', 'what is the factory waiting for', 'resolve stops'])
       assert.ok(inbox.includes(`"${words}"`), words);
   });
 
-  test('Factory inbox says currentTargetOnly works for both skills', () => {
-    assert.match(section('Factory inbox'), /`currentTargetOnly: true` makes `\/factory-inbox` and `\/factory-approve-issues` work only on the target/);
+  test('Resolve stops says currentTargetOnly works for both skills', () => {
+    assert.match(section('Resolve stops'), /`currentTargetOnly: true` makes `\/factory-resolve-stops` and `\/factory-approve-issues` work only on the target/);
   });
 });
 
@@ -383,8 +383,8 @@ describe('easy to scan', () => {
     assert.match(checks, /\/\/ without network\b[^\n]*$/);
   });
 
-  test('Factory inbox has numbered install steps 1, 2 and 3', () => {
-    const inbox = section('Factory inbox');
+  test('Resolve stops has numbered install steps 1, 2 and 3', () => {
+    const inbox = section('Resolve stops');
     for (const n of [1, 2, 3]) assert.match(inbox, new RegExp(`^${n}\\. `, 'm'), `${n}.`);
   });
 });

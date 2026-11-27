@@ -11,15 +11,15 @@ Walk the owner through the open issues the factory could build now. For each one
 
 ## Settings
 
-Read `~/.claude/skills/factory-inbox/config.json`, the settings file this skill shares with
-`/factory-inbox`:
+Read `~/.claude/skills/factory-resolve-stops/config.json`, the settings file this skill shares with
+`/factory-resolve-stops`:
 
 - `owner`: the GitHub login whose repos the factory works on.
 - `factoryDir`: the path to the issue-to-pr-factory checkout.
 - `currentTargetOnly`: `true` works only on the target of the folder Claude was started in.
   Missing means `false`.
 
-If the file is missing, say so, show `<factoryDir>/factory-inbox/config.example.json` and stop.
+If the file is missing, say so, show `<factoryDir>/factory-resolve-stops/config.example.json` and stop.
 
 ## 1. Collect
 
