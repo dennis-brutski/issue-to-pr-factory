@@ -264,13 +264,13 @@ What stays outside: see *⚠ Risks you accept* above.
 
 The `factory-inbox` Claude Code skill walks you through the stops. It ships with this repo in `factory-inbox/`. Start it in any Claude Code session with `/factory-inbox`, or ask in words: "factory inbox", "answer the factory", "what is the factory waiting for". Install it once:
 
-1. From this folder, `ln -s "$PWD/factory-inbox" ~/.claude/skills/factory-inbox`, so it lives at `~/.claude/skills/factory-inbox/SKILL.md`.
+1. From this folder, `ln -s "$PWD/factory-inbox" ~/.claude/skills/factory-inbox`, so it lives at `~/.claude/skills/factory-inbox/SKILL.md`. Link `factory-approve-issues` the same way; it shares these settings.
 2. Copy `factory-inbox/config.example.json` to `config.json` next to it, so its settings are in `~/.claude/skills/factory-inbox/config.json` (not in git).
-3. Set `owner` (your GitHub login), `factoryDir` (the path to this folder) and optionally `notebookId` (a NotebookLM notebook it asks for background; `null` skips it).
+3. Set `owner` (your GitHub login), `factoryDir` (the path to this folder) and optionally `notebookId` (a NotebookLM notebook it asks for background; `null` skips it). `currentTargetOnly: true` makes `/factory-approve-issues` work only on the target of the folder you start Claude in.
 
 - It lists the stops itself with `gh search issues "label:agent:needs-human" --state open --owner <owner>`, across every repo of the owner, oldest first.
 - For each stop it shows what the issue wants, why the factory stopped, and a proposed reply, hand fix or relabel.
-- Nothing is posted, labelled or committed until you approve that one item (approve / edit / skip).
+- Nothing is posted, labelled or committed until you approve that one item (approve / edit / skip). `/factory-approve-issues` ("what can the factory build next") works the same way on the open issues nothing holds back, as `node ready.mjs [<target> | --current]` lists them, and recommends implement, explore, sharpen first, leave or close for each.
 
 ## Files
 
@@ -279,7 +279,7 @@ The `factory-inbox` Claude Code skill walks you through the stops. It ships with
 - `targets/` — one settings file per repo.
 - `prompts/` — what each agent step is told.
 - `skills/` — the skills agents may use, read-only.
-- `factory-inbox/` — the `factory-inbox` skill for you, not for agents.
+- `factory-inbox/` — the `factory-inbox` skill for you, not for agents; `factory-approve-issues/` and `ready.mjs`, the skill that approves issues and the list it reads.
 - `runs/<target>/` — the agents' clone (`repo/`), the factory's own clone (`upstream.git/`), per-issue worktrees and logs, and its lock (not in git).
 
 ## Testing the factory

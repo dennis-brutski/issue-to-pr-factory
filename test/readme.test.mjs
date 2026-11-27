@@ -156,8 +156,9 @@ describe('factory inbox', () => {
 
   test('the skill ships an example config and keeps the real one out of git', () => {
     const example = JSON.parse(readFileSync(join(ROOT, 'factory-inbox', 'config.example.json'), 'utf8'));
-    assert.deepEqual(Object.keys(example).sort(), ['factoryDir', 'notebookId', 'owner']);
+    assert.deepEqual(Object.keys(example).sort(), ['currentTargetOnly', 'factoryDir', 'notebookId', 'owner']);
     assert.equal(example.notebookId, null);
+    assert.equal(example.currentTargetOnly, false);
     const ignored = execFileSync('git', ['check-ignore', 'factory-inbox/config.json'], { cwd: ROOT, encoding: 'utf8' });
     assert.equal(ignored.trim(), 'factory-inbox/config.json');
   });

@@ -21,7 +21,7 @@ Needs Linux with `bwrap` and Node (tested on 26). Tests that need real bwrap or 
 
 | Path | What |
 |---|---|
-| `lib/eligibility.mjs`, `lib/brakes.mjs`, `lib/names.mjs`, `lib/startup.mjs` | Pure decisions: who may trigger, what a diff may contain, issue ↔ branch ↔ worktree names, startup warnings. No I/O. |
+| `lib/eligibility.mjs`, `lib/brakes.mjs`, `lib/names.mjs`, `lib/startup.mjs`, `lib/ready.mjs` | Pure decisions: who may trigger, what a diff may contain, issue ↔ branch ↔ worktree names, startup warnings, which open issues are ready to approve. No I/O. |
 | `lib/github.mjs`, `lib/workspace.mjs`, `lib/agent.mjs`, `lib/confine.mjs`, `lib/checks.mjs` | Thin adapters around `gh`, `git`, `claude` and `bwrap`. |
 | `lib/verify.mjs` | Judges a branch: what stops a push, what makes a pull request a draft. |
 | `lib/stages.mjs`, `lib/loop.mjs`, `factory.mjs` | The stages of one run, the poll loop, the entry point. |

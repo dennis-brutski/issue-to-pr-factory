@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from '../config.mjs';
-import { loadSettings, cloneUrl, parseFactoryArgs, targetNames } from '../lib/settings.mjs';
+import { loadSettings, cloneUrl, parseFactoryArgs, targetNames, repoOfRemote } from '../lib/settings.mjs';
 import { tempDir } from './fakes/tmp.mjs';
 
 const tmp = () => tempDir('factory-settings-');
@@ -157,4 +157,11 @@ test('targetNames lists targets/*.mjs by name, in name order', () => {
 });
 test('targetNames of a missing folder is empty', () => {
   assert.deepEqual(targetNames(join(tempDir('factory-names-'), 'targets')), []);
+});
+test('repoOfRemote reads owner/name from the usual GitHub remotes', () => {
+  for (const url of ['https://github.com/me/Repo.git', 'https://github.com/me/Repo', 'git@github.com:me/Repo.git', 'ssh://git@github.com/me/Repo.git'])
+    assert.equal(repoOfRemote(url), 'me/Repo', url);
+});
+test('repoOfRemote of anything else is null', () => {
+  for (const url of ['/tmp/x', '', 'https://gitlab.com/me/repo.git']) assert.equal(repoOfRemote(url), null, url);
 });
