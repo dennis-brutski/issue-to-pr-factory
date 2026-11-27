@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // Lists the open factory stops of each target, oldest first, with the stop comment, the owner's
-// answers since and the worktree, as JSON for the factory-inbox skill.
-// node inbox.mjs [<target> | --current]
+// answers since and the worktree, as JSON for the factory-resolve-stops skill.
+// node stops.mjs [<target> | --current]
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chooseTargets } from './lib/settings.mjs';
-import { inboxOf } from './lib/inbox.mjs';
+import { inboxOf } from './lib/stops.mjs';
 import { run } from './lib/exec.mjs';
 
 /** @typedef {{ number: number, kind: string, title: string, url: string, body: string, stop: string | null, answers: string[], worktree: string | null }} Stop */

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from './fixtures/config.mjs';
-import { stopOf, worktreeOf, inboxOf } from '../lib/inbox.mjs';
+import { stopOf, worktreeOf, inboxOf } from '../lib/stops.mjs';
 import { stopped, didNotStart } from '../lib/comments.mjs';
 
 const OWNER = config.owner;

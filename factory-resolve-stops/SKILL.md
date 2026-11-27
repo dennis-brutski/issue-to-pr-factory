@@ -1,9 +1,9 @@
 ---
-name: factory-inbox
-description: Use when the owner says "factory inbox", "answer the factory", "factory stops", "what is the factory waiting for" or types /factory-inbox. Walks through every open issue and pull request the factory labelled agent:needs-human, one at a time, and acts only on approval.
+name: factory-resolve-stops
+description: Use when the owner says "resolve stops", "factory inbox", "answer the factory", "factory stops", "what is the factory waiting for" or types /factory-resolve-stops. Walks through every open issue and pull request the factory labelled agent:needs-human, one at a time, and acts only on approval.
 ---
 
-# Factory inbox
+# Factory resolve stops
 
 Walk the owner through every open factory stop in one sitting. For each one, draft the answer;
 **nothing is posted, labelled, pushed or committed until the owner approves that exact action.**
@@ -23,8 +23,8 @@ If `config.json` is missing, say so, show `config.example.json` and stop.
 ## 1. Collect
 
 ```sh
-node <factoryDir>/inbox.mjs              # every target
-node <factoryDir>/inbox.mjs --current    # when currentTargetOnly is true; run it in the folder Claude started in
+node <factoryDir>/stops.mjs              # every target
+node <factoryDir>/stops.mjs --current    # when currentTargetOnly is true; run it in the folder Claude started in
 ```
 
 It prints JSON, one entry per target with its `repo` and `stops`, oldest first. An entry with `error`

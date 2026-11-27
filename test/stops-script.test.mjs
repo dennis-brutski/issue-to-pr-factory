@@ -4,14 +4,14 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runInbox } from '../inbox.mjs';
+import { runInbox } from '../stops.mjs';
 import { stopped } from '../lib/comments.mjs';
 import { tempDir } from './fakes/tmp.mjs';
 
-const script = fileURLToPath(new URL('../inbox.mjs', import.meta.url));
+const script = fileURLToPath(new URL('../stops.mjs', import.meta.url));
 
 function root(targets) {
-  const r = tempDir('factory-inbox-');
+  const r = tempDir('factory-stops-');
   mkdirSync(join(r, 'targets'));
   for (const [name, repo] of Object.entries(targets))
     writeFileSync(join(r, 'targets', `${name}.mjs`), `export default ${JSON.stringify({ repo, owner: 'me', baseBranch: 'main' })};\n`);
