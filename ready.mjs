@@ -2,11 +2,10 @@
 // Lists the open issues of each target that are ready for the owner to approve, and the
 // ones held back with why, as JSON for the factory-approve-issues skill.
 // node ready.mjs [<target> | --current]
-import { dirname, join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadSettings, targetNames, repoOfRemote } from './lib/settings.mjs';
+import { chooseTargets } from './lib/settings.mjs';
 import { readiness } from './lib/ready.mjs';
-import { same } from './lib/text.mjs';
 import { run } from './lib/exec.mjs';
 
 /** @typedef {{ number: number, title: string, url: string }} Ready */
@@ -32,18 +31,7 @@ async function reportOf(cfg, gh) {
  * @throws when the target is unknown, or --current runs outside a target's folder
  */
 export async function runReady(argv, { factoryRoot, gh, remote }) {
-  let configs;
-  if (argv[0] === '--current') {
-    const url = await remote();
-    const all = await Promise.all(targetNames(join(factoryRoot, 'targets')).map((n) => loadSettings(n, { factoryRoot })));
-    const cfg = all.find((c) => repoOfRemote(url) !== null && same(c.repo, repoOfRemote(url)));
-    if (!cfg) throw new Error(`this folder is not a target: ${url || '(no origin remote)'}`);
-    configs = [cfg];
-  } else if (argv[0] !== undefined) {
-    configs = [await loadSettings(argv[0], { factoryRoot })];
-  } else {
-    configs = await Promise.all(targetNames(join(factoryRoot, 'targets')).map((n) => loadSettings(n, { factoryRoot })));
-  }
+  const configs = await chooseTargets(argv, { factoryRoot, remote });
   let ok = true;
   const report = [];
   for (const cfg of configs) {

@@ -15,30 +15,34 @@ Read `config.json` in this skill's folder (a copy of `config.example.json`):
 - `owner`: the GitHub login whose repos the factory works on, and whose comments count.
 - `factoryDir`: the path to the issue-to-pr-factory checkout.
 - `notebookId`: a NotebookLM notebook to ask for design background. `null` or missing skips it.
+- `currentTargetOnly`: `true` works only on the target of the folder Claude was started in.
+  Missing means `false`.
 
 If `config.json` is missing, say so, show `config.example.json` and stop.
 
 ## 1. Collect
 
 ```sh
-gh search issues "label:agent:needs-human" --state open --owner <owner> --include-prs \
-  --json repository,number,title,url,isPullRequest,updatedAt
+node <factoryDir>/inbox.mjs              # every target
+node <factoryDir>/inbox.mjs --current    # when currentTargetOnly is true; run it in the folder Claude started in
 ```
 
-Go through them oldest first, by `updatedAt`. Say how many there are and in which repos, then take them one at a time.
+It prints JSON, one entry per target with its `repo` and `stops`, oldest first. An entry with `error`
+could not be read: say so. `--current` outside a target exits 1 with "this folder is not a target":
+say so and stop.
+
+Say how many there are and in which repos, then take them one at a time.
 
 ## 2. Read one stop
 
-```sh
-gh issue view <n> -R <repo> --json title,body,labels,comments    # also works for pull requests
-```
+Each stop has `number`, `kind` (`issue` or `pr`), `title`, `url`, and:
 
-- **The stop** is the newest comment by `<owner>` starting with `🏭 **Factory stopped` or
-  `🏭 **Factory did not start`. No such comment means the label was set by hand: say so.
-- **The owner's answers since** are the owner's later comments that do not start with 🏭.
-- **The target** is the file in `<factoryDir>/targets/` whose `repo:` matches. The worktree is
-  `<factoryDir>/runs/<target>/worktrees/issue-<n>`; a pull request uses its branch's issue number
-  (`factory/issue-<n>`). Check that it exists before planning a hand fix.
+- **`body`**: what the issue or pull request asks for.
+- **`stop`**: the newest comment by `<owner>` starting with `🏭 **Factory stopped` or
+  `🏭 **Factory did not start`. `null` means the label was set by hand: say so.
+- **`answers`**: the owner's later comments that do not start with 🏭.
+- **`worktree`**: `<factoryDir>/runs/<target>/worktrees/issue-<n>`; a pull request uses its branch's
+  issue number (`factory/issue-<n>`). `null` means it does not exist: no hand fix there.
 - Read the code the stop names before drafting.
 - **Background:** for a design or "why" question, and only when `notebookId` is set, ask that
   notebook (`mcp__notebooklm-mcp__notebook_query`). Before any web search, ask the owner.
