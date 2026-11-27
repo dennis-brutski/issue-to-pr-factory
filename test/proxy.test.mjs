@@ -188,3 +188,51 @@ test('the proxy records the first 10 refused hosts and only counts the rest', as
     assert.equal(proxy.requests(), 26);
   } finally { await proxy.close(); }
 });
+
+test('a plain request whose Host is not a host name is refused and recorded as (not a host name)', async () => {
+  const proxy = await listening({ hosts: [], lookup });
+  try {
+    const { reply, s } = await ask(proxy.port, 'GET / HTTP/1.1\r\nHost: a`](http://e.vil)\r\n\r\n');
+    assert.match(reply, /^HTTP\/1.1 403/);
+    s.destroy();
+    assert.deepEqual(proxy.refused(), [{ host: '(not a host name)', why: 'plain' }]);
+    assert.equal(proxy.requests(), 1);
+  } finally { await proxy.close(); }
+});
+
+test('a CONNECT to a very long host name is refused and recorded cut to 100 characters', async () => {
+  const proxy = await listening({ hosts: [], lookup });
+  try {
+    const { reply, s } = await ask(proxy.port, `CONNECT ${'a'.repeat(500)}:443 HTTP/1.1\r\n\r\n`);
+    assert.match(reply, /^HTTP\/1.1 403/);
+    s.destroy();
+    const [r] = proxy.refused();
+    assert.equal(r.why, 'unlisted');
+    assert.ok(r.host.length <= 100, String(r.host.length));
+    assert.ok(r.host.startsWith('aaaa') && r.host.endsWith('…'), r.host);
+  } finally { await proxy.close(); }
+});
+
+test('host names, IP addresses and ports are recorded as they are', async () => {
+  const proxy = await listening({ hosts: [], lookup });
+  try {
+    for (const req of ['CONNECT x-1.example.com:443 HTTP/1.1\r\n\r\n', 'CONNECT 93.184.216.34:443 HTTP/1.1\r\n\r\n',
+      'CONNECT [2606:4700::1]:443 HTTP/1.1\r\n\r\n', 'GET http://[::1]:8080/ HTTP/1.1\r\nHost: [::1]:8080\r\n\r\n',
+      'GET / HTTP/1.1\r\nHost: plain.test:8080\r\n\r\n']) {
+      const { reply, s } = await ask(proxy.port, req);
+      assert.match(reply, /^HTTP\/1.1 403/, req);
+      s.destroy();
+    }
+    assert.deepEqual(proxy.refused().map((r) => r.host), ['x-1.example.com', '93.184.216.34', '2606:4700::1', '[::1]', 'plain.test:8080']);
+  } finally { await proxy.close(); }
+});
+
+test('two refused hosts that are recorded the same are listed once and the other is counted', async () => {
+  const proxy = await listening({ hosts: [], lookup });
+  try {
+    for (const bad of ['a`b', 'c`d', 'a`b']) (await ask(proxy.port, `GET / HTTP/1.1\r\nHost: ${bad}\r\n\r\n`)).s.destroy();
+    assert.deepEqual(proxy.refused(), [{ host: '(not a host name)', why: 'plain' }]);
+    assert.equal(proxy.moreRefused(), 1);
+    assert.equal(proxy.requests(), 3);
+  } finally { await proxy.close(); }
+});
