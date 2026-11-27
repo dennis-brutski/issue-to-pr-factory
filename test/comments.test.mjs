@@ -62,7 +62,7 @@ test('the last push is the newest factory comment by the owner that is not a sto
   assert.equal(lastPush([c(merged, T), c('looks good', T2), c(rework('s'), T2, 'someone')], OWNER), T);
 });
 
-// ADR 0006: only the owner's own comments approve setup for a commit, never the factory's.
+// ADR 0007: only the owner's own comments approve setup for a commit, never the factory's.
 test('setup approvals are the full shas the owner names in their own comments', () => {
   const a = 'a'.repeat(40), b = '0123456789abcdef0123456789abcdef01234567';
   assert.deepEqual(setupApprovals([c(`approve protected setup ${a}`, T), c(`Read it, fine.\napprove protected setup ${b}\n`, T2, 'Dennis-Brutski')], OWNER), [a, b]);

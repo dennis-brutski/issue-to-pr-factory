@@ -1,4 +1,4 @@
-# 6. The owner may approve setup for one commit that changes protected files
+# 7. The owner may approve setup for one commit that changes protected files
 
 Date: 2026-11-26 · Status: accepted · Adds to [ADR 0004](0004-issues-may-list-protected-files-as-a-draft.md)
 

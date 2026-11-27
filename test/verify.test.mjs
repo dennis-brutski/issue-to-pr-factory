@@ -72,7 +72,7 @@ describe('protected files and tests', () => {
     assert.deepEqual(await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: [] }), { park: null, flags: [] });
   });
 
-  // ADR 0006: the owner may approve setup for one commit whose protected change they read.
+  // ADR 0007: the owner may approve setup for one commit whose protected change they read.
   test('before setup, an approval naming HEAD lets setup run on a protected change', async () => {
     const head = await commit(dir, { 'lib/brakes.mjs': 'loose\n' });
     assert.deepEqual(await verifyBranch(ws, cfg, dir, { before: 'setup', approvals: [head] }), { park: null, flags: [] });

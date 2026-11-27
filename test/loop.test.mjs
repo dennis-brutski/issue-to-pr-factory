@@ -155,7 +155,7 @@ test('acquireLock refuses a second holder and takes over a dead pid', () => {
 test('a live lock names the file to delete if the pid is not the factory', () => {
   const file = join(mkdtempSync(join(tmpdir(), 'factory-lock-')), 'factory.lock');
   const release = acquireLock(file);
-  assert.throws(() => acquireLock(file), (e) => /already running \(pid \d+\)/.test(e.message) && e.message.includes(file));
+  assert.throws(() => acquireLock(file), (/** @type {Error} */ e) => /already running \(pid \d+\)/.test(e.message) && e.message.includes(file));
   release();
 });
 test('a lock file without a pid is stale', () => {

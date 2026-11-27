@@ -34,7 +34,7 @@ test('a branch that changed a protected file in an earlier run parks before setu
   } finally { w.close(); }
 });
 
-// ADR 0006: after the stop, the owner reads the change and approves setup for that one commit.
+// ADR 0007: after the stop, the owner reads the change and approves setup for that one commit.
 test("the owner's approval comment and removing the label let the retry run setup", async () => {
   const w = await world();
   try {

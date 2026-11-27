@@ -2,7 +2,7 @@
 // for unit tests of the stages and the loop. Every method returns a plain default;
 // a test passes `over` to replace the ones it cares about. A contract test keeps its
 // method names equal to the real handle's.
-// ponytail: fixed answers, not a model of the branch; grow one if tests keep faking state by hand.
+// shortcut: fixed answers, not a model of the branch; grow one if tests keep faking state by hand.
 import { paths } from '../../lib/workspace.mjs';
 
 export const BASE = 'b'.repeat(40);
