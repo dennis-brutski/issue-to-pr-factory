@@ -8,8 +8,8 @@ import { issueOfBranch, issueOfWorktree } from './lib/names.mjs';
 import { addUp, count, usageOf } from './lib/usage.mjs';
 import { loadSettings, targetNames } from './lib/settings.mjs';
 import { autoMergedPull, isCountedStop, isRework, stopLabel } from './lib/comments.mjs';
+import { same } from './lib/text.mjs';
 
-const same = (a, b) => (a || '').toLowerCase() === (b || '').toLowerCase();
 const after = (at, since) => !since || Date.parse(at) >= Date.parse(since);
 
 // Pull requests from factory branches of the target repo itself (no forks), by outcome. Pure.
