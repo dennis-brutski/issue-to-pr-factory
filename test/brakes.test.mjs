@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { protectedPathViolations as check, attributionViolations, workflowChanges, additionsOnly, skippedTests, strayDotfiles, secretViolations, addedLines } from '../lib/brakes.mjs';
+import { protectedPathViolations as check, attributionViolations, workflowChanges, additionsOnly, skippedTests, strayDotfiles, secretViolations, addedLines, binaryFiles } from '../lib/brakes.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 
 // The web app target: its protections must stay exactly what they were.
@@ -156,4 +156,33 @@ test('addedLines gives each added line with its file and line number', () => {
     { file: 'x.js', line: 2, text: 'new one' }, { file: 'x.js', line: 3, text: 'new two' },
     { file: 'x.js', line: 12, text: 'later' }, { file: 'y.js', line: 1, text: '+plus' },
   ]);
+});
+test('a file whose name looks like a secret is a finding, and its name is never shown', () => {
+  for (const [kind, token] of Object.entries(TOKENS)) {
+    const file = `${token}.txt`;
+    const found = secretViolations([secretLine('harmless', file, 1)], [], []);
+    assert.deepEqual(found, [`(a file whose name looks like a secret): its name looks like a ${kind}`], kind);
+  }
+});
+test('a changed path whose name looks like a secret is a finding, even with no added lines', () => {
+  const token = TOKENS['GitHub token'];
+  assert.deepEqual(secretViolations([], [], [`docs/${token}`, 'src/a.js']), ['(a file whose name looks like a secret): its name looks like a GitHub token']);
+});
+test('a line finding in a file whose name looks like a secret does not show the name', () => {
+  const token = TOKENS['GitHub token'];
+  const found = secretViolations([secretLine(token, `${token}.txt`, 2)], [], [`${token}.txt`]);
+  assert.deepEqual(found, [
+    '(a file whose name looks like a secret) line 2: looks like a GitHub token',
+    '(a file whose name looks like a secret): its name looks like a GitHub token',
+  ]);
+  assert.ok(!found.join('\n').includes(token));
+});
+test('binaryFiles lists the files a diff shows only as binary, added or changed, not deleted', () => {
+  const token = TOKENS['GitHub token'];
+  const diff = ['diff --git a/bin.dat b/bin.dat', 'new file mode 100644', 'index 0000000..1111111', 'Binary files /dev/null and b/bin.dat differ',
+    'diff --git a/my img.png b/my img.png', 'Binary files a/my img.png and b/my img.png differ',
+    'diff --git a/old.bin b/old.bin', 'deleted file mode 100644', 'Binary files a/old.bin and /dev/null differ',
+    `diff --git a/${token} b/${token}`, `Binary files /dev/null and b/${token} differ`,
+    'diff --git a/x.js b/x.js', '--- a/x.js', '+++ b/x.js', '@@ -1 +1 @@', '+Binary files a/q and b/q differ'].join('\n');
+  assert.deepEqual(binaryFiles(diff), ['bin.dat', 'my img.png', '(a file whose name looks like a secret)']);
 });
