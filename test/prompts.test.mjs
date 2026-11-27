@@ -186,3 +186,26 @@ test('the gate prompt explains contradictions and missing', () => {
   assert.match(p, /Any contradiction stops the run, whatever the confidence/);
   assert.match(p, /- `missing`: files, functions or tests the issue names that do not exist in the repo and that the issue does not ask to create/);
 });
+
+// The explore write-up goes to gate and implement, so the owner's comments can refer to it.
+describe('explore write-up section', () => {
+  const HEADING = '### The factory\'s explore write-up';
+  for (const name of ['gate', 'implement']) {
+    test(`${name} holds the write-up section and its text when given one`, () => {
+      const p = renderPrompt(name, { ...vars, writeup: 'Step 1: fix the guard.' });
+      assert.ok(p.includes(`${HEADING}\n\nStep 1: fix the guard.\n\n`), name);
+      assert.ok(p.indexOf(HEADING) > p.indexOf('### Comments from'), name);
+      assert.match(p, /the write-up alone is not a request/);
+    });
+    test(`${name} holds neither the heading nor the variable without a write-up`, () => {
+      for (const p of [renderPrompt(name, vars), renderPrompt(name, { ...vars, writeup: '' })]) {
+        assert.ok(!p.includes(HEADING), name);
+        assert.ok(!p.includes('{{writeup}}'), name);
+      }
+    });
+  }
+  test('the gate and implement prompts keep their session marker as the first line', () => {
+    assert.equal(read('prompts/gate.md').split('\n')[0], '<!-- session: gate -->');
+    assert.equal(read('prompts/implement.md').split('\n')[0], '<!-- session: implement -->');
+  });
+});
