@@ -11,7 +11,7 @@ const PAD = ' '.repeat(10);
 function setup(opts = {}) {
   let t = 0;
   const clock = { now: () => t, set: (ms) => { t = ms; } };
-  const show = screen({ repo: 'o/r', pollSec: undefined, columns: undefined, stream: new PassThrough(), now: clock.now, ...opts });
+  const show = screen({ repo: 'o/r', columns: undefined, stream: new PassThrough(), now: clock.now, ...opts });
   return { show, clock };
 }
 
@@ -249,7 +249,7 @@ describe('colours', () => {
   }
 
   const tagOf = (depth, n, stream = fakeStream(depth)) =>
-    screen({ repo: 'o/r', pollSec: undefined, columns: 100, stream })(T, `#${n} implement started`);
+    screen({ repo: 'o/r', columns: 100, stream })(T, `#${n} implement started`);
   const code256 = (s) => s.match(/\u001b\[38;5;(\d+)m#\d+/)?.[1];
 
   // Hard to read on a dark background, or the same as a line tone (cyan, green, yellow, red).
@@ -290,7 +290,7 @@ describe('colours', () => {
 describe('aligned columns', () => {
   const T = '23:45:47';
 
-  const setup = (columns) => screen({ repo: 'o/r', pollSec: undefined, columns, stream: new PassThrough(), now: () => 0 }).bind(null, T);
+  const setup = (columns) => screen({ repo: 'o/r', columns, stream: new PassThrough(), now: () => 0 }).bind(null, T);
 
   // Where each " · " starts in a line.
   const dots = (line) => [...line.matchAll(/ · /g)].map((m) => m.index);
@@ -430,7 +430,7 @@ describe('durations', () => {
   function setup(columns) {
     let t = 0;
     const clock = { now: () => t, set: (ms) => { t = ms; } };
-    const show = screen({ repo: 'o/r', pollSec: undefined, columns, stream: new PassThrough(), now: clock.now });
+    const show = screen({ repo: 'o/r', columns, stream: new PassThrough(), now: clock.now });
     return { show, clock };
   }
 
@@ -471,7 +471,7 @@ describe('start line title', () => {
 
   function setup() {
     let t = 0;
-    const show = screen({ repo: 'o/r', pollSec: undefined, columns: undefined, stream: new PassThrough(), now: () => t });
+    const show = screen({ repo: 'o/r', columns: undefined, stream: new PassThrough(), now: () => t });
     return { show, set: (ms) => { t = ms; } };
   }
 
