@@ -12,7 +12,6 @@ Two hard guarantees:
 The factory has no dependencies: Node's standard library, `gh`, `git`, `bwrap` and `claude`. There is nothing to `npm install` to run it; `npm ci` only adds the tools for working on it (lint, type check).
 
 ## A day with the factory
-
 ```mermaid
 flowchart TD
   write["You write issues and label them"]:::you --> start["You start the factory and do something else"]:::you
@@ -34,14 +33,12 @@ Blue is you, grey is the factory, orange is a stop.
 ![The factory's terminal during an implement run: one line per agent session, with turns, time, tokens and cost](docs/img/terminal-run.png)
 
 ## Trust model
-
 - **Trusted:** the base commit GitHub reports, your review, and the confinement.
 - **Assumed hostile:** issue text, agent output, and branch code until the checks pass.
 - Treat issue text as untrusted input: it goes into every prompt.
 - Only labels and comments by you count; anyone else's are ignored.
 
 ## ⚠ Risks you accept
-
 - ⚠ Agents run Claude Code with your login (`~/.claude`) and spend your Claude plan.
 - ⚠ After a push, unchanged CI workflows run the branch's code on GitHub's machines.
 - ⚠ With `autoMerge`, auto-merged code reaches the base branch before you read it. Read the merged pull requests afterwards and revert what you do not like.
@@ -52,7 +49,6 @@ Blue is you, grey is the factory, orange is a stop.
 What the factory does about it: see *Confinement and brakes* below. To report a way out of the confinement, see [`SECURITY.md`](SECURITY.md).
 
 ## Getting started
-
 You need:
 - **Linux with `bwrap`** (bubblewrap), with unprivileged user namespaces allowed. `bwrap --ro-bind / / --dev /dev true` must succeed.
 - **`socat`**, which Claude Code's sandbox needs on Linux next to `bwrap` (see its docs). Without it every agent session fails; `npm run smoke` shows it.
@@ -86,7 +82,6 @@ Then:
 6. Day to day: write an issue as clearly as for a colleague, add `agent:implement` (or `agent:explore` when unsure), and do something else. It ends in a pull request (`agent:done`) or a stop (`agent:needs-human`, with a comment saying why).
 
 ## Use
-
 ```sh
 npm start                          # the only target, when there is just one
 npm start -- my-app                # one factory per target; several can run side by side
@@ -98,7 +93,6 @@ npm run start:local my-app         # agents on a local model instead of Claude (
 - **Ctrl-C again** kills them at once. Their commits are kept and resume on the next start; uncommitted changes stop the issue.
 
 ## Labels
-
 You set one of these. Only labels **you** applied count.
 
 | Label | On | What happens |
@@ -119,7 +113,6 @@ The factory sets these:
 Comments you write on a labelled issue or pull request are instructions for the agent's next run, its review and its fix step. The factory's own comments start with 🏭 and are not passed on as requests.
 
 ## How a run works
-
 ```mermaid
 flowchart TD
   start["Merge the base branch in, run setup"]:::factory --> gate["Gate: how clear is the issue, 0 to 100?"]:::factory
@@ -163,7 +156,6 @@ flowchart TD
 - **Brakes:** what stops a push or makes the pull request a draft is under *Confinement and brakes*.
 
 ## When it stops (`agent:needs-human`)
-
 | The comment says | What to do |
 |---|---|
 | not clear enough to build without guessing | Answer the questions in a comment, remove the label. |
@@ -185,7 +177,6 @@ flowchart TD
 Nothing is ever retried on its own. In the terminal, a stop is a ⏸ `parked:` line.
 
 ## Targets
-
 One file per repo in `targets/`, on top of the shared defaults in `config.mjs` and your `local.mjs`:
 
 | Field | Example (a web app) |
@@ -220,7 +211,6 @@ They are not filled in anywhere else, not even in `setup` and `checks` arguments
 To add a repo, follow *Getting started*. Missing `agent:*` labels are created on the first start, with their colours.
 
 ## Settings you change
-
 `config.mjs` holds the shared defaults. Change them in `local.mjs` (for every target) or in a target file (for one).
 
 | Key | Default | What |
@@ -239,7 +229,6 @@ To add a repo, follow *Getting started*. Missing `agent:*` labels are created on
 | `maxBudgetUsd` | `null` | what one agent session may spend, by Claude Code's own estimate; `null` means no cap |
 
 ## Confinement and brakes
-
 - ✅ **Agents** run in Claude Code's sandbox: no network, no `git push`, no `gh`, no web tools, writes only in their worktree.
 - ✅ **What agents can read**, all of it in one place: their worktree; the target's run folder `runs/<target>/` (its clone, the other worktrees and the logs), never the factory folder, which holds every target's; the `runtimeRead` and `sandboxRead` folders; the factory's `skills/` folder, read-only. Claude Code itself reads your login in `~/.claude`. The rest of the home folder is hidden.
 - ✅ Agents get only an allowlisted environment: no tokens, API keys or agent sockets.
@@ -251,17 +240,15 @@ To add a repo, follow *Getting started*. Missing `agent:*` labels are created on
 What stays outside: see *⚠ Risks you accept* above.
 
 ## Startup warnings
-
 - `` warning: `spec/` is in targets/<name>.mjs but not on main — update the target file `` — the target file no longer matches the repo; a protection or test folder does nothing until you fix it.
+- `` warning: setup runs with the full network: set `setupHosts` in targets/<name>.mjs to the hosts it needs (ADR 0008) `` — the target has `setup` but no `setupHosts`, so setup can reach any host until you list the ones it needs.
 
 ## Statistics
-
 `npm run stats` prints, for every target in `targets/`, the factory's pull requests (opened, merged, closed unmerged, still open), how many were auto-merged and reverted, its review load, and its stops grouped by reason; a reason without a label shows as `other:`. It only reads from GitHub. `npm run stats -- <target> --since 2026-11-01` prints one target, counting only pull requests opened and comments made on or after that day. The review load is how often you stepped in per merged pull request (each `🏭 **Rework**` comment and each stop on the pull request or its issue, whenever made) and the median time from opened to merged, for example `review load: 0.8 reworks or stops per merged PR · median 14h to merge`; with `--since` it covers merged pull requests opened on or after that day, and it shows `-` when none were merged. The gate section groups closed factory pull requests by the `gate confidence N` in their footer (70–79, 80–89, 90+, and `other` for no footer or below 70) into merged without rework, merged after rework and closed unmerged, then counts the gate's "not clear enough" stops. A target that cannot be read prints `<target>: could not read stats: <reason>` and the exit code is 1.
 
 ![The output of npm run stats for one target: pull requests opened and merged, and stops by reason](docs/img/stats.png)
 
 ## Resolve stops
-
 The `factory-resolve-stops` Claude Code skill walks you through the stops. It ships with this repo in `factory-resolve-stops/`. Start it in any Claude Code session with `/factory-resolve-stops`, or ask in words: "resolve stops", "factory inbox", "answer the factory", "what is the factory waiting for". Install it once:
 
 1. From this folder, `ln -s "$PWD/factory-resolve-stops" ~/.claude/skills/factory-resolve-stops`, so it lives at `~/.claude/skills/factory-resolve-stops/SKILL.md`. Link `factory-approve-issues` the same way; it shares these settings.
@@ -273,7 +260,6 @@ The `factory-resolve-stops` Claude Code skill walks you through the stops. It sh
 - Nothing is posted, labelled or committed until you approve that one item (approve / edit / skip). `/factory-approve-issues` ("what can the factory build next") works the same way on the open issues nothing holds back, as `node ready.mjs [<target> | --current]` lists them, and recommends implement, explore, sharpen first, leave or close for each.
 
 ## Files
-
 - `config.mjs` — shared defaults (see *Settings you change*), labels.
 - `local.mjs` — your own settings over those defaults (not in git).
 - `targets/` — one settings file per repo.
@@ -283,7 +269,6 @@ The `factory-resolve-stops` Claude Code skill walks you through the stops. It sh
 - `runs/<target>/` — the agents' clone (`repo/`), the factory's own clone (`upstream.git/`), per-issue worktrees and logs, and its lock (not in git).
 
 ## Testing the factory
-
 ```sh
 npm test                           # unit and behaviour tests; no network or logins needed
 npm run smoke                      # proves an agent cannot escape its worktree; runs one real agent session (uses your Claude plan)
@@ -292,9 +277,7 @@ npm run smoke:skills               # proves agents can use the factory's skills/
 ```
 
 ## License
-
 MIT, see [`LICENSE`](LICENSE).
 
 ## History
-
 Design notes and plans are in [`docs/superpowers/`](docs/superpowers/); how releases work is in [`docs/releasing.md`](docs/releasing.md).
