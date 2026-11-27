@@ -85,6 +85,7 @@ export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) 
     /** @param {number} n @param {string} body @param {{ by?: string, path?: string }} [opts] */
     comment(n, body, { by = OWNER, path } = {}) { change((s) => { s.items.find((x) => x.number === n).comments.push({ author: by, body, at: now(), ...(path ? { path } : {}) }); }); },
     slowLists(ms) { change((s) => { s.listDelayMs = ms; }); }, // the fake gh waits this long after each list call
+    block(n, by) { change((s) => { const i = s.items.find((x) => x.number === n); i.blockedBy = [...(i.blockedBy ?? []), by]; }); }, // a blocked-by link
     closeIssue(n) { change((s) => { s.items.find((x) => x.number === n).state = 'CLOSED'; }); },
     merge(n) { change((s) => { s.items.find((x) => x.number === n).state = 'MERGED'; }); },
     state: readGh,

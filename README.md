@@ -142,7 +142,7 @@ flowchart TD
   classDef stop fill:#f0883e,stroke:#b35900,color:#ffffff
 ```
 
-- **Polling:** every `pollSec` it lists labelled issues and pull requests, oldest first, and runs up to `maxParallel` at a time. An issue that lists issues under `## Depends on`, one `- #<n>` each, waits until all of them are closed; the terminal says once what it waits for (`#160 waits for #151, #152`).
+- **Polling:** every `pollSec` it lists labelled issues and pull requests, oldest first, and runs up to `maxParallel` at a time. An issue that lists issues under `## Depends on`, one `- #<n>` each, or is blocked by open issues in GitHub's *Relationships* (blocked-by links), waits until all of them are closed; the terminal says once what it waits for (`#160 waits for #151, #152`).
 - **Conflicts:** its own unlabelled pull requests (`factory/issue-<n>`, opened by you) that conflict get a `merge` run, as with `agent:merge`.
 - **Worktree:** one per issue, `runs/<target>/worktrees/issue-<n>`, shared by its pull request; the base is merged in (never rebased) before `explore` and `implement`, and it is removed when the issue or pull request closes.
 - **Setup** runs confined, with network, before each run's first session, since agents have no network.

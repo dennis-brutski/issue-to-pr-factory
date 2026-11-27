@@ -98,17 +98,26 @@ describe('depends on', () => {
   const body = 'Do it.\n\n## Depends on\n\n- #151\n- #152\n\n## Out of scope\n\n- #153\n';
 
   test('an issue that depends on an open issue is skipped and says what it waits for', () =>
-    assert.deepEqual(classify(waiting(body), config, [151, 200]), { action: 'skip', reason: 'waits for #151', waitsFor: [151] }));
+    assert.deepEqual(classify(waiting(body), config, [151, 200]), { action: 'skip', reason: 'waits for #151', waitsFor: ['#151'] }));
   test('once the issues it depends on are closed it runs', () =>
     assert.deepEqual(classify(waiting(body), config, [153, 200]), { action: 'run', stage: 'implement' }));
   test('it names every open issue it waits for', () =>
-    assert.deepEqual(classify(waiting(body), config, [151, 152]).waitsFor, [151, 152]));
+    assert.deepEqual(classify(waiting(body), config, [151, 152]).waitsFor, ['#151', '#152']));
   test('lines that are not "- #n" under the heading are ignored', () =>
     assert.equal(classify(waiting('## Depends on\n\n- #151 first\n- other/repo#152\nsee #153\n- 154\n'), config, [151, 152, 153, 154]).action, 'run'));
   test('without the open issues it cannot tell, so an issue with dependencies waits', () =>
-    assert.deepEqual(classify(waiting(body), config).waitsFor, [151, 152]));
+    assert.deepEqual(classify(waiting(body), config).waitsFor, ['#151', '#152']));
   test('without the open issues an issue with no dependencies still runs', () =>
     assert.equal(classify(waiting('Do it.'), config).action, 'run'));
+  const linked = (blockedBy, body = 'Do it.') => ({ ...waiting(body), blockedBy });
+  test('an open blocked-by link makes the issue wait', () =>
+    assert.equal(classify(linked([{ number: 12, repo: config.repo, open: true }]), config, [12]).reason, 'waits for #12'));
+  test('a closed blocked-by link does not', () =>
+    assert.equal(classify(linked([{ number: 12, repo: config.repo, open: false }]), config, []).action, 'run'));
+  test('a blocker in another repo is named with its repo', () =>
+    assert.equal(classify(linked([{ number: 3, repo: 'o/other', open: true }]), config, []).reason, 'waits for o/other#3'));
+  test('an issue listed under Depends on and linked is named once', () =>
+    assert.deepEqual(classify(linked([{ number: 151, repo: config.repo, open: true }], '## Depends on\n- #151\n'), config, [151]).waitsFor, ['#151']));
   test('an issue never waits for itself', () =>
     assert.equal(classify(waiting('## Depends on\n- #160\n'), config, [160]).action, 'run'));
   test('a pull request does not wait', () =>

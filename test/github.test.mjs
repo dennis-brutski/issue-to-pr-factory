@@ -100,3 +100,13 @@ describe('pages', () => {
     assert.deepEqual(items.map((i) => [i.kind, i.number]), [['issue', 1]]);
   });
 });
+
+test('toItems carries the blocked-by links of an issue', () => {
+  const issue = { number: 5, title: 't', body: '', blockedBy: { nodes: [
+    { number: 12, state: 'OPEN', repository: { nameWithOwner: 'o/r' } }, null,
+    { number: 3, state: 'CLOSED', repository: { nameWithOwner: 'o/other' } }] } };
+  const [item] = toItems({ data: { repository: { issues: { nodes: [issue] } } } });
+  assert.deepEqual(item.blockedBy, [{ number: 12, repo: 'o/r', open: true }, { number: 3, repo: 'o/other', open: false }]);
+});
+test('an item without blocked-by links has none', () =>
+  assert.deepEqual(toItems(fixture).find((i) => i.number === 1).blockedBy, []));
