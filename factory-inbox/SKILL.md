@@ -37,6 +37,7 @@ Say how many there are and in which repos, then take them one at a time.
 
 Each stop has `number`, `kind` (`issue` or `pr`), `title`, `url`, and:
 
+- **`body`**: what the issue or pull request asks for.
 - **`stop`**: the newest comment by `<owner>` starting with `🏭 **Factory stopped` or
   `🏭 **Factory did not start`. `null` means the label was set by hand: say so.
 - **`answers`**: the owner's later comments that do not start with 🏭.

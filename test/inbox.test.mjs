@@ -10,7 +10,7 @@ const cfg = { ...config, target: 'web', repo: 'me/web', runDir: '/f/runs/web' };
 const at = (h) => `2026-11-01T${String(h).padStart(2, '0')}:00:00Z`;
 const says = (body, h, author = OWNER) => ({ author, body, at: at(h) });
 const STOP = stopped('implement', 'A check failed.', 'agent:needs-human');
-const item = (number, comments = [], o = {}) => ({ number, kind: 'issue', title: `Item ${number}`, labels: ['agent:needs-human'],
+const item = (number, comments = [], o = {}) => ({ number, kind: 'issue', title: `Item ${number}`, body: `Body ${number}`, labels: ['agent:needs-human'],
   comments, headRef: null, ...o });
 
 test('the stop is the newest stop comment by the owner; the answers are the owner\'s later own comments', () => {
@@ -45,8 +45,16 @@ test('inboxOf: only agent:needs-human items, oldest stop first, hand-set labels 
   ];
   const exists = (p) => p.endsWith('issue-9');
   assert.deepEqual(inboxOf(items, cfg, exists), [
-    { number: 2, kind: 'pr', title: 'Item 2', url: 'https://github.com/me/web/pull/2', stop: STOP, answers: [], worktree: '/f/runs/web/worktrees/issue-9' },
-    { number: 1, kind: 'issue', title: 'Item 1', url: 'https://github.com/me/web/issues/1', stop: STOP, answers: [], worktree: null },
-    { number: 4, kind: 'issue', title: 'Item 4', url: 'https://github.com/me/web/issues/4', stop: null, answers: ['hand'], worktree: null },
+    { number: 2, kind: 'pr', title: 'Item 2', url: 'https://github.com/me/web/pull/2', body: 'Body 2',
+      stop: STOP, answers: [], worktree: '/f/runs/web/worktrees/issue-9' },
+    { number: 1, kind: 'issue', title: 'Item 1', url: 'https://github.com/me/web/issues/1', body: 'Body 1',
+      stop: STOP, answers: [], worktree: null },
+    { number: 4, kind: 'issue', title: 'Item 4', url: 'https://github.com/me/web/issues/4', body: 'Body 4',
+      stop: null, answers: ['hand'], worktree: null },
   ]);
+});
+
+test('inboxOf: each stop carries what the issue or pull request asks for', () => {
+  const [s] = inboxOf([item(5, [says(STOP, 1)], { body: 'Make the button blue.' })], cfg, () => false);
+  assert.equal(s.body, 'Make the button blue.');
 });

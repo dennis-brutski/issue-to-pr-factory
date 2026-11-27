@@ -9,7 +9,7 @@ import { chooseTargets } from './lib/settings.mjs';
 import { inboxOf } from './lib/inbox.mjs';
 import { run } from './lib/exec.mjs';
 
-/** @typedef {{ number: number, kind: string, title: string, url: string, stop: string | null, answers: string[], worktree: string | null }} Stop */
+/** @typedef {{ number: number, kind: string, title: string, url: string, body: string, stop: string | null, answers: string[], worktree: string | null }} Stop */
 /** @typedef {{ target: string, repo?: string, stops?: Stop[], error?: string }} Report */
 
 /**

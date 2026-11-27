@@ -18,7 +18,7 @@ function root(targets) {
   return r;
 }
 const STOP = stopped('implement', 'A check failed.', 'agent:needs-human');
-const item = (number, o = {}) => ({ number, kind: 'issue', title: `Item ${number}`, labels: ['agent:needs-human'], headRef: null,
+const item = (number, o = {}) => ({ number, kind: 'issue', title: `Item ${number}`, body: `Body ${number}`, labels: ['agent:needs-human'], headRef: null,
   comments: [{ author: 'me', body: STOP, at: '2026-11-01T10:00:00Z' }], ...o });
 const fakeGh = (byRepo) => ({
   listCandidates: async (cfg) => {
@@ -36,7 +36,7 @@ test('every target: its stops, with the worktree when it exists', async () => {
   assert.equal(ok, true);
   assert.deepEqual(report, [
     { target: 'one', repo: 'me/one', stops: [{ number: 1, kind: 'issue', title: 'Item 1', url: 'https://github.com/me/one/issues/1',
-      stop: STOP, answers: [], worktree: join(r, 'runs', 'one', 'worktrees', 'issue-1') }] },
+      body: 'Body 1', stop: STOP, answers: [], worktree: join(r, 'runs', 'one', 'worktrees', 'issue-1') }] },
     { target: 'two', repo: 'me/two', stops: [] },
   ]);
 });
