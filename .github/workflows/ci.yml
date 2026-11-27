@@ -10,7 +10,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     outputs:
-      lines: ${{ steps.test.outputs.lines }}
+      branches: ${{ steps.test.outputs.branches }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -23,8 +23,8 @@ jobs:
         shell: bash # pipefail: a failing test still fails the step
         run: |
           npm test 2>&1 | tee test-output.txt
-          echo "lines=$(awk -F'|' '/^ℹ all files +\|/ { gsub(/ /, "", $2); print $2; exit }' test-output.txt)" >> "$GITHUB_OUTPUT"
-  # Publishes the line coverage for the README badge as the only commit of the badges branch.
+          echo "branches=$(awk -F'|' '/^ℹ all files +\|/ { gsub(/ /, "", $3); print $3; exit }' test-output.txt)" >> "$GITHUB_OUTPUT"
+  # Publishes the branch coverage for the README badge as the only commit of the badges branch.
   badge:
     needs: check
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -36,12 +36,12 @@ jobs:
     steps:
       - shell: bash
         env:
-          LINES: ${{ needs.check.outputs.lines }}
+          BRANCHES: ${{ needs.check.outputs.branches }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          [[ "$LINES" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "Line coverage is not a number: '$LINES'"; exit 1; }
+          [[ "$BRANCHES" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "Branch coverage is not a number: '$BRANCHES'"; exit 1; }
           git init -q -b badges badges && cd badges
           git config user.name CI && git config user.email ci@example.invalid
-          printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"brightgreen"}\n' "$LINES" > coverage.json
-          git add coverage.json && git commit -q -m "Coverage $LINES%"
+          printf '{"schemaVersion":1,"label":"branch coverage","message":"%s%%","color":"brightgreen"}\n' "$BRANCHES" > coverage.json
+          git add coverage.json && git commit -q -m "Branch coverage $BRANCHES%"
           git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" badges
