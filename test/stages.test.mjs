@@ -770,6 +770,34 @@ describe('automerge', () => {
     assert.equal(r.outcome, 'done', r.detail);
     assert.deepEqual(x.calls, []);
   });
+
+  // Rework and merge runs push changes nobody read yet: auto-merge must be off before they push.
+  const pushing = (x, { disableFails = false } = {}) => {
+    x.d.gh.disableAutoMerge = async (c, n) => { x.calls.push(['disable', n]); if (disableFails) throw new Error('gh pr merge failed: boom'); };
+    x.d.ws.push = async () => { x.calls.push(['push']); };
+    return x;
+  };
+  for (const [stage, item, sessions] of [['review', pullRequestItem, [work]], ['merge', { ...pullRequestItem, labels: ['agent:merge'] }, []]]) {
+    test(`a ${stage} run turns auto-merge off before it pushes`, async () => {
+      const x = pushing(deps({ sessions }));
+      const r = await runItem({ ...item, autoMerge: true }, stage, x.d, 4201);
+      assert.equal(r.outcome, 'done', r.detail);
+      assert.deepEqual(x.calls, [['disable', 50], ['push']]);
+    });
+    test(`a ${stage} run goes on when auto-merge was already off`, async () => {
+      const x = pushing(deps({ sessions }));
+      const r = await runItem({ ...item, autoMerge: false }, stage, x.d, 4201);
+      assert.equal(r.outcome, 'done', r.detail);
+      assert.deepEqual(x.calls, [['push']]);
+    });
+    test(`a ${stage} run does not push when auto-merge cannot be turned off`, async () => {
+      const x = pushing(deps({ sessions }), { disableFails: true });
+      const r = await runItem({ ...item, autoMerge: true }, stage, x.d, 4201);
+      assert.equal(r.outcome, 'parked');
+      assert.match(r.detail, /boom/);
+      assert.deepEqual(x.calls, [['disable', 50]]);
+    });
+  }
 });
 
 // The auto-merge rules on their own, without GitHub.
