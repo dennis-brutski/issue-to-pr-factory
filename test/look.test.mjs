@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
-import { look, paint, logLine } from '../lib/look.mjs';
+import { look, paint, logLine, detailTone } from '../lib/look.mjs';
 
 const ESC = '\u001b[';
 const cases = [
@@ -130,4 +130,37 @@ test('a title cannot change the look', () => {
 
 test('text after started that is not a title is not a start line', () => {
   assert.deepEqual(look('#12 implement started later'), { icon: '', tone: 'plain' });
+});
+
+// A run that ends with a draft pull request is done: the line is green, why it is a draft is yellow under it.
+describe('draft pull requests', () => {
+  const DRAFT = '\n          draft: it changes files you should check:\n          - protected file changed: AGENTS.md';
+  for (const stage of ['implement', 'rework', 'merge']) {
+    test(`a ${stage} run with a draft is ✔ green, its draft lines yellow`, () => {
+      const msg = `#12 ${stage} done: https://github.com/o/r/pull/3${DRAFT}`;
+      assert.deepEqual(look(msg), { icon: '✔', tone: 'green' });
+      assert.equal(detailTone(msg), 'yellow');
+    });
+  }
+
+  test('other lines keep their details in the first line\'s tone', () => {
+    assert.equal(detailTone('#12 implement crashed: a\n          b'), 'red');
+    assert.equal(detailTone('#12 rework done: changed it\n          and more'), 'green');
+    assert.equal(detailTone('#12 implement parked: a\n          draft: b'), 'yellow');
+    assert.equal(detailTone('0 eligible'), 'plain');
+  });
+
+  test('logLine with colour: the done line green, the draft lines yellow', () => {
+    const { FORCE_COLOR, NO_COLOR } = process.env;
+    process.env.FORCE_COLOR = '1';
+    delete process.env.NO_COLOR;
+    try {
+      const [first, ...rest] = logLine('12:00:00', `#12 implement done: https://github.com/o/r/pull/3${DRAFT}`, notTerminal()).split('\n');
+      assert.ok(first.includes(`${ESC}32m`), JSON.stringify(first));
+      for (const line of rest) assert.ok(line.startsWith(`${ESC}33m`), JSON.stringify(line));
+    } finally {
+      if (FORCE_COLOR === undefined) delete process.env.FORCE_COLOR; else process.env.FORCE_COLOR = FORCE_COLOR;
+      if (NO_COLOR !== undefined) process.env.NO_COLOR = NO_COLOR;
+    }
+  });
 });
