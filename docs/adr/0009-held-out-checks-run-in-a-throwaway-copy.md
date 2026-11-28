@@ -8,7 +8,9 @@ Held-out checks run tests that agents never see, kept in `heldOutDir` outside th
 
 ## Decision
 
-- Before the held-out checks, the factory copies the worktree, ignored files included (`node_modules`, `.venv`, …), into a new folder in the system temp folder, outside the run folder: `cp -a --reflink=auto`. That is a reflink where the filesystem has one and a plain copy where it does not. `cp` runs confined: no network, home hidden, writes only to the copy (`inCopy` in `lib/workspace.mjs`).
+- Before the held-out checks, the factory copies the worktree, ignored files included (`node_modules`, `.venv`, …), into a new folder in the copies folder next to the run folder (`runs/.<target>-copies` for the default `runs/<target>`): `cp -a --reflink=auto`. That is a reflink where the filesystem has one and a plain copy where it does not. `cp` runs confined: no network, home hidden, writes only to the copy (`inCopy` in `lib/workspace.mjs`).
+- The copies folder is the factory's own, never the system temp folder: agent sessions may read `/tmp`, and with `maxParallel` above 1 another issue's session runs while the held-out checks do. Agent sessions see none of the home folder but the run folder, so a folder next to it is hidden from them, as long as the run folder is in the home folder (a `runDir` elsewhere loses this). It has mode 0700, because `cp -a` gives the copy itself the worktree's mode.
+- At startup, holding the run folder's lock, the factory deletes the `factory-copy-*` folders a killed run left there (SIGKILL, a crash, power loss), before any agent session starts.
 - Never a hardlink copy (`cp -al`): a write to an existing file would reach the original.
 - bwrap binds the copy at the worktree's own path, so absolute paths (venv shebangs, config files) still resolve. The copy's `.git` file is bound read-only there, the clone's git data read-only and `heldOutDir` read-only, as before.
 - After the held-out checks, pass, fail or throw, the copy is deleted. Folders the checks made unwritable are made writable first.
@@ -18,4 +20,4 @@ Considered and not taken: a read-only worktree with writable folders listed per 
 
 ## Consequences
 
-Held-out checks may write anything in the copy: test results, caches, coverage. None of it reaches the worktree, so the next agent session never sees the held-out tests or anything made from them. That is why auto-merge can trust them: the code they passed was not tuned to them. Each held-out run costs a copy of the worktree, near zero with reflinks and up to some seconds for a large `node_modules` without them. Do not run held-out checks in the worktree itself, and do not make the copy with hardlinks.
+Held-out checks may write anything in the copy: test results, caches, coverage. None of it reaches the worktree, and no agent session can read the copy while it exists or find it after a crash, so the next agent session never sees the held-out tests or anything made from them. That is why auto-merge can trust them: the code they passed was not tuned to them. Each held-out run costs a copy of the worktree, near zero with reflinks and up to some seconds for a large `node_modules` without them. Do not run held-out checks in the worktree itself, and do not make the copy with hardlinks.
