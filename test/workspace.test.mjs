@@ -1,7 +1,7 @@
 import { test, beforeEach, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, readFileSync, existsSync, mkdirSync, rmSync, chmodSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync, readFileSync, existsSync, mkdirSync, rmSync, chmodSync, statSync, readdirSync } from 'node:fs';
+import { join, dirname, basename } from 'node:path';
 import { run } from '../lib/exec.mjs';
 import { workspace } from '../lib/workspace.mjs';
 import * as ws from '../lib/workspace.mjs';
@@ -877,10 +877,18 @@ describe('tests on the base', () => {
     await git(join(root, 'repo'), 'config', 'credential.helper', '!touch /tmp/pwned');
     await assert.rejects(() => h.testsOnBase(dir, sha, ['test/'], async () => {}), /credential\.helper/);
   });
+  test('the handle makes the copy in a folder of its own next to the run folder, not in the system temp folder', async () => {
+    const h = workspace({ root, url: origin, base: 'master' });
+    const parent = await h.inCopy(dir, async (copy) => dirname(copy));
+    assert.equal(parent, ws.copiesOf(root));
+    assert.equal(parent, join(dirname(root), `.${basename(root)}-copies`));
+  });
 });
 
 // Held-out checks run in a throwaway copy of the worktree (ADR 0009).
 describe('throwaway copy', () => {
+  let copies;
+  beforeEach(() => { copies = join(tempDir('factory-copies-'), 'copies'); });
   const worktree = () => {
     const dir = tempDir('factory-copy-');
     writeFileSync(join(dir, 'a.txt'), 'one\n');
@@ -896,7 +904,7 @@ describe('throwaway copy', () => {
       writeFileSync(join(copy, 'a.txt'), 'two\n');
       writeFileSync(join(copy, 'node_modules', 'dep', 'index.js'), 'z\n');
       return { copy, files };
-    });
+    }, copies);
     assert.notEqual(seen.copy, dir);
     assert.deepEqual(seen.files, ['one\n', 'dep\n']);
     assert.equal(readFileSync(join(dir, 'a.txt'), 'utf8'), 'one\n');
@@ -904,17 +912,44 @@ describe('throwaway copy', () => {
   });
   test('the copy is gone after the checks pass', async () => {
     let copy;
-    assert.equal(await ws.inCopy(worktree(), async (c) => { copy = c; return 'passed'; }), 'passed');
+    assert.equal(await ws.inCopy(worktree(), async (c) => { copy = c; return 'passed'; }, copies), 'passed');
     assert.ok(!existsSync(copy));
   });
   test('the copy is gone after the checks fail or throw', async () => {
     let copy;
-    await assert.rejects(ws.inCopy(worktree(), async (c) => { copy = c; throw new Error('boom'); }), /boom/);
+    await assert.rejects(ws.inCopy(worktree(), async (c) => { copy = c; throw new Error('boom'); }, copies), /boom/);
     assert.ok(!existsSync(copy));
   });
   test('the copy is gone even when the checks left a folder without write permission', async () => {
     let copy;
-    await ws.inCopy(worktree(), async (c) => { copy = c; mkdirSync(join(c, 'locked')); writeFileSync(join(c, 'locked', 'f'), 'x'); chmodSync(join(c, 'locked'), 0o500); });
+    await ws.inCopy(worktree(), async (c) => { copy = c; mkdirSync(join(c, 'locked')); writeFileSync(join(c, 'locked', 'f'), 'x'); chmodSync(join(c, 'locked'), 0o500); }, copies);
     assert.ok(!existsSync(copy));
+  });
+  test('the copies folder is only for the factory: mode 0700, whatever mode the worktree has', async () => {
+    const dir = worktree();
+    chmodSync(dir, 0o755);
+    const seen = await ws.inCopy(dir, async (copy) => ({ parent: dirname(copy), mode: statSync(copies).mode & 0o777 }), copies);
+    assert.equal(seen.parent, copies);
+    assert.equal(seen.mode, 0o700);
+  });
+  test('an existing copies folder that others can read is closed again', async () => {
+    mkdirSync(copies, { mode: 0o755 });
+    chmodSync(copies, 0o755);
+    const mode = await ws.inCopy(worktree(), async () => statSync(copies).mode & 0o777, copies);
+    assert.equal(mode, 0o700);
+  });
+  test('removeLeftoverCopies deletes the copies a killed factory left, and nothing else', async () => {
+    mkdirSync(join(copies, 'factory-copy-old', 'node_modules', '.cache', 'x'), { recursive: true });
+    writeFileSync(join(copies, 'factory-copy-old', 'node_modules', '.cache', 'x', 'held.test.mjs'), 'secret\n');
+    mkdirSync(join(copies, 'factory-copy-locked', 'ro'), { recursive: true });
+    writeFileSync(join(copies, 'factory-copy-locked', 'ro', 'f'), 'x');
+    chmodSync(join(copies, 'factory-copy-locked', 'ro'), 0o500);
+    writeFileSync(join(copies, 'notes.txt'), 'keep\n');
+    ws.removeLeftoverCopies(copies);
+    assert.deepEqual(readdirSync(copies), ['notes.txt']);
+  });
+  test('removeLeftoverCopies does nothing when there is no copies folder', () => {
+    ws.removeLeftoverCopies(join(copies, 'missing'));
+    assert.ok(!existsSync(join(copies, 'missing')));
   });
 });

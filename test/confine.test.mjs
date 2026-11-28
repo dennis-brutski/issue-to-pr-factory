@@ -344,7 +344,7 @@ async function repoWithIgnored() {
   await git('add', '-A'); await git('commit', '-q', '-m', 'init');
   return { dir, git };
 }
-const heldOutCfg = (step) => ({ ...config, runDir: '/nonexistent-run-dir', heldOutDir: tempDir('held-'), checks: [], heldOutChecks: [['sh', ['-c', step]]] });
+const heldOutCfg = (step) => ({ ...config, runDir: join(tempDir('run-'), 'run'), heldOutDir: tempDir('held-'), checks: [], heldOutChecks: [['sh', ['-c', step]]] });
 test('held-out checks that write ignored and tracked files leave the worktree unchanged', real, async () => {
   const { dir, git } = await repoWithIgnored();
   const step = 'mkdir -p node_modules/.cache/x && cp -r {heldOut} node_modules/.cache/x/ && echo two > a.txt && echo z > node_modules/dep/index.js && echo n > new.txt';
