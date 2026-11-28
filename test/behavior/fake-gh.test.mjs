@@ -163,6 +163,34 @@ describe('gh commands', () => {
       [[2, 'pr', 'factory/issue-2', 'CONFLICTING'], [3, 'pr', 'factory/issue-3', 'MERGEABLE']]);
     assert.equal((await gh.listCandidates(cfg)).find((i) => i.number === 3).mergeable, null);
   });
+  test('listPullRequests gives each pull request its url, auto-merge and CI result with the failed run', async () => {
+    const s = state();
+    const pr = (number, o = {}) => ({ number, kind: 'pr', title: 't', body: 'b', author: 'dennis-brutski', state: 'OPEN', labels: [], labelEvents: [],
+      comments: [], headRefName: `factory/issue-${number}`, headRepo: 'dennis-brutski/demo', ...o });
+    s.items.push(pr(2, { autoMerge: 'squash', ci: { state: 'FAILURE', failedUrl: 'https://github.com/dennis-brutski/demo/actions/runs/7' } }),
+      pr(3, { ci: { state: 'PENDING' } }), pr(4));
+    write(s);
+    const items = await gh.listPullRequests(cfg);
+    assert.deepEqual(items.map((i) => [i.number, i.url, i.autoMerge, i.ci]), [
+      [2, 'https://github.com/dennis-brutski/demo/pull/2', true, { state: 'FAILURE', failedUrl: 'https://github.com/dennis-brutski/demo/actions/runs/7' }],
+      [3, 'https://github.com/dennis-brutski/demo/pull/3', false, { state: 'PENDING', failedUrl: null }],
+      [4, 'https://github.com/dennis-brutski/demo/pull/4', false, null],
+    ]);
+  });
+  test('listCandidates says whether auto-merge is on for a labelled pull request', async () => {
+    const s = state();
+    s.items.push({ number: 2, kind: 'pr', title: 't', body: 'b', author: 'dennis-brutski', state: 'OPEN', labels: ['agent:review'], labelEvents: [],
+      comments: [], headRefName: 'factory/issue-2', headRepo: 'dennis-brutski/demo', autoMerge: 'squash' });
+    write(s);
+    assert.equal((await gh.listCandidates(cfg)).find((i) => i.number === 2).autoMerge, true);
+  });
+  test('disableAutoMerge turns auto-merge off', async () => {
+    await gh.openPullRequest(cfg, { branch: 'factory/issue-1', title: 't', body: 'b', draft: false });
+    await gh.autoMerge(cfg, 2);
+    await gh.disableAutoMerge(cfg, 2);
+    assert.deepEqual(state().calls.at(-1), ['pr', 'merge', '2', '--repo', 'dennis-brutski/demo', '--disable-auto']);
+    assert.equal(state().items.find((i) => i.number === 2).autoMerge, undefined);
+  });
 });
 
 // The fake gh pages GraphQL results like GitHub does; checked against the real adapter.

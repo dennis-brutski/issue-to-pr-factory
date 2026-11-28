@@ -63,6 +63,10 @@ try {
         reviews: { nodes: [] },
         reviewThreads: { nodes: i.comments.filter((c) => c.path).map((c) => ({ comments: { nodes: [{ author: actor(c.author), body: c.body, path: c.path, createdAt: c.at }] } })) },
         ...(/\bmergeable\b/.test(query) ? { mergeable: i.mergeable ?? 'MERGEABLE' } : {}),
+        ...(/\bautoMergeRequest\b/.test(query) ? { autoMergeRequest: i.autoMerge ? { enabledAt: i.autoMergeAt ?? now() } : null } : {}),
+        // ci: { state, failedUrl }, as the poll reads the head commit's checks; a failed one is one check run.
+        ...(/\bstatusCheckRollup\b/.test(query) ? { url: url(i.headRepo, i.number), commits: { nodes: [{ commit: { statusCheckRollup: i.ci ? { state: i.ci.state,
+          contexts: { nodes: i.ci.failedUrl ? [{ conclusion: 'FAILURE', detailsUrl: i.ci.failedUrl }] : [] } } : null } }] } } : {}),
       } : {}),
     });
     // Pages like GitHub: at most `first:` nodes, starting after the cursor (here: how many came before).
@@ -129,6 +133,8 @@ try {
     const i = item(pos[2]);
     if (s.autoMergeAllowed === false) die('GraphQL: Auto merge is not allowed for this repository (enablePullRequestAutoMerge)');
     i.autoMerge = 'squash';
+  } else if (pos[0] === 'pr' && pos[1] === 'merge' && opt['disable-auto']) {
+    delete item(pos[2]).autoMerge;
   } else if (pos[0] === 'pr' && pos[1] === 'ready') {
     item(pos[2]).isDraft = !!opt.undo;
   } else unsupported();
