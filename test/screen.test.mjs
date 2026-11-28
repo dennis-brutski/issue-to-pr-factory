@@ -605,3 +605,30 @@ describe('waiting line updates', () => {
     assert.equal(show('03:17:29', '0 eligible'), '03:17:29  0 eligible');
   }));
 });
+
+const DECISION = 'This needs your decision: it is not clearly easy to undo and small in reach. To build it anyway, replace `agent:explore` with `agent:implement`.';
+
+test('explore promoted ends with the link to the issue and its write-up', () => noColour(() => {
+  const { show } = setup();
+  assert.equal(show(T, '#41 explore promoted: explore found it safe; queued for implement'),
+    `${T}  #41 │ explore promoted: explore found it safe; queued for implement: https://github.com/o/r/issues/41`);
+}));
+
+test('explore parked on a short decision reason ends with the link to the issue', () => noColour(() => {
+  const { show } = setup();
+  assert.equal(show(T, `#41 explore parked: ${DECISION}`),
+    `${T}  #41 │ ⏸ explore parked: ${DECISION} Write-up: https://github.com/o/r/issues/41`);
+}));
+
+test('explore parked on a decision reason that is cut shows one full text link only', () => noColour(() => {
+  const { show } = setup({ columns: 60 });
+  const out = show(T, `#40 explore parked: ${DECISION} ${'more '.repeat(40)}`).split('\n');
+  assertParkCut(out);
+  assert.equal(out.join('\n').match(/https:/g).length, 1);
+}));
+
+test('other parked stops get no write-up link', () => noColour(() => {
+  const { show } = setup();
+  assert.equal(show(T, '#41 explore parked: The worktree has changes.'), `${T}  #41 │ ⏸ explore parked: The worktree has changes.`);
+  assert.equal(show(T, `#41 implement parked: ${DECISION}`), `${T}  #41 │ ⏸ implement parked: ${DECISION}`);
+}));
