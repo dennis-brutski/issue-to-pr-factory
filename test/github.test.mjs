@@ -110,3 +110,23 @@ test('toItems carries the blocked-by links of an issue', () => {
 });
 test('an item without blocked-by links has none', () =>
   assert.deepEqual(toItems(fixture).find((i) => i.number === 1).blockedBy, []));
+
+test('toItems gives a pull request its url, whether auto-merge is on and its CI result with the failed run', () => {
+  const rollup = (state, contexts = []) => ({ commits: { nodes: [{ commit: { statusCheckRollup: { state, contexts: { nodes: contexts } } } }] } });
+  const items = toItems({ data: { repository: { issues: { nodes: [node(1)] }, pullRequests: { nodes: [
+    node(2, { url: 'https://github.com/o/r/pull/2', autoMergeRequest: { enabledAt: '2026-11-01T10:00:00Z' },
+      ...rollup('FAILURE', [{ conclusion: 'SUCCESS', detailsUrl: 'https://ci/ok' }, null, { conclusion: 'FAILURE', detailsUrl: 'https://ci/run/7' }]) }),
+    node(3, { url: 'https://github.com/o/r/pull/3', autoMergeRequest: null, ...rollup('ERROR', [{ state: 'ERROR', targetUrl: 'https://ci/status/8' }]) }),
+    node(4, { url: 'https://github.com/o/r/pull/4', ...rollup('FAILURE') }),
+    node(5, { commits: { nodes: [{ commit: { statusCheckRollup: null } }] } }),
+    node(6),
+  ] } } } });
+  assert.deepEqual(items.map((i) => [i.number, i.url, i.autoMerge, i.ci]), [
+    [1, null, false, null],
+    [2, 'https://github.com/o/r/pull/2', true, { state: 'FAILURE', failedUrl: 'https://ci/run/7' }],
+    [3, 'https://github.com/o/r/pull/3', false, { state: 'ERROR', failedUrl: 'https://ci/status/8' }],
+    [4, 'https://github.com/o/r/pull/4', false, { state: 'FAILURE', failedUrl: null }],
+    [5, null, false, null],
+    [6, null, false, null],
+  ]);
+});
