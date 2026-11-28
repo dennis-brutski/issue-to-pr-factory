@@ -685,4 +685,16 @@ describe('draft pull requests', () => {
     const out = show(T, `#40 merge done: https://github.com/o/r/pull/3${draft(flags)}`).split('\n');
     assert.equal(out.at(-1), `${PAD}#40 │   full text: https://github.com/o/r/pull/3`);
   }));
+
+  test('on a narrow terminal, a cut draft\'s done line still wraps, as it does without the cut', () => noColour(() => {
+    const { show } = setup({ columns: 50 });
+    const link = 'https://github.com/owner/some-long-repository-name/pull/333';
+    const flags = Array.from({ length: 6 }, (_, i) => `protected file changed: f${i}`);
+    const cut = show(T, `#40 implement done: ${link}${draft(flags)}`).split('\n');
+    const uncut = show(T, `#40 implement done: ${link}${draft(flags.slice(0, 1))}`).split('\n');
+    assert.deepEqual(cut.slice(0, 2), uncut.slice(0, 2));
+    assert.equal(cut[0], `${T}  #40 │ ✔ implement done:`);
+    assert.equal(cut[1], `${PAD}#40 │   ${link}`);
+    assert.equal(cut.at(-1), `${PAD}#40 │   full text: https://github.com/o/r/issues/40`);
+  }));
 });
