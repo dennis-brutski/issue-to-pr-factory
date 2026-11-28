@@ -40,6 +40,8 @@ export function fakeWorkspace(over = {}, root = '/f') {
     push: async () => {},
     preparePush: async () => ({ sha: 'abc', reattached: false }),
     testsOnBase: async (_dir, _sha, _testDirs, _run) => null,
+    inCopy: async (dir, fn) => fn(dir),
+    removeLeftoverCopies: () => {},
     ...over,
   };
 }

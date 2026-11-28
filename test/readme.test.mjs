@@ -256,6 +256,12 @@ describe('screenshots and sentence length', () => {
     assert.match(polling, /`maxParallel`/);
   });
 
+  test('Confinement and brakes says held-out checks run in a throwaway copy', () => {
+    const line = section('Confinement and brakes').split('\n').find((l) => l.includes('**Setup and checks**'));
+    assert.match(line, /Held-out checks run in a throwaway copy of the worktree/);
+    assert.match(line, /ADR 0009/);
+  });
+
   test('the Git itself bullet has two sentences and keeps what it guards', () => {
     const line = section('Confinement and brakes').split('\n').find((l) => l.includes('**Git itself:**'));
     assert.ok(line, 'Git itself line');

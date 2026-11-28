@@ -311,3 +311,52 @@ test('setup with setupHosts null keeps full network and starts no proxy', async 
 test('setupHosts is null by default', () => {
   assert.equal(config.setupHosts, null);
 });
+
+// Held-out checks run in a throwaway copy of the worktree, bound at the worktree's own path (ADR 0009).
+test('a source folder is bound at the worktree path, its .git file read-only, and the run starts there', () => {
+  const copy = tempDir('copy-');
+  writeFileSync(join(copy, '.git'), 'gitdir: /c/.git/worktrees/w\n');
+  const a = bwrapArgs({ dir: '/w', source: copy, gitDir: '/c/.git', home: '/h', network: false });
+  assert.deepEqual(pairs(a, '--bind'), [[copy, '/w']]);
+  assert.deepEqual(pairs(a, '--ro-bind').slice(-1), [[join(copy, '.git'), '/w/.git']]);
+  assert.deepEqual(a.slice(-2), ['--chdir', '/w']);
+});
+test('held-out checks run in the copy, the normal checks in the worktree', async () => {
+  const held = tempDir('held-'), calls = [], copies = [];
+  const confined = async (cmd, args, opts) => { calls.push([cmd, opts.dir, opts.source ?? null]); return { code: 0, stdout: '', stderr: '', timedOut: false }; };
+  const inCopy = async (dir, fn) => { copies.push(dir); return fn('/tmp/copy-1'); };
+  const cfg = { ...config, runDir: '/r', heldOutDir: held, checks: [['npm', ['test']]], heldOutChecks: [['node', ['--test', '{heldOut}/']]] };
+  const r = await runChecks('/w', cfg, 4201, undefined, { confined, inCopy });
+  assert.deepEqual(r, { ok: true, failed: null, output: '', heldOut: true });
+  assert.deepEqual(copies, ['/w']);
+  assert.deepEqual(calls, [['npm', '/w', '/w'], ['node', '/w', '/tmp/copy-1']]);
+});
+
+// A worktree-like folder: a git repo with a tracked file and a git-ignored node_modules.
+async function repoWithIgnored() {
+  const dir = tempDir('confine-wt-');
+  const git = (...args) => run('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...args]);
+  await git('init', '-q');
+  writeFileSync(join(dir, '.gitignore'), 'node_modules/\n');
+  writeFileSync(join(dir, 'a.txt'), 'one\n');
+  mkdirSync(join(dir, 'node_modules', 'dep'), { recursive: true });
+  writeFileSync(join(dir, 'node_modules', 'dep', 'index.js'), 'dep\n');
+  await git('add', '-A'); await git('commit', '-q', '-m', 'init');
+  return { dir, git };
+}
+const heldOutCfg = (step) => ({ ...config, runDir: join(tempDir('run-'), 'run'), heldOutDir: tempDir('held-'), checks: [], heldOutChecks: [['sh', ['-c', step]]] });
+test('held-out checks that write ignored and tracked files leave the worktree unchanged', real, async () => {
+  const { dir, git } = await repoWithIgnored();
+  const step = 'mkdir -p node_modules/.cache/x && cp -r {heldOut} node_modules/.cache/x/ && echo two > a.txt && echo z > node_modules/dep/index.js && echo n > new.txt';
+  const r = await runChecks(dir, heldOutCfg(step), 4201);
+  assert.equal(r.ok, true, r.output);
+  assert.equal((await git('status', '--porcelain', '--ignored')).stdout, '!! node_modules/\n');
+  assert.equal(readFileSync(join(dir, 'a.txt'), 'utf8'), 'one\n');
+  assert.equal(readFileSync(join(dir, 'node_modules', 'dep', 'index.js'), 'utf8'), 'dep\n');
+  assert.ok(!existsSync(join(dir, 'node_modules', '.cache')), 'the held-out tests were left in an ignored folder');
+});
+test("inside the held-out checks the working folder has the worktree's path and the ignored files", real, async () => {
+  const { dir } = await repoWithIgnored();
+  const r = await runChecks(dir, heldOutCfg(`test "$(pwd)" = '${dir}' && test -f node_modules/dep/index.js && test -f a.txt`), 4201);
+  assert.equal(r.ok, true, r.output);
+});
