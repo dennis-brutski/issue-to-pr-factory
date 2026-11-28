@@ -56,6 +56,8 @@ process.on('SIGINT', () => {
 process.on('SIGTERM', () => process.emit('SIGINT'));
 
 try {
+  // Copies a killed run left during its held-out checks. The lock is held, so none of them is in use (ADR 0009).
+  ws.removeLeftoverCopies();
   await preflight(deps);
   await ws.ensureClone();
   if (!(await ws.hasRemoteBranch())) throw new Error(`base branch "${cfg.baseBranch}" not found on ${cfg.repo}`);

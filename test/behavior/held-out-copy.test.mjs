@@ -2,11 +2,11 @@
 // tests themselves included, never stays where the next session can read it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { writeFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { world } from './world.mjs';
-import { gate, clean, implement, settled } from './steps.mjs';
+import { gate, clean, implement, settled, polls } from './steps.mjs';
 import { tempDir } from '../fakes/tmp.mjs';
 
 // The fake bwrap ignores binds, so this needs the real one.
@@ -27,6 +27,19 @@ test('held-out checks that copy their tests into an ignored folder and edit a tr
     assert.ok(!existsSync(join(dir, 'node_modules', '.cache', 'x')), 'the held-out tests stayed in an ignored folder');
     assert.ok(!existsSync(join(dir, 'new.txt')));
     assert.equal(readFileSync(join(dir, 'src', 'a.js'), 'utf8'), 'export const a = 2;\n');
+    f.signal('SIGINT'); await f.exited;
+  } finally { w.close(); }
+});
+
+test('at startup the factory deletes the copies a killed run left next to the run folder', async () => {
+  const w = await world();
+  try {
+    const leftover = join(dirname(w.runDir), `.${basename(w.runDir)}-copies`, 'factory-copy-old');
+    mkdirSync(join(leftover, 'node_modules', '.cache', 'x'), { recursive: true });
+    writeFileSync(join(leftover, 'node_modules', '.cache', 'x', 'held.test.mjs'), 'secret\n');
+    const f = w.start();
+    await w.until(() => polls(f) >= 1, 10000, 'a poll');
+    assert.ok(!existsSync(leftover), 'the leftover copy is still there');
     f.signal('SIGINT'); await f.exited;
   } finally { w.close(); }
 });
