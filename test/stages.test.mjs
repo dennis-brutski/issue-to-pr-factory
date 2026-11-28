@@ -117,6 +117,13 @@ test('happy path opens a ready pull request and marks done', async () => {
   assert.ok(d.comments.some((c) => c.includes('https://github.com/x/y/pull/50')));
   assert.equal(d.checkPort, 4201);
 });
+test("the held-out checks get the workspace's checked copy of the worktree", async () => {
+  const d = fakes({ agent: [gate(90), work(), review()] });
+  let given;
+  d.deps.runChecks = async (dir, cfg, port, gitDir, deps) => { given = deps?.inCopy; return { ok: true, failed: null, output: '' }; };
+  await runItem(issue, 'implement', d.deps, 4201);
+  assert.equal(given, d.deps.ws.inCopy);
+});
 test('agents only ever see the owner\'s comments', async () => {
   const d = fakes({ agent: [gate(90), work(), review()] });
   await runItem(issue, 'implement', d.deps, 4201);
