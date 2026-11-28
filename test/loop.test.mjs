@@ -331,6 +331,18 @@ describe('failed CI under auto-merge', () => {
     assert.deepEqual(d.started, []);
     assert.equal(d.calls.length, 3);
   });
+  for (const label of ['agent:review', 'agent:merge'])
+    test(`a failed CI pull request labelled ${label} is parked, not run, on the same poll`, async () => {
+      const pr = pull({ labels: [label] });
+      const d = fakes([pr]);
+      d.deps.gh.listCandidates = async () => [{ ...pr }];
+      d.deps.classify = () => ({ action: 'run', stage: label === 'agent:review' ? 'rework' : 'merge' });
+      const running = new Map();
+      await tick(d.deps, running);
+      await Promise.all(running.values());
+      assert.deepEqual(d.started, []);
+      assert.deepEqual(d.calls.map((c) => c.slice(0, 2)), [['disableAutoMerge', 10], ['comment', 10], ['addLabel', 10]]);
+    });
   test('when auto-merge cannot be turned off, nothing is posted and the next poll tries again', async () => {
     const d = fakes([pull()], { disableFails: true });
     await tick(d.deps, new Map());
