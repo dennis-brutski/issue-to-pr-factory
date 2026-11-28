@@ -269,6 +269,77 @@ describe('conflicting pull requests', () => {
   });
 });
 
+// tick turns auto-merge off on the factory's own pull requests whose CI failed, and parks them.
+describe('failed CI under auto-merge', () => {
+  const cfg = { ...defaults, repo: 'example/web-app' };
+  const URL = 'https://github.com/example/web-app/pull/10', RUN = 'https://github.com/example/web-app/actions/runs/7';
+  const pull = (o = {}) => issue(10, {
+    kind: 'pr', labels: [], labelEvents: [], headRef: 'factory/issue-3', headRepo: 'example/web-app', mergeable: 'MERGEABLE',
+    url: URL, autoMerge: true, ci: { state: 'FAILURE', failedUrl: RUN }, ...o,
+  });
+
+  function fakes(pulls, { disableFails = false } = {}) {
+    const d = { calls: [], logs: [], started: [] };
+    d.deps = {
+      cfg, log: (m) => d.logs.push(m),
+      runItem: async (item, stage) => { d.started.push([item.number, stage]); return { outcome: 'done' }; },
+      gh: {
+        listCandidates: async () => [], openIssueNumbers: async () => [], listPullRequests: async () => pulls,
+        disableAutoMerge: async (_, n) => {
+          d.calls.push(['disableAutoMerge', n]);
+          if (disableFails) throw new Error('GitHub is down');
+          for (const p of pulls) if (p.number === n) p.autoMerge = false;
+        },
+        comment: async (_, n, body) => d.calls.push(['comment', n, body]),
+        addLabel: async (_, n, l) => d.calls.push(['addLabel', n, l]),
+        removeLabel: async () => {},
+      },
+    };
+    return d;
+  }
+
+  test('a factory pull request on auto-merge whose CI failed gets auto-merge off, the comment and the label, once', async () => {
+    const d = fakes([pull()]);
+    const running = new Map();
+    await tick(d.deps, running);
+    await tick(d.deps, running);
+    assert.deepEqual(d.calls.map((c) => c.slice(0, 2)), [['disableAutoMerge', 10], ['comment', 10], ['addLabel', 10]]);
+    const body = d.calls[1][2];
+    assert.match(body, /^🏭 \*\*Factory stopped \(CI\)\.\*\*/);
+    assert.ok(body.includes(URL) && body.includes(RUN) && body.includes('agent:review'), body);
+    assert.equal(d.calls[2][2], 'agent:needs-human');
+    assert.deepEqual(d.logs.filter((l) => /CI failed/.test(l)), [`#3 parked: CI failed on ${URL}; auto-merge is off`]);
+    assert.deepEqual(d.started, []);
+  });
+  for (const [name, o] of [['pending CI', { ci: { state: 'PENDING', failedUrl: null } }], ['passing CI', { ci: { state: 'SUCCESS', failedUrl: null } }],
+    ['no checks', { ci: null }], ['auto-merge off', { autoMerge: false }]])
+    test(`${name} is left alone`, async () => {
+      const d = fakes([pull(o)]);
+      await tick(d.deps, new Map());
+      assert.deepEqual(d.calls, []);
+    });
+  test('a pull request whose issue is running is left for a later poll', async () => {
+    const d = fakes([pull()]);
+    await tick(d.deps, new Map([[3, new Promise(() => {})]]));
+    assert.deepEqual(d.calls, []);
+  });
+  test('a failed CI pull request that also conflicts is parked, not merged, on the same poll', async () => {
+    const d = fakes([pull({ mergeable: 'CONFLICTING' })]);
+    const running = new Map();
+    await tick(d.deps, running);
+    await Promise.all(running.values());
+    assert.deepEqual(d.started, []);
+    assert.equal(d.calls.length, 3);
+  });
+  test('when auto-merge cannot be turned off, nothing is posted and the next poll tries again', async () => {
+    const d = fakes([pull()], { disableFails: true });
+    await tick(d.deps, new Map());
+    await tick(d.deps, new Map());
+    assert.deepEqual(d.calls, [['disableAutoMerge', 10], ['disableAutoMerge', 10]]);
+    assert.ok(d.logs.some((l) => l === '#3 could not turn auto-merge off: GitHub is down'), d.logs.join('\n'));
+  });
+});
+
 describe('free port', () => {
   const issue = (number) => ({
     number, kind: 'issue', title: `Issue ${number}`, body: '', author: 'dennis-brutski', bodyEditedAt: null,
