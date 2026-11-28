@@ -777,7 +777,9 @@ describe('automerge', () => {
     x.d.ws.push = async () => { x.calls.push(['push']); };
     return x;
   };
-  for (const [stage, item, sessions] of [['review', pullRequestItem, [work]], ['merge', { ...pullRequestItem, labels: ['agent:merge'] }, []]]) {
+  /** @type {{ stage: string, item: any, sessions: object[] }[]} */
+  const pushRuns = [{ stage: 'review', item: pullRequestItem, sessions: [work] }, { stage: 'merge', item: { ...pullRequestItem, labels: ['agent:merge'] }, sessions: [] }];
+  for (const { stage, item, sessions } of pushRuns) {
     test(`a ${stage} run turns auto-merge off before it pushes`, async () => {
       const x = pushing(deps({ sessions }));
       const r = await runItem({ ...item, autoMerge: true }, stage, x.d, 4201);
