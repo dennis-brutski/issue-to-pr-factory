@@ -878,3 +878,43 @@ describe('tests on the base', () => {
     await assert.rejects(() => h.testsOnBase(dir, sha, ['test/'], async () => {}), /credential\.helper/);
   });
 });
+
+// Held-out checks run in a throwaway copy of the worktree (ADR 0009).
+describe('throwaway copy', () => {
+  const worktree = () => {
+    const dir = tempDir('factory-copy-');
+    writeFileSync(join(dir, 'a.txt'), 'one\n');
+    mkdirSync(join(dir, 'node_modules', 'dep'), { recursive: true });
+    writeFileSync(join(dir, 'node_modules', 'dep', 'index.js'), 'dep\n');
+    return dir;
+  };
+
+  test('the copy holds every file, ignored ones included, and writes to it miss the worktree', async () => {
+    const dir = worktree();
+    const seen = await ws.inCopy(dir, async (copy) => {
+      const files = [readFileSync(join(copy, 'a.txt'), 'utf8'), readFileSync(join(copy, 'node_modules', 'dep', 'index.js'), 'utf8')];
+      writeFileSync(join(copy, 'a.txt'), 'two\n');
+      writeFileSync(join(copy, 'node_modules', 'dep', 'index.js'), 'z\n');
+      return { copy, files };
+    });
+    assert.notEqual(seen.copy, dir);
+    assert.deepEqual(seen.files, ['one\n', 'dep\n']);
+    assert.equal(readFileSync(join(dir, 'a.txt'), 'utf8'), 'one\n');
+    assert.equal(readFileSync(join(dir, 'node_modules', 'dep', 'index.js'), 'utf8'), 'dep\n');
+  });
+  test('the copy is gone after the checks pass', async () => {
+    let copy;
+    assert.equal(await ws.inCopy(worktree(), async (c) => { copy = c; return 'passed'; }), 'passed');
+    assert.ok(!existsSync(copy));
+  });
+  test('the copy is gone after the checks fail or throw', async () => {
+    let copy;
+    await assert.rejects(ws.inCopy(worktree(), async (c) => { copy = c; throw new Error('boom'); }), /boom/);
+    assert.ok(!existsSync(copy));
+  });
+  test('the copy is gone even when the checks left a folder without write permission', async () => {
+    let copy;
+    await ws.inCopy(worktree(), async (c) => { copy = c; mkdirSync(join(c, 'locked')); writeFileSync(join(c, 'locked', 'f'), 'x'); chmodSync(join(c, 'locked'), 0o500); });
+    assert.ok(!existsSync(copy));
+  });
+});
