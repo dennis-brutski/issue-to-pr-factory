@@ -88,6 +88,7 @@ export async function world({ seed = SEED, settings = {}, name = 'demo' } = {}) 
     block(n, by) { change((s) => { const i = s.items.find((x) => x.number === n); i.blockedBy = [...(i.blockedBy ?? []), by]; }); }, // a blocked-by link
     closeIssue(n) { change((s) => { s.items.find((x) => x.number === n).state = 'CLOSED'; }); },
     merge(n) { change((s) => { s.items.find((x) => x.number === n).state = 'MERGED'; }); },
+    ci(n, state, failedUrl = null) { change((s) => { s.items.find((x) => x.number === n).ci = { state, failedUrl }; }); }, // the head commit's checks
     state: readGh,
     item: (n) => readGh().items.find((x) => x.number === n),
     pr: () => readGh().items.find((x) => x.kind === 'pr'),
