@@ -189,7 +189,7 @@ test('attribution line in a commit parks', async () => {
 test('protected path opens a draft with a warning and needs-human', async () => {
   const d = fakes({ agent: [gate(90), work(), review()], changes: [{ status: 'M', path: 'test/unit/scoring.test.js' }] });
   const r = await runItem(issue, 'implement', d.deps, 4201);
-  assert.equal(r.outcome, 'parked');
+  assert.equal(r.outcome, 'done'); // a draft is a finished run; GitHub still shows a stop
   assert.equal(d.opened[0].draft, true);
   assert.match(d.opened[0].body, /^> ⚠ This pull request changes files you should check:/);
   assert.match(d.opened[0].body, /test\/unit\/scoring\.test\.js/);
@@ -248,7 +248,7 @@ test('rework without new owner comments parks', async () => {
 test('rework that touches protected files turns the pull request into a draft', async () => {
   const d = fakes({ agent: [work()], changes: [{ status: 'M', path: 'package.json' }] });
   const r = await runItem(pr(), 'review', d.deps, 4201);
-  assert.equal(r.outcome, 'parked');
+  assert.equal(r.outcome, 'done'); // a draft is a finished run; GitHub still shows a stop
   assert.deepEqual(d.drafts, [true]);
   assert.deepEqual(d.pushed, ['factory/issue-1']);
 });
@@ -1149,7 +1149,7 @@ describe('draft stops', () => {
   test('an implement draft stop says to read the changes, not to try again', async () => {
     const { d, comments, opened } = deps();
     const r = await runItem(issue, 'implement', d, 4201);
-    assert.equal(r.outcome, 'parked');
+    assert.equal(r.outcome, 'done');
     assertDraftStop(comments.at(-1));
     assert.doesNotMatch(opened[0].body, /touches protected files/);
     assert.match(opened[0].body, /^> ⚠ This pull request changes files you should check:/);
@@ -1162,15 +1162,62 @@ describe('draft stops', () => {
     let n = 0;
     d.ws.headInfo = async () => ({ sha: `abc${n++}` });
     const r = await runItem(asked, 'review', d, 4201);
-    assert.equal(r.outcome, 'parked');
+    assert.equal(r.outcome, 'done');
     assertDraftStop(comments.at(-1));
   });
 
   test('a merge draft stop says to read the changes, not to try again', async () => {
     const { d, comments } = deps();
     const r = await runItem(pr, 'merge', d, 4201);
-    assert.equal(r.outcome, 'parked');
+    assert.equal(r.outcome, 'done');
     assertDraftStop(comments.at(-1));
+  });
+
+  // On the terminal a draft is a finished run: done, with the pull request's link and why it is a draft.
+  // On GitHub it stays a stop: the comment, agent:needs-human, the draft.
+  function track(d) {
+    const labels = [], drafts = [];
+    d.gh.addLabel = async (c, n, l) => { labels.push(l); };
+    d.gh.setDraft = async (c, n, v) => { drafts.push(v); };
+    return { labels, drafts };
+  }
+
+  test('an implement run that opens a draft ends done with the link, and still stops on GitHub', async () => {
+    const { d, comments, opened } = deps();
+    const { labels } = track(d);
+    const r = await runItem(issue, 'implement', d, 4201);
+    assert.equal(r.outcome, 'done');
+    assert.match(r.detail, /^https:\/\/github\.com\/x\/y\/pull\/50\ndraft: it changes files you should check:\n- .*test\/unit\/scoring\.test\.js$/);
+    assert.equal(opened[0].draft, true);
+    assertDraftStop(comments.at(-1));
+    assert.ok(labels.includes('agent:needs-human'));
+    assert.ok(!labels.includes('agent:done'));
+  });
+
+  test('a rework that makes a draft ends done with the pull request\'s link, and still stops on GitHub', async () => {
+    const asked = { ...pr, url: 'https://github.com/x/y/pull/8', labels: ['agent:review'], comments: [{ author: 'dennis-brutski', body: 'Rename it.', at: '2026-11-05T10:00:00Z' }] };
+    const { d, comments } = deps();
+    const { labels, drafts } = track(d);
+    d.runAgent = async () => ok({ status: 'complete', summary: 'Renamed.', detail: '' });
+    let n = 0;
+    d.ws.headInfo = async () => ({ sha: `abc${n++}` });
+    const r = await runItem(asked, 'review', d, 4201);
+    assert.equal(r.outcome, 'done');
+    assert.match(r.detail, /^https:\/\/github\.com\/x\/y\/pull\/8\ndraft: it changes files you should check:\n- .*test\/unit\/scoring\.test\.js$/);
+    assert.deepEqual(drafts, [true]);
+    assertDraftStop(comments.at(-1));
+    assert.ok(labels.includes('agent:needs-human'));
+  });
+
+  test('a merge that makes a draft ends done with the pull request\'s link, and still stops on GitHub', async () => {
+    const { d, comments } = deps();
+    const { labels, drafts } = track(d);
+    const r = await runItem({ ...pr, url: 'https://github.com/x/y/pull/8' }, 'merge', d, 4201);
+    assert.equal(r.outcome, 'done');
+    assert.match(r.detail, /^https:\/\/github\.com\/x\/y\/pull\/8\ndraft: it changes files you should check:\n- .*test\/unit\/scoring\.test\.js$/);
+    assert.deepEqual(drafts, [true]);
+    assertDraftStop(comments.at(-1));
+    assert.ok(labels.includes('agent:needs-human'));
   });
 });
 
@@ -1547,8 +1594,8 @@ describe('park and pull request text', () => {
     assert.match(r1.detail, /Questions:\n\n- Which\?/);
 
     const touched = deps({ changes: [{ status: 'M', path: 'test/unit/scoring.test.js' }] });
-    const r2 = await runItem(issue, 'implement', touched.d, 4201);
-    assert.match(r2.detail, /is a draft because it changes files you should check:\n\n- /);
+    await runItem(issue, 'implement', touched.d, 4201);
+    assert.match(touched.comments.at(-1), /is a draft because it changes files you should check:\n\n- /);
   });
 
   test('a contradiction stops the run whatever the confidence, and the stop lists it', async () => {
@@ -1596,16 +1643,16 @@ describe('park and pull request text', () => {
   test('rework and merge parks leave an empty line before the list of protected files', async () => {
     const pr = { ...issue, kind: 'pr', headRef: 'factory/issue-7', labels: ['agent:merge'] };
     const merged = deps({ changes: [{ status: 'M', path: 'test/unit/scoring.test.js' }] });
-    const r1 = await runItem(pr, 'merge', merged.d, 4201);
-    assert.match(r1.detail, /so the pull request is now a draft:\n\n- /);
+    await runItem(pr, 'merge', merged.d, 4201);
+    assert.match(merged.comments.at(-1), /so the pull request is now a draft:\n\n- /);
 
     const asked = { ...pr, labels: ['agent:review'], comments: [{ author: 'dennis-brutski', body: 'Rename it.', at: '2026-11-05T10:00:00Z' }] };
     const reworked = deps({ changes: [{ status: 'M', path: 'test/unit/scoring.test.js' }] });
     reworked.d.runAgent = async () => ok({ status: 'complete', summary: 'Renamed.', detail: '' });
     let n = 0;
     reworked.d.ws.headInfo = async () => ({ sha: `abc${n++}` });
-    const r2 = await runItem(asked, 'review', reworked.d, 4201);
-    assert.match(r2.detail, /it changes files you should check, so the pull request is now a draft:\n\n- /);
+    await runItem(asked, 'review', reworked.d, 4201);
+    assert.match(reworked.comments.at(-1), /it changes files you should check, so the pull request is now a draft:\n\n- /);
   });
 });
 

@@ -632,3 +632,69 @@ test('other parked stops get no write-up link', () => noColour(() => {
   assert.equal(show(T, '#41 explore parked: The worktree has changes.'), `${T}  #41 │ ⏸ explore parked: The worktree has changes.`);
   assert.equal(show(T, `#41 implement parked: ${DECISION}`), `${T}  #41 │ ⏸ implement parked: ${DECISION}`);
 }));
+
+// A run that ends with a draft pull request is done: green, with its summary and link; why it is a draft in yellow under it.
+describe('draft pull requests', () => {
+  const draft = (flags) => `\n${PAD}draft: it changes files you should check:${flags.map((f) => `\n${PAD}- ${f}`).join('')}`;
+  const run = (show, clock, stage) => {
+    clock.set(1000);
+    show(T, `#40 ${stage} started`);
+    show(T, `#40 ${stage} session ended · 7 turns · ≈ $0.20`);
+    clock.set(1000 + 156_000);
+  };
+
+  for (const stage of ['implement', 'rework', 'merge']) {
+    test(`a ${stage} run with a draft pull request is shown as done, with the link and the reasons`, () => noColour(() => {
+      const { show, clock } = setup();
+      run(show, clock, stage);
+      const out = show(T, `#40 ${stage} done: https://github.com/o/r/pull/3${draft(['protected file changed: AGENTS.md'])}`).split('\n');
+      assert.deepEqual(out, [
+        `${T}  #40 │ ✔ ${stage} done in 2m36s · 1 session · ≈ $0.20: https://github.com/o/r/pull/3`,
+        `${PAD}#40 │   draft: it changes files you should check:`,
+        `${PAD}#40 │   - protected file changed: AGENTS.md`,
+      ]);
+    }));
+
+    test(`with colour, a ${stage} draft's done line is green and its reasons yellow`, () => withColour(() => {
+      const { show, clock } = setup({ columns: 100 });
+      run(show, clock, stage);
+      const [first, ...rest] = show(T, `#40 ${stage} done: https://github.com/o/r/pull/3${draft(['protected file changed: AGENTS.md'])}`).split('\n');
+      assert.ok(first.includes(`${ESC}32m✔`) || first.includes(`${ESC}32m${stage} done`), JSON.stringify(first));
+      assert.ok(first.includes('https://github.com/o/r/pull/3'));
+      assert.equal(rest.length, 2);
+      for (const line of rest) assert.match(line, /\u001b\[33m(draft: |- protected)/, JSON.stringify(line));
+    }));
+  }
+
+  test('a long list of reasons is cut as a park reason is, with a link to the full text', () => noColour(() => {
+    const { show } = setup();
+    const flags = Array.from({ length: 6 }, (_, i) => `protected file changed: f${i}`);
+    const out = show(T, `#40 implement done: https://github.com/o/r/pull/3${draft(flags)}`).split('\n');
+    assert.deepEqual(out, [
+      `${T}  #40 │ ✔ implement done: https://github.com/o/r/pull/3`,
+      `${PAD}#40 │   draft: it changes files you should check:`,
+      `${PAD}#40 │   - protected file changed: f0`,
+      `${PAD}#40 │   - protected file changed: f1 …`,
+      `${PAD}#40 │   full text: https://github.com/o/r/issues/40`,
+    ]);
+  }));
+
+  test('a rework or merge draft\'s full text is on the pull request', () => noColour(() => {
+    const { show } = setup();
+    const flags = Array.from({ length: 6 }, (_, i) => `protected file changed: f${i}`);
+    const out = show(T, `#40 merge done: https://github.com/o/r/pull/3${draft(flags)}`).split('\n');
+    assert.equal(out.at(-1), `${PAD}#40 │   full text: https://github.com/o/r/pull/3`);
+  }));
+
+  test('on a narrow terminal, a cut draft\'s done line still wraps, as it does without the cut', () => noColour(() => {
+    const { show } = setup({ columns: 50 });
+    const link = 'https://github.com/owner/some-long-repository-name/pull/333';
+    const flags = Array.from({ length: 6 }, (_, i) => `protected file changed: f${i}`);
+    const cut = show(T, `#40 implement done: ${link}${draft(flags)}`).split('\n');
+    const uncut = show(T, `#40 implement done: ${link}${draft(flags.slice(0, 1))}`).split('\n');
+    assert.deepEqual(cut.slice(0, 2), uncut.slice(0, 2));
+    assert.equal(cut[0], `${T}  #40 │ ✔ implement done:`);
+    assert.equal(cut[1], `${PAD}#40 │   ${link}`);
+    assert.equal(cut.at(-1), `${PAD}#40 │   full text: https://github.com/o/r/issues/40`);
+  }));
+});
