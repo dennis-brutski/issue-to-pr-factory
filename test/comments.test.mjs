@@ -1,7 +1,7 @@
 // The factory's own GitHub comments: what one module writes, the same module reads back.
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { stopped, didNotStart, explore, rework, pullRequest, merged, isFactory, lastStop, lastPush, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel, isRework, setupApprovals, isStop } from '../lib/comments.mjs';
+import { stopped, didNotStart, explore, rework, pullRequest, merged, isFactory, lastStop, lastPush, NO_NEW_COMMENTS, autoMerged, autoMergeFailed, autoMergedPull, reasons, stopLabel, isRework, setupApprovals, isStop, ciFailed } from '../lib/comments.mjs';
 import { config } from '../config.mjs';
 import scorePad from './fixtures/web-app-target.mjs';
 import { verifyBranch } from '../lib/verify.mjs';
@@ -339,3 +339,14 @@ test('agent text in a comment cannot notify, close or fetch', () => {
     assert.doesNotMatch(body, /Fixes #3|@someone|!\[\]/, body);
   }
 });
+
+test('ciFailed says CI failed, that auto-merge is off, links the failed run and says what to do', () => {
+  const body = ciFailed('https://github.com/o/r/pull/50', 'https://github.com/o/r/actions/runs/7', 'agent:needs-human', 'agent:review');
+  assert.equal(body, '🏭 **Factory stopped (CI).**\n\n'
+    + 'CI failed on https://github.com/o/r/pull/50, so the factory turned auto-merge off. Failed run: https://github.com/o/r/actions/runs/7\n\n'
+    + 'Read the failure. Fix it by hand, or comment on this pull request, add `agent:review` and remove `agent:needs-human`. Merge it yourself when it is green.');
+  assert.ok(isStop(body), 'a stop, so it never marks a push');
+  assert.equal(stopLabel(body), 'CI failed');
+});
+test('ciFailed without a failed run links the checks of the pull request', () =>
+  assert.match(ciFailed('https://github.com/o/r/pull/50', null, 'agent:needs-human', 'agent:review'), /Failed run: https:\/\/github\.com\/o\/r\/pull\/50\/checks\n/));
